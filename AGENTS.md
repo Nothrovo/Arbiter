@@ -1,0 +1,132 @@
+# AGENTS.md — Arbiter Project Context for AI Agents
+
+This file is the single source of truth for any AI coding agent working on Arbiter.
+Read this before writing code, running tests, or making architectural decisions.
+
+## What is Arbiter
+
+Arbiter is an airgapped SOC investigation desk for normalized Wazuh SIEM telemetry.
+Analysts triage deduplicated alerts, inspect source intelligence, group evidence into
+incident cases, author analysis/conclusions/recommendations, and produce scoped
+document deliverables (Google Docs HTML, Word .docx, Excel .xlsx, TSV, Markdown).
+
+## Stack — do not migrate
+
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Backend | **FastAPI** (Python 3.11+) + **Uvicorn** | Single `app/main.py` entry, modular `app/query.py` |
+| Database | **PostgreSQL 16** via `psycopg` | Schema in `init-db.sql` and `app/database.py` |
+| Frontend | **Vanilla JavaScript ES modules** + **native CSS** | No React, Vue, Angular, Tailwind. Pure DOM manipulation. |
+| Typography | IBM Plex Sans / Mono (local woff2, OFL) | In `app/static/fonts/` |
+| Design tokens | CSS custom properties in `app/static/styles/tokens.css` | Exported from `docs/ui-ux-redesign/DESIGN.md` |
+| Exports | python-docx, openpyxl | In `app/exports.py` |
+| Containerization | Docker + docker-compose | `network_mode: host` connects to host PostgreSQL |
+
+## Architecture (frontend)
+
+```
+app/
+├── index.html                      # 64-line modular shell, semantic landmarks
+├── static/
+│   ├── fonts/                      # IBM Plex (local, OFL license)
+│   ├── styles/
+│   │   ├── tokens.css              # Design token CSS custom properties
+│   │   ├── base.css                # Reset, typography, form controls
+│   │   ├── shell.css               # Sidebar, workspace grid, responsive
+│   │   └── components.css          # All component styles
+│   └── js/
+│       ├── app.js                  # Shell controller, router, tenant switching, health probe
+│       ├── router.js               # Hash router: #/triage, #/incidents/:id, #/imports, #/reports
+│       ├── api/client.js           # Same-origin fetch wrapper, timeout, error extraction
+│       ├── state/
+│       │   ├── scope.js            # Query normalization, export scope, pagination safety
+│       │   ├── selection.js        # Tenant-scoped Set-based selection store
+│       │   ├── triage.js           # Queue scroll memory, detail version guard
+│       │   ├── navigation.js       # Cross-page query memory per destination
+│       │   └── workspace.js        # Health probe state
+│       ├── ui/primitives.js        # esc(), icon(), severity(), formatTime(), emptyState()
+│       └── features/
+│           ├── triage/             # model.js (intelSummary, renderQueue), view.js
+│           ├── incidents/          # model.js, render.js, state.js, view.js, workspace.js
+│           ├── imports/            # model.js, render.js, view.js
+│           └── reports/            # model.js, render.js, view.js
+```
+
+## Four destinations (not a monolithic page)
+
+| Route | Purpose |
+|-------|---------|
+| `#/triage` | Alert queue with sidebar inspector. Default home. |
+| `#/incidents/:id` | Case editor: evidence grouping, analysis, conclusion, recommendation |
+| `#/imports` | Paste or upload new Wazuh JSON exports |
+| `#/reports` | Scoped export to CSV, JSON, clipboard HTML, .docx, .xlsx |
+
+There is **no overview dashboard**. Triage is the entry point.
+
+## Design direction: Quiet Evidence Desk
+
+- Calm functional density; data visible immediately, decoration absent.
+- Forensic neutral palette (`#0f1419` → `#f7f9fc`) with signal colors per severity level.
+- Full design spec: `docs/ui-ux-redesign/DESIGN.md` (lintable with `@google/design.md`).
+
+## Key policies
+
+1. **Tenant scoping**: Tenant is workspace context, not authorization. Selection store rejects cross-tenant contamination.
+2. **Empty case rejection**: A tenant-scoped case must have evidence in that tenant. "Semua tenant" scope allows empty cases.
+3. **Detail version guard**: Stale inspector API responses are discarded via monotonic counter.
+4. **Export scope consistency**: `scopeParams()` strips pagination and enforces same filters for all export formats.
+5. **Intel labels**: Use "Belum ada cache" / "Tidak ada deteksi" / scored value. Never "Clean" or "Aman".
+6. **Redaction disclaimer**: "Versi tersamarkan—tinjau sebelum dibagikan", not "Aman".
+
+## Privacy — STRICT
+
+- **NEVER** read `.env`, production database, real alert records, raw logs, or live UI on port 8000.
+- **NEVER** run `tests.test_api` against the active database — it expects live PostgreSQL with real data.
+- All development and QA uses synthetic fixtures only.
+- Use `python -m tests.serve_synthetic_ui` (port 8767) for browser QA.
+- Use isolated test suites: `tests.test_ui_api`, `tests.test_ui_safety`, `tests.test_parser`, `tests.test_exports`, `tests.test_privacy`, `tests.test_dedup`.
+
+## Running tests
+
+```bash
+# Frontend (44 tests)
+node --test tests/frontend/*.test.mjs
+
+# Backend - SAFE isolated suites only (61 tests)
+.venv/bin/python -m unittest tests.test_parser tests.test_exports tests.test_privacy tests.test_dedup tests.test_ui_api tests.test_ui_safety -q
+
+# Synthetic browser QA server (NOT production)
+.venv/bin/python -m tests.serve_synthetic_ui
+# → http://127.0.0.1:8767
+
+# Design system lint
+npx -y @google/design.md@0.4.0 lint docs/ui-ux-redesign/DESIGN.md
+```
+
+## Running production
+
+```bash
+# Docker (connects to host PostgreSQL via network_mode: host)
+docker compose up -d --build
+# → http://localhost:8000
+
+# Or standalone with bundled PostgreSQL
+docker compose --profile standalone up -d --build
+
+# Or local Python
+source .venv/bin/activate
+./start.sh
+```
+
+## Graph
+
+This project has a knowledge graph at `graphify-out/`. Run `graphify query "<question>"` before grep/search for codebase questions. After modifying code, run `graphify update .` to keep the graph current.
+
+## What NOT to do
+
+- Do not introduce React, Vue, Angular, Svelte, or Tailwind CSS.
+- Do not add CDN-hosted fonts, analytics, or external fetches.
+- Do not access production data or the `.env` file.
+- Do not run `tests.test_api` — it hits the live database.
+- Do not create overview/dashboard pages — the four-destination architecture is intentional.
+- Do not label any security state as "Clean", "Aman", or "Safe".

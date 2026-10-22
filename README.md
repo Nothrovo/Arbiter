@@ -16,7 +16,7 @@
 
 ## 🎯 Overview
 
-**Arbiter** is an open-source, airgapped SOC investigation desk built to bridge the gap between raw **Wazuh SIEM alerts** and **executive incident reporting**. 
+**Arbiter** is an open-source, airgapped SOC investigation desk built to bridge the gap between raw **Wazuh SIEM alerts** and **executive incident reporting**.
 
 When investigating high-volume attacks (credential stuffing, SSH brute-force, web vulnerability probing), raw Wazuh Elasticsearch JSON exports often flood analysts with tens of thousands of repetitive log lines. Arbiter normalizes multi-format logs, deduplicates recurring attacks using stable hashing, enriches source IPs with local Threat Intelligence, and produces **Google Docs**, **Word (.docx)**, and **Excel (.xlsx)** deliverables in one click.
 
@@ -27,85 +27,99 @@ When investigating high-volume attacks (credential stuffing, SSH brute-force, we
 ### 1. Resilient Multi-Format Ingestion
 - **Any Ingest Format**: Accepts Elasticsearch `hits.hits[]` exports, raw JSON arrays, JSON Lines (`.jsonl`), or single alert objects.
 - **Direct Paste & File Upload**: Ingest via file upload (`.json` / `.txt`) or instant paste with real-time JSON validation.
-- **Control Byte Salvage**: Built-in parser (`strict=False`) safely decodes raw logs containing unescaped control characters (such as raw newlines inside HTTP request logs) without mutating or dropping valid events.
-- **Duplicate Wazuh ID Safeguard**: Re-ingesting identical alerts or previously imported Wazuh IDs is automatically identified and ignored to prevent data corruption.
+- **Control Byte Salvage**: Built-in parser (`strict=False`) safely decodes raw logs containing unescaped control characters without mutating or dropping valid events.
+- **Duplicate Wazuh ID Safeguard**: Re-ingesting identical alerts is automatically identified and ignored to prevent data corruption.
 
 ### 2. High-Precision Log Dissector (No False Fields)
 - Specialized regex engines for:
   - **Web Access Logs**: Apache / Nginx combined logs (Method, Path, Query string, Status code, Referer, User-Agent).
   - **Syslog & Auth Logs**: OpenSSH (`sshd`), PAM authentication failures, session lifecycle.
-  - **Linux Kernel & Audit**: AppArmor profiles, syscall audit events without misinterpreting timestamps as path names.
+  - **Linux Kernel & Audit**: AppArmor profiles, syscall audit events.
   - **Embedded HTTP & JSON Payloads**: Auto-detects URLs, methods, and status codes inside generic syslog lines.
 
-### 3. Signature-Based Deduplication & Expandable View
-- Computes a stable 24-character SHA-256 signature across `(tenant, agent, rule_id, srcip, normalized_log)`.
-- Eliminates noise by condensing thousands of repetitive scans into a single triage row with `Hit Count` and `first_seen s/d last_seen` time range.
-- **Expandable Occurrences**: Click `▶ Rincian Duplikasi` to expand an inline drawer showing every single duplicate instance with exact timestamps and individual Wazuh IDs.
+### 3. Signature-Based Deduplication
+- Computes a stable SHA-256 signature across `(tenant, agent, rule_id, srcip, normalized_log)`.
+- Condenses thousands of repetitive scans into a single triage row with `Hit Count` and `first_seen → last_seen` time range.
 
 ### 4. Enterprise Multi-Tenant Architecture
 - Automatic tenant extraction from `agent.labels.tenant`.
-- Top-level tenant navigation tabs with real-time count badges.
+- Workspace tenant selector with real-time population from database.
 - Isolate investigations per tenant or triage across all tenants simultaneously.
 
-### 5. Review & Triage Status Workflow
-- Flag alerts as `⭕ Pending` or `✅ Reviewed`.
-- **Shift + Click Range Selection**: Select batches of 50+ alerts in seconds without clicking checkboxes one by one.
-- Quick batch selection chips: *Pilih Yang Tampil*, *Pilih Belum Direview*, *Batal Pilihan*.
-- Floating batch toolbar for one-click mass review marking and group assignment.
+### 5. Modular Four-Destination UI
 
-### 6. Local Threat Intelligence Auto-Enrichment
-- Zero external API exposure: Joins incoming `source_ip` directly with local PostgreSQL Threat Intelligence tables (`ip_intel_cache`).
-- Real-time AbuseIPDB confidence score, VirusTotal malicious detection count, ISP, and country code.
-- Clickable IP detail modal + direct pivot link (`↗`) to local deep-dive intelligence dashboards.
+Arbiter uses a **Quiet Evidence Desk** design with four focused destinations instead of a monolithic single-page layout:
 
-### 7. Privacy-First Cloud AI Redactor
+| Destination | Route | Purpose |
+|-------------|-------|---------|
+| **Triage** | `#/triage` | Alert queue with sidebar inspector. Default home. |
+| **Insiden** | `#/incidents/:id` | Case editor: evidence grouping, analysis, conclusions, recommendations |
+| **Impor** | `#/imports` | Paste or upload new Wazuh JSON exports |
+| **Laporan** | `#/reports` | Scoped export (CSV, JSON, clipboard HTML, .docx, .xlsx) |
+
+### 6. Review & Triage Workflow
+- Flag alerts as Pending or Reviewed, individually or in batch.
+- **Shift + Click** range selection for fast bulk operations.
+- Selection survives page re-renders and filter changes (Set-based state, not DOM checkboxes).
+- Tenant-scoped selection prevents cross-tenant contamination.
+- Quick filter presets: 403 Forbidden, 404 Probes, Repeating, Bot traffic, Curl requests, Non-HTTP.
+
+### 7. Incident Case Management
+- Group selected alerts into named incident cases with category, severity, analysis, conclusion, and recommendation.
+- Add or remove evidence (alert group members) from the inspector or case editor.
+- Tenant-scoped case policy: a scoped case must have evidence in that tenant.
+
+### 8. Local Threat Intelligence
+- Zero external API exposure: joins `source_ip` with local PostgreSQL intelligence tables (`ip_intel_cache`).
+- AbuseIPDB confidence score, VirusTotal detection count, ISP, and country code.
+- Direct pivot link to local IP intelligence dashboard.
+
+### 9. Privacy-First Redactor
 - **Zero-Cloud Log Transmission**: Raw logs, database records, and credentials never leave your local environment.
-- **One-Click Sanitizer**: Deterministic regex redactor masks private RFC1918 IPs (`<INTERNAL_IP>`), public IPs (`<EXTERNAL_IP>`), passwords/tokens (`<REDACTED_SECRET>`), and emails (`<REDACTED_EMAIL>`). Safely copy logs for external LLM consultation (ChatGPT / Claude) without leaking company infrastructure.
+- **One-Click Sanitizer**: Deterministic regex redactor masks private IPs, public IPs, passwords/tokens, and emails.
+- Explicit disclaimer: redaction is not a guarantee of safe external sharing.
 
-### 8. Official One-Click Deliverables (5 Export Paths)
-- **📋 Salin GDocs**: Formatted HTML table with zebra striping, severity badges, attack chronology, root cause analysis, and remediation ready for direct `Ctrl+V` pasting into Google Docs.
-- **📄 Word Document (.docx)**: Formal landscape document with styled tables and executive summary sections.
-- **📊 Excel Workbook (.xlsx)**: Multi-column spreadsheet with Threat Intel metrics and auto-adjusted columns.
-- **📋 Salin TSV**: Tab-Separated Values for instant pasting into spreadsheet software.
-- **📝 Markdown Briefing**: Executive incident summary with KPI metrics.
+### 10. Official Deliverables (5 Export Paths)
+- **📋 Clipboard HTML** — formatted table for Google Docs paste.
+- **📄 Word (.docx)** — formal landscape document with styled tables.
+- **📊 Excel (.xlsx)** — multi-column spreadsheet with Threat Intel metrics.
+- **📋 TSV** — tab-separated values for spreadsheet software.
+- **📝 Markdown** — executive incident summary.
 
 ---
 
 ## 🛠️ Architecture & Tech Stack
 
-```text
-               +-------------------------------------------------------+
-               |                  Browser / SOC Analyst                |
-               +---------------------------+---------------------------+
-                                           | HTTP (Port 8000)
-                                           v
-+--------------------------------------------------------------------------------------+
-| Arbiter Application Container                                                        |
-|                                                                                      |
-|   +---------------------+   +---------------------+   +--------------------------+   |
-|   |   FastAPI Backend   |   |   Log Dissector     |   |   Deliverables Engine    |   |
-|   |  - REST Endpoints   |   |  - Access log / Sys |   |  - Google Docs HTML      |   |
-|   |  - Multi-Tenant API |   |  - AppArmor / sshd  |   |  - Word (.docx)          |   |
-|   |  - Incident Groups  |   |  - Signature Dedup  |   |  - Excel (.xlsx)         |   |
-|   +----------+----------+   +----------+----------+   +--------------------------+   |
-|              |                         |                                             |
-|              +-------------------------+                                             |
-|                                        |                                             |
-+----------------------------------------|---------------------------------------------+
-                                         v SQL
-+--------------------------------------------------------------------------------------+
-| PostgreSQL Database (abuseip / arbiter)                                             |
-|  - wazuh.alerts (telemetry, deduplication hits, review flags, wazuh_ids)             |
-|  - wazuh.analysis_groups (investigation cases, verdicts, remediation)                |
-|  - wazuh.alert_group_members (many-to-many incident mapping)                         |
-|  - public.ip_intel_cache (local threat intelligence cache)                           |
-+--------------------------------------------------------------------------------------+
+```
+app/
+├── index.html                      # Modular shell (64 lines)
+├── main.py                         # FastAPI backend + REST API
+├── query.py                        # SQL query builder with filter presets
+├── database.py                     # PostgreSQL layer + schema migration
+├── parser.py                       # Multi-format log dissector
+├── core.py                         # Normalization, deduplication, correlation
+├── privacy.py                      # Deterministic redactor
+├── exports.py                      # .docx, .xlsx, Markdown, HTML, TSV
+├── static/
+│   ├── fonts/                      # IBM Plex Sans/Mono (local, OFL)
+│   ├── styles/                     # Token-driven CSS (4 sheets)
+│   │   ├── tokens.css              # Design token custom properties
+│   │   ├── base.css                # Reset, typography
+│   │   ├── shell.css               # Sidebar, workspace grid, responsive
+│   │   └── components.css          # All component styles
+│   └── js/                         # 22 ES modules (feature-based)
+│       ├── app.js                  # Shell controller + hash router integration
+│       ├── router.js               # Hash router (#/triage, #/incidents/:id, …)
+│       ├── api/client.js           # Same-origin fetch wrapper
+│       ├── state/                  # Scope, selection, navigation, triage, workspace
+│       ├── ui/primitives.js        # Shared UI utilities
+│       └── features/               # triage/, incidents/, imports/, reports/
 ```
 
 - **Backend**: Python 3.11+, FastAPI, Uvicorn, Psycopg 3
-- **Frontend**: Linear-inspired High-Density Dark Theme (Inter, JetBrains Mono, Tailwind CSS variables)
+- **Frontend**: Vanilla JavaScript ES modules, native CSS with design tokens (IBM Plex Sans/Mono)
 - **Reporting**: python-docx, openpyxl
-- **Database**: PostgreSQL 15+
+- **Database**: PostgreSQL 16+
 
 ---
 
@@ -118,107 +132,68 @@ When investigating high-volume attacks (credential stuffing, SSH brute-force, we
 
 ### Method A: Standalone Docker Setup (Fastest for new users)
 
-If you **do not** have PostgreSQL installed, Arbiter provides a bundled PostgreSQL service initialized automatically via `init-db.sql`:
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Nothrovo/Arbiter.git
-   cd Arbiter
-   ```
-
-2. **Run with standalone profile**:
-   ```bash
-   docker compose --profile standalone up -d --build
-   ```
-
-3. **Access Arbiter**:
-   Open **`http://localhost:8000`** in your browser.
-   The database and all schemas are pre-configured and ready for use.
+```bash
+git clone https://github.com/Nothrovo/Arbiter.git
+cd Arbiter
+docker compose --profile standalone up -d --build
+```
+Open **`http://localhost:8000`**. Database and schemas are pre-configured.
 
 ---
 
 ### Method B: Host Mode (Connect to existing PostgreSQL / IP Intel)
 
-If you already run PostgreSQL locally (e.g. on port 5432 with database `abuseip`):
-
-1. **Configure `.env`**:
-   ```bash
-   cp .env.example .env
-   # Edit .env and point DATABASE_URL to your local database:
-   # DATABASE_URL=postgresql://user:password@127.0.0.1:5432/abuseip
-   ```
-
-2. **Start Arbiter**:
-   ```bash
-   docker compose up -d --build
-   ```
-
-3. **Access**:
-   Open **`http://localhost:8000`**.
+```bash
+cp .env.example .env
+# Edit .env: DATABASE_URL=postgresql://user:***@127.0.0.1:5432/abuseip
+docker compose up -d --build
+```
+Open **`http://localhost:8000`**.
 
 ---
 
 ### Method C: Local Python Setup (Without Docker)
 
-1. **Create and activate a virtual environment**:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure environment & start**:
-   ```bash
-   cp .env.example .env
-   ./start.sh
-   ```
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env
+./start.sh
+```
 
 ---
 
 ## 📖 SOC Analyst Quickstart Workflow
 
-1. **Ingest Telemetry**:
-   - Click **`📥 Ingest Alert`** on the top toolbar.
-   - Either paste your raw Wazuh / Elasticsearch hits JSON or upload your `.json`/`.txt` file.
-   - Alerts are parsed, deduplicated, and enriched instantly.
+1. **Navigate to Impor** (`#/imports`) — paste your raw Wazuh / Elasticsearch JSON or upload `.json`/`.txt` files. Alerts are parsed, deduplicated, and enriched.
 
-2. **Select Tenant**:
-   - Click the tenant tab (e.g. `🏢 wicida`, `🏢 sgu`) to isolate investigations to a specific client.
+2. **Select Tenant** — use the workspace selector in the utility bar to isolate by tenant (e.g. `wicida`, `sgu`) or view all tenants.
 
-3. **Triage & Chronology**:
-   - Use the quick preset chips (`🚫 403`, `🔁 Berulang`, `🤖 Bot`) to filter noisy scans.
-   - Click **`⏳ Urutan: Terlama → Terbaru`** to replay the attack chronologically from the initial probe to the final exploit attempt.
+3. **Triage** (`#/triage`) — filter with presets (403, 404 Probes, Bot, Curl, Repeating), sort by severity/time/hits. Click any alert to open the sidebar inspector with full details and IP intel.
 
-4. **Group into an Incident Case**:
-   - Hold **Shift + Click** to select multiple relevant alerts.
-   - Click **`＋ Buat Insiden`** on the floating batch bar.
-   - Enter Case Title, Category, Severity, Technical Analysis, Verdict (Conclusion), and Remediation.
+4. **Group into Incident** — Shift+Click to select alerts, click "Buat insiden" on the selection toolbar. Add title, category, severity, analysis, conclusion, and recommendation.
 
-5. **Export Deliverable**:
-   - Click **`📋 Salin GDocs`** ➔ Open your Google Doc and press **`Ctrl+V`**. Your complete formatted investigation report with colored severity tags and clean chronology tables is ready for submission!
+5. **Export** (`#/reports`) — choose scope (current filter or selected alerts), pick format (Clipboard HTML, .docx, .xlsx, TSV, Markdown), and export.
 
 ---
 
 ## 🧪 Testing & Quality Assurance
 
-Run the comprehensive unit and integration test suite:
-
 ```bash
-# Run all 23+ automated tests
-python -m unittest discover -s tests -v
-```
+# Frontend tests (44 tests)
+node --test tests/frontend/*.test.mjs
 
-Tests cover:
-- Combined Apache/Nginx, Syslog, AppArmor, and OpenSSH log parsing
-- Signature-based deduplication and timestamp normalization
-- Duplicate Wazuh ID safeguards
-- Multi-tenant isolation and review status flags
-- Document deliverables (HTML, DOCX, XLSX, TSV, Markdown)
-- Privacy sanitization engine
+# Backend tests — safe isolated suites (61 tests)
+.venv/bin/python -m unittest tests.test_parser tests.test_exports \
+  tests.test_privacy tests.test_dedup tests.test_ui_api tests.test_ui_safety -q
+
+# Synthetic browser QA server (port 8767, NOT production)
+.venv/bin/python -m tests.serve_synthetic_ui
+
+# Design system lint
+npx -y @google/design.md@0.4.0 lint docs/ui-ux-redesign/DESIGN.md
+```
 
 ---
 
@@ -226,6 +201,7 @@ Tests cover:
 
 - **No Remote Telemetry**: Arbiter does not phone home, load tracking pixels, or transmit sensitive telemetry to third parties.
 - **Airgapped Design**: Local rule-based correlation and local database queries ensure that internal IP addresses, infrastructure paths, and user data remain strictly confidential.
+- **Font & Asset Locality**: All fonts and assets served locally. No CDN, no external fetches.
 
 ---
 
