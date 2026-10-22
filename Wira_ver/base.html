@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}IP Intel — AbuseIPDB + Geo{% endblock %}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  fontFamily: { sans: ['Archivo','system-ui','sans-serif'], mono: ['IBM Plex Mono','monospace'] },
+  colors: { ink: '#141210', card: '#1b1815', line: '#37312a' }
+}}};
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --font-sans:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --bg-ink:#141210;
+    --bg-card:#1b1815;
+    --bg-surface-2:#221e1a;
+    --bg-sidebar:#100e0c;
+    --border-line:#37312a;
+    --border-strong:#4a4239;
+    --text-main:#f2ece3;
+    --text-soft:#d5cabc;
+    --text-muted:#a89d8f;
+    --text-subtle:#786e61;
+    --accent:#ff5c35;
+    --accent-soft:#ffb39e;
+    --accent-line:#7a3a26;
+    --accent-bg:rgba(255,92,53,.12);
+    --success:#78bd88;
+    --success-line:#365c3e;
+    --success-bg:rgba(120,189,136,.12);
+    --warning:#d9a441;
+    --warning-line:#6a5430;
+    --warning-bg:rgba(217,164,65,.12);
+    --danger:#e06b63;
+    --danger-line:#6e3a36;
+    --danger-bg:rgba(224,107,99,.12);
+    --focus:#ff8a67;
+    --radius:3px;
+    --btn-radius:3px;
+    color-scheme:dark;
+  }
+  body.light-mode{
+    --bg-ink:#f3eee5;
+    --bg-card:#fbf7ef;
+    --bg-surface-2:#ebe4d8;
+    --bg-sidebar:#e9e2d6;
+    --border-line:#d7cdbe;
+    --border-strong:#bdb1a0;
+    --text-main:#1b1713;
+    --text-soft:#4c443b;
+    --text-muted:#5f564b;
+    --text-subtle:#6f6559;
+    --accent:#d94a22;
+    --accent-soft:#9e3519;
+    --accent-line:#e0b4a6;
+    --accent-bg:rgba(217,74,34,.09);
+    --success:#2f7d4a;
+    --success-line:#b6d0bd;
+    --success-bg:rgba(47,125,74,.09);
+    --warning:#98650d;
+    --warning-line:#d8c39a;
+    --warning-bg:rgba(152,101,13,.09);
+    --danger:#b83b35;
+    --danger-line:#d9b3af;
+    --danger-bg:rgba(184,59,53,.09);
+    --focus:#b83b1c;
+    color-scheme:light;
+  }
+  html{ background:var(--bg-ink); scrollbar-color:var(--border-strong) var(--bg-ink); }
+  body{ font-family:var(--font-sans); background:var(--bg-ink); color:var(--text-main) !important; -webkit-font-smoothing:antialiased; }
+  ::selection{ background:var(--accent); color:#17120f; }
+  .font-mono{ font-family:var(--font-mono) !important; }
+  .font-sans{ font-family:var(--font-sans) !important; }
+  .bg-ink{ background-color:var(--bg-ink) !important; }
+  .bg-card{ background-color:var(--bg-card) !important; }
+  .border-line{ border-color:var(--border-line) !important; }
+  [class~="bg-ink/95"]{ background-color:var(--bg-ink) !important; }
+  [class~="bg-ink/50"],[class~="bg-ink/60"],[class~="bg-ink/40"]{ background-color:var(--bg-surface-2) !important; }
+  [class~="border-line/40"],[class~="border-line/50"]{ border-color:var(--border-line) !important; }
+  .divide-line > :not([hidden]) ~ :not([hidden]){ border-color:var(--border-line) !important; }
+  .app-main{
+    width:100%;
+    max-width:1660px;
+    margin:0 auto;
+    padding:28px 28px 64px;
+    min-width:0;
+    overflow-x:hidden;
+  }
+  body.soc-page .app-main{ max-width:none; padding:0; }
+  [class~="max-w-7xl"]{ max-width:1600px !important; }
+  [class~="max-w-6xl"]{ max-width:1500px !important; }
+  [class~="max-w-5xl"]{ max-width:1180px !important; }
+  [class~="max-w-4xl"]{ max-width:1100px !important; }
+  body:not(.soc-page) .app-main > header{
+    background:transparent !important;
+    border:0 !important;
+    border-bottom:1px solid var(--border-line) !important;
+    padding:0 0 20px !important;
+    margin:0 0 22px !important;
+    backdrop-filter:none !important;
+  }
+  body:not(.soc-page) .app-main > header > div{
+    max-width:none !important;
+    padding:0 !important;
+  }
+  body:not(.soc-page) .app-main > main{
+    padding:0 !important;
+    margin-top:0 !important;
+    margin-bottom:0 !important;
+  }
+  body:not(.soc-page) .app-main .space-y-6 > div:first-child.border-b{
+    padding-bottom:20px !important;
+  }
+  body:not(.soc-page) .app-main h1{
+    font-family:var(--font-sans) !important;
+    color:var(--text-main) !important;
+    font-size:clamp(28px,3vw,38px) !important;
+    line-height:1.02 !important;
+    letter-spacing:-.035em !important;
+    font-weight:600 !important;
+  }
+  body:not(.soc-page) .app-main > header h1::before{
+    content:"";
+    display:inline-block;
+    width:10px;
+    height:10px;
+    background:var(--accent);
+    margin-right:10px;
+    vertical-align:.08em;
+  }
+  body:not(.soc-page) .app-main p{
+    color:var(--text-muted);
+  }
+  body:not(.soc-page) .app-main header p,
+  body:not(.soc-page) .app-main .space-y-6 > div:first-child.border-b p{
+    font-size:13px;
+    line-height:1.5;
+    max-width:76ch;
+  }
+  #sidebar{ background:var(--bg-sidebar) !important; border-right-color:var(--border-line) !important; }
+  .brand-full .font-mono{ font-size:17px !important; }
+  .brand-full [class~="text-[10px]"]{
+    margin-left:4px;
+    background:var(--bg-surface-2) !important;
+    color:var(--accent-soft) !important;
+    border:1px solid var(--border-line);
+    border-radius:2px !important;
+    white-space:nowrap;
+    letter-spacing:0;
+    padding:1px 4px !important;
+    font-size:9px !important;
+  }
+  .brand-full > div:nth-child(2){
+    font-size:10px;
+    line-height:1.35;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:150px;
+  }
+  .navlink{ display:flex; align-items:center; gap:.6rem; min-height:38px; padding:8px 10px; border-radius:2px; font-size:12.5px; color:var(--text-muted); border:0; border-left:2px solid transparent; }
+  .navlink:hover{ background:var(--bg-card); border-left-color:var(--border-strong); color:var(--text-main); }
+  .navlink.active{ background:var(--bg-card); border-left-color:var(--accent); color:var(--text-main); }
+  .navlink svg{ flex-shrink:0; }
+  .navlabel{ font-size:10px; letter-spacing:.08em; color:var(--text-subtle); font-weight:500; padding:1.15rem .8rem .3rem; white-space:nowrap; }
+  #sidebar .text-sky-400{ color:var(--text-subtle) !important; }
+  #sidebar .btn-ghost{ background:transparent; border-color:var(--border-line); }
+  .brand-mini{ display:none; }
+  #expandBtn{ display:none; }
+  details summary{ cursor:pointer; min-height:36px; display:flex; align-items:center; }
+  .btn{ min-height:36px !important; border-radius:var(--radius); font-family:var(--font-sans); font-size:12px !important; font-weight:600; white-space:nowrap; box-shadow:none !important; transition:background-color .16s ease,border-color .16s ease,color .16s ease; }
+  .btn:hover{ transform:none !important; }
+  .btn-primary{ background:var(--accent); border:1px solid var(--accent); color:#17120f !important; }
+  .btn-primary:hover{ background:#ff7150; border-color:#ff7150; }
+  .btn-ghost{ background:transparent; border:1px solid var(--border-line); color:var(--text-main); }
+  .btn-ghost:hover{ background:var(--bg-surface-2); border-color:var(--border-strong); }
+  .field{ background:var(--bg-surface-2); border:1px solid var(--border-line); border-radius:var(--radius); min-height:36px !important; color:var(--text-main); }
+  .field:focus{ outline:none; border-color:var(--focus); box-shadow:0 0 0 2px rgba(255,92,53,.2); }
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+  .score{ min-width:52px; }
+  input[type=checkbox]{ width:16px; height:16px; accent-color:var(--accent); }
+  input[type=radio]{ width:15px; height:15px; accent-color:var(--accent); }
+  .cp{ cursor:pointer; border-bottom:1px dashed var(--border-strong); }
+  .cp:hover{ color:var(--accent-soft); border-bottom-color:var(--accent-soft); }
+  #toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-strong); padding:10px 18px; border-radius:2px; font-size:13px; opacity:0; transition:all .25s ease; z-index:50; pointer-events:none; max-width:90vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  body:not(.soc-page) [class*="rounded-"], body:not(.soc-page) [class~="rounded"]{ border-radius:var(--radius) !important; }
+  body:not(.soc-page) .shadow, body:not(.soc-page) .shadow-sm, body:not(.soc-page) .shadow-md,
+  body:not(.soc-page) .shadow-lg, body:not(.soc-page) .shadow-xl, body:not(.soc-page) .shadow-2xl{ box-shadow:none !important; }
+  body:not(.soc-page) .backdrop-blur, body:not(.soc-page) .backdrop-blur-sm, body:not(.soc-page) .backdrop-blur-md{ backdrop-filter:none !important; }
+  body:not(.soc-page) [class*="bg-gradient"]{ background-image:none !important; }
+  body:not(.soc-page) [class~="bg-slate-950"]{ background-color:var(--bg-ink) !important; }
+  body:not(.soc-page) [class~="bg-slate-900"]{ background-color:var(--bg-card) !important; }
+  body:not(.soc-page) [class~="bg-slate-900/60"]{ background-color:var(--bg-surface-2) !important; }
+  body:not(.soc-page) [class~="bg-slate-900/40"],
+  body:not(.soc-page) [class~="bg-slate-900/30"]{ background-color:var(--bg-card) !important; }
+  body:not(.soc-page) [class~="bg-slate-800"],
+  body:not(.soc-page) [class~="bg-slate-800/80"],
+  body:not(.soc-page) [class~="bg-slate-800/60"]{ background-color:var(--bg-surface-2) !important; }
+  body:not(.soc-page) [class~="bg-slate-700"]{ background-color:var(--border-strong) !important; }
+  body:not(.soc-page) [class~="bg-slate-500"]{ background-color:var(--text-subtle) !important; }
+  body:not(.soc-page) [class~="bg-[#0b1220]"]{ background-color:var(--bg-surface-2) !important; }
+  body:not(.soc-page) [class~="bg-sky-950"], body:not(.soc-page) [class~="bg-sky-900"],
+  body:not(.soc-page) [class~="bg-sky-950/80"], body:not(.soc-page) [class~="bg-purple-950"],
+  body:not(.soc-page) [class~="bg-purple-950/80"], body:not(.soc-page) [class~="bg-purple-900"],
+  body:not(.soc-page) [class~="bg-orange-950"], body:not(.soc-page) [class~="bg-orange-950/80"]{ background-color:var(--accent-bg) !important; }
+  body:not(.soc-page) [class~="bg-emerald-950"], body:not(.soc-page) [class~="bg-emerald-950/80"],
+  body:not(.soc-page) [class~="bg-emerald-900"], body:not(.soc-page) [class~="bg-green-950"],
+  body:not(.soc-page) [class~="bg-emerald-500/20"]{ background-color:var(--success-bg) !important; }
+  body:not(.soc-page) [class~="bg-amber-950"], body:not(.soc-page) [class~="bg-amber-950/80"],
+  body:not(.soc-page) [class~="bg-yellow-950"], body:not(.soc-page) [class~="bg-amber-500/20"]{ background-color:var(--warning-bg) !important; }
+  body:not(.soc-page) [class~="bg-rose-950"], body:not(.soc-page) [class~="bg-rose-950/80"],
+  body:not(.soc-page) [class~="bg-rose-500/20"], body:not(.soc-page) [class~="bg-red-950"],
+  body:not(.soc-page) [class~="bg-red-950/80"]{ background-color:var(--danger-bg) !important; }
+  body:not(.soc-page) [class~="bg-orange-500"], body:not(.soc-page) [class~="bg-orange-600"]{ background-color:var(--accent) !important; }
+  body:not(.soc-page) [class~="bg-emerald-500"]{ background-color:var(--success) !important; }
+  body:not(.soc-page) [class~="bg-rose-500"]{ background-color:var(--danger) !important; }
+  body:not(.soc-page) [class~="bg-amber-500"]{ background-color:var(--warning) !important; }
+  body:not(.soc-page) [class~="hover:bg-slate-800/60"]:hover,
+  body:not(.soc-page) [class~="hover:bg-slate-900/40"]:hover,
+  body:not(.soc-page) [class~="hover:bg-slate-900/30"]:hover,
+  body:not(.soc-page) [class~="hover:bg-ink/30"]:hover{ background-color:var(--bg-surface-2) !important; }
+  body:not(.soc-page) [class~="hover:bg-amber-950"]:hover,
+  body:not(.soc-page) [class~="hover:bg-yellow-950"]:hover{ background-color:var(--warning-bg) !important; }
+  body:not(.soc-page) [class~="hover:bg-sky-950"]:hover{ background-color:var(--accent-bg) !important; }
+  body:not(.soc-page) [class~="hover:bg-red-950"]:hover{ background-color:var(--danger-bg) !important; }
+  body:not(.soc-page) [class~="text-white"],
+  body:not(.soc-page) [class~="text-slate-100"],
+  body:not(.soc-page) [class~="text-slate-200"]{ color:var(--text-main) !important; }
+  body:not(.soc-page) [class~="text-slate-300"]{ color:var(--text-soft) !important; }
+  body:not(.soc-page) [class~="text-slate-400"]{ color:var(--text-muted) !important; }
+  body:not(.soc-page) [class~="text-slate-500"],
+  body:not(.soc-page) [class~="text-slate-600"]{ color:var(--text-subtle) !important; }
+  body:not(.soc-page) [class~="text-sky-200"], body:not(.soc-page) [class~="text-sky-300"],
+  body:not(.soc-page) [class~="text-sky-400"], body:not(.soc-page) [class~="text-blue-300"],
+  body:not(.soc-page) [class~="text-blue-400"], body:not(.soc-page) [class~="text-purple-200"],
+  body:not(.soc-page) [class~="text-purple-300"], body:not(.soc-page) [class~="text-purple-400"]{ color:var(--accent-soft) !important; }
+  body:not(.soc-page) [class~="text-emerald-200"], body:not(.soc-page) [class~="text-emerald-300"],
+  body:not(.soc-page) [class~="text-emerald-400"], body:not(.soc-page) [class~="text-green-300"]{ color:var(--success) !important; }
+  body:not(.soc-page) [class~="text-amber-200"], body:not(.soc-page) [class~="text-amber-300"],
+  body:not(.soc-page) [class~="text-amber-400"], body:not(.soc-page) [class~="text-yellow-200"],
+  body:not(.soc-page) [class~="text-yellow-300"]{ color:var(--warning) !important; }
+  body:not(.soc-page) [class~="text-rose-200"], body:not(.soc-page) [class~="text-rose-300"],
+  body:not(.soc-page) [class~="text-rose-400"], body:not(.soc-page) [class~="text-red-200"],
+  body:not(.soc-page) [class~="text-red-300"], body:not(.soc-page) [class~="text-red-400"]{ color:var(--danger) !important; }
+  body:not(.soc-page) [class~="text-orange-300"], body:not(.soc-page) [class~="text-orange-400"],
+  body:not(.soc-page) [class~="text-orange-500"]{ color:var(--accent) !important; }
+  body:not(.soc-page) [class~="border-slate-700"], body:not(.soc-page) [class~="border-slate-800"],
+  body:not(.soc-page) [class~="border-slate-900"]{ border-color:var(--border-line) !important; }
+  body:not(.soc-page) [class~="border-sky-400"], body:not(.soc-page) [class~="border-sky-500"],
+  body:not(.soc-page) [class~="border-sky-600"], body:not(.soc-page) [class~="border-sky-800"],
+  body:not(.soc-page) [class~="border-purple-800"], body:not(.soc-page) [class~="border-orange-800"]{ border-color:var(--accent-line) !important; }
+  body:not(.soc-page) [class~="border-emerald-800"]{ border-color:var(--success-line) !important; }
+  body:not(.soc-page) [class~="border-amber-400"], body:not(.soc-page) [class~="border-amber-700"],
+  body:not(.soc-page) [class~="border-amber-800"], body:not(.soc-page) [class~="border-amber-900"],
+  body:not(.soc-page) [class~="border-yellow-800"]{ border-color:var(--warning-line) !important; }
+  body:not(.soc-page) [class~="border-rose-700"], body:not(.soc-page) [class~="border-rose-800"],
+  body:not(.soc-page) [class~="border-red-800"]{ border-color:var(--danger-line) !important; }
+  body:not(.soc-page) .btn-primary,
+  body:not(.soc-page) .btn-primary *{ color:#17120f !important; }
+
+  body:not(.soc-page) ::placeholder{ color:var(--text-subtle) !important; }
+  body:not(.soc-page) input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  body:not(.soc-page) select, body:not(.soc-page) textarea{
+    background-color:var(--bg-surface-2);
+    border:1px solid var(--border-line);
+    border-radius:var(--radius);
+    color:var(--text-main);
+  }
+  body:not(.soc-page) input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,
+  body:not(.soc-page) select:focus, body:not(.soc-page) textarea:focus{
+    outline:none; border-color:var(--focus); box-shadow:0 0 0 2px rgba(255,92,53,.2);
+  }
+  body:not(.soc-page) input[type=file]::file-selector-button{
+    font-family:var(--font-sans) !important; font-size:11px !important; font-weight:600 !important;
+    background:var(--bg-surface-2) !important; color:var(--text-main) !important;
+    border:1px solid var(--border-line) !important; border-radius:var(--radius) !important;
+    padding:8px 10px !important; margin-right:10px !important; cursor:pointer;
+  }
+  body:not(.soc-page) input[type=file]::file-selector-button:hover{
+    background:var(--bg-card) !important; border-color:var(--border-strong) !important;
+  }
+  :where(body:not(.soc-page)) a{ color:inherit; }
+  body:not(.soc-page) table{ width:100%; min-width:980px; border-collapse:collapse; }
+  body:not(.soc-page) thead{ background:transparent !important; }
+  body:not(.soc-page) thead th{
+    background:transparent !important;
+    border-bottom:1px solid var(--border-line) !important;
+    color:var(--text-subtle) !important;
+    font-family:var(--font-mono) !important;
+    font-size:10px !important;
+    font-weight:500 !important;
+    letter-spacing:.08em !important;
+    text-transform:uppercase;
+    padding:9px 12px !important;
+  }
+  body:not(.soc-page) tbody td{
+    border-bottom:1px solid var(--border-line);
+    padding:9px 12px !important;
+    vertical-align:top;
+  }
+  body:not(.soc-page) tbody td.break-all{ min-width:240px; }
+  body:not(.soc-page) tbody.divide-y > tr + tr{ border-top-width:0 !important; }
+  body:not(.soc-page) tbody tr:hover{ background-color:var(--bg-surface-2) !important; }
+  @media (min-width:1024px){
+    #sidebar{ transition:width .2s ease; }
+    body.nav-collapsed #sidebar{ width:68px; }
+    body.nav-collapsed #sidebar .navtext,
+    body.nav-collapsed #sidebar .navbadge,
+    body.nav-collapsed #sidebar .navlabel,
+    body.nav-collapsed #sidebar .navfoot,
+    body.nav-collapsed #sidebar .brand-full,
+    body.nav-collapsed #sidebar #collapseBtn{ display:none; }
+    body.nav-collapsed #sidebar .brand-mini{ display:block; }
+    body.nav-collapsed #sidebar .navlink{ justify-content:center; padding:.6rem 0; }
+    body.nav-collapsed #sidebar #expandBtn{ display:flex; }
+  }
+  @media (max-width:1023px){
+    #sidebar{ position:fixed; inset:0 auto 0 0; width:270px; transform:translateX(-105%); transition:transform .25s ease; z-index:40; }
+    #sidebar.open{ transform:none; }
+    #scrim.show{ display:block; }
+    #collapseBtn, #expandBtn{ display:none !important; }
+    .app-main{ padding:22px 18px 56px; }
+  }
+  @media (max-width:640px){
+    .app-main{ padding:18px 16px 48px; }
+    body:not(.soc-page) .app-main h1{ font-size:30px !important; }
+    body:not(.soc-page) .app-main > header > div > .flex,
+    body:not(.soc-page) .app-main > header > div.flex{ flex-wrap:wrap; }
+    body:not(.soc-page) .app-main > header > div.flex > div:first-child{ flex:1 1 100%; min-width:0; }
+    body:not(.soc-page) .app-main > header h1{ flex:1 1 100%; }
+    body:not(.soc-page) .app-main > header nav{ width:100%; flex-wrap:wrap; }
+    body:not(.soc-page) .app-main .space-y-6 > div:first-child.border-b{
+      flex-direction:column;
+      align-items:flex-start;
+      gap:12px;
+    }
+    body:not(.soc-page) .app-main .space-y-6 > div:first-child.border-b > .flex.items-center.gap-3{
+      flex-direction:column;
+      align-items:flex-start;
+      gap:8px;
+    }
+    body:not(.soc-page) .app-main .space-y-6 > div:first-child.border-b .flex.items-center.gap-2{
+      flex-wrap:wrap;
+    }
+    body:not(.soc-page) .app-main .space-y-6 > div:first-child.border-b .flex.items-center.gap-2 > h1{
+      flex-basis:100%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .btn, #sidebar, #toast{ transition:none !important; }
+  }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body class="bg-ink text-slate-100 min-h-screen {% block body_class %}{% endblock %}">
+<div id="scrim" class="fixed inset-0 bg-black/60 z-30" style="display:none" onclick="toggleNav(false)"></div>
+<div class="lg:flex min-h-screen">
+  <!-- ===== Sidebar ===== -->
+  <aside id="sidebar" class="bg-[#0b1220] border-r border-line w-[270px] shrink-0 lg:sticky lg:top-0 lg:h-screen overflow-y-auto" aria-label="Sidebar navigasi">
+    <div class="px-4 pt-4 pb-2 flex items-center justify-between gap-2">
+      <div class="brand-full">
+        <div class="font-mono text-xl font-bold tracking-tight">IP<span class="text-orange-500">Intel</span> <span class="text-[10px] align-middle bg-slate-800 text-sky-300 px-1.5 py-0.5 rounded">MISP-lite</span></div>
+        <div class="text-slate-500 text-[11px] mt-0.5">Threat intel • AbuseIPDB + Geo</div>
+      </div>
+      <div class="brand-mini font-mono text-lg font-bold" title="IPIntel">I<span class="text-orange-500">I</span></div>
+      <div class="flex items-center gap-1">
+        <button onclick="toggleTheme()" class="btn btn-ghost px-2.5" style="min-height:36px;min-width:36px" title="Ganti Mode Terang / Gelap">
+          <svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+        <button id="collapseBtn" class="btn btn-ghost px-2.5" style="min-height:40px;min-width:40px" onclick="setNavCollapsed(true)" aria-expanded="true" aria-controls="sidebar" aria-label="Ciutkan sidebar" title="Ciutkan sidebar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M13 8l-3 3 3 3"/></svg></button>
+      </div>
+      <button class="lg:hidden btn-ghost btn px-3 text-sm" style="min-height:40px" onclick="toggleNav(false)" aria-label="Tutup menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <nav class="px-3 pb-6" aria-label="Navigasi utama">
+      <div class="navlabel">THREAT INTEL (MISP)</div>
+      <a class="navlink {% if active=='dashboard' %}active{% endif %}" href="/" {% if active=='dashboard' %}aria-current="page"{% endif %} title="Dashboard IP"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="navtext">Dashboard IP</span> <span class="navbadge ml-auto text-[10px] text-slate-500 font-mono">{{ nav_counts.cache if nav_counts else '' }}</span></a>
+      <a class="navlink {% if active=='misp_events' %}active{% endif %}" href="/misp" {% if active=='misp_events' %}aria-current="page"{% endif %} title="MISP Events"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="navtext">MISP Events</span> <span class="navbadge ml-auto text-[10px] text-rose-400 font-mono">{{ nav_counts.misp_events if nav_counts else '' }}</span></a>
+      <a class="navlink {% if active=='iocs' %}active{% endif %}" href="/iocs" {% if active=='iocs' %}aria-current="page"{% endif %} title="Universal IoCs"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span class="navtext">Universal IoCs</span> <span class="navbadge ml-auto text-[10px] text-sky-400 font-mono">{{ nav_counts.misp_attributes if nav_counts else '' }}</span></a>
+      <a class="navlink {% if active=='threat_feeds' %}active{% endif %}" href="/threat-feeds" {% if active=='threat_feeds' %}aria-current="page"{% endif %} title="Threat Feeds"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg><span class="navtext">Threat Feeds</span></a>
+
+      <div class="navlabel">OPERATIONS &amp; SOC</div>
+      <a class="navlink {% if active=='soc_logs' %}active{% endif %}" href="/soc-logs" {% if active=='soc_logs' %}aria-current="page"{% endif %} title="SOC Log Reader"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="navtext">SOC Log Reader</span> <span class="navbadge ml-auto text-[10px] text-emerald-400 font-mono">{{ nav_counts.wazuh_alerts if nav_counts and nav_counts.wazuh_alerts else '' }}</span></a>
+      <a class="navlink {% if active=='triage' %}active{% endif %}" href="/triage" {% if active=='triage' %}aria-current="page"{% endif %} title="Triage Workbench"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span class="navtext">Triage Workbench</span></a>
+      <a class="navlink {% if active=='events' %}active{% endif %}" href="/events" {% if active=='events' %}aria-current="page"{% endif %} title="Events"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg><span class="navtext">Events Log</span> <span class="navbadge ml-auto text-[10px] text-slate-500 font-mono">{{ nav_counts.events if nav_counts else '' }}</span></a>
+      <a class="navlink {% if active=='batch' %}active{% endif %}" href="/batch" {% if active=='batch' %}aria-current="page"{% endif %} title="Batch Search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg><span class="navtext">Batch Search</span></a>
+      <a class="navlink {% if active=='queue' %}active{% endif %}" href="/queue" {% if active=='queue' %}aria-current="page"{% endif %} title="Antrean"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="navtext">Antrean</span> <span class="navbadge ml-auto text-[10px] text-slate-500 font-mono">{{ nav_counts.queue_pending if nav_counts else '' }}</span></a>
+      <a class="navlink {% if active=='stats' %}active{% endif %}" href="/stats" {% if active=='stats' %}aria-current="page"{% endif %} title="Statistik"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 20v-6M11 20V5M17 20v-9"/></svg><span class="navtext">Statistik</span></a>
+      <a class="navlink {% if active=='hash' %}active{% endif %}" href="/hash" {% if active=='hash' %}aria-current="page"{% endif %} title="File Hash"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17"/></svg><span class="navtext">File Hash</span></a>
+
+      <div class="navlabel">KNOWLEDGE & RULES</div>
+      <a class="navlink {% if active=='actors' %}active{% endif %}" href="/actors" {% if active=='actors' %}aria-current="page"{% endif %} title="Threat Actors"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="navtext">Threat Actors / APT</span></a>
+      <a class="navlink {% if active=='rules' %}active{% endif %}" href="/rules" {% if active=='rules' %}aria-current="page"{% endif %} title="Detection Rules"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span class="navtext">Detection Rules</span></a>
+      <a class="navlink {% if active=='mitre' %}active{% endif %}" href="/mitre" {% if active=='mitre' %}aria-current="page"{% endif %} title="MITRE ATT&amp;CK"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg><span class="navtext">MITRE ATT&amp;CK</span></a>
+      <a class="navlink {% if active=='cve' %}active{% endif %}" href="/cve" {% if active=='cve' %}aria-current="page"{% endif %} title="CVE NIST"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"/></svg><span class="navtext">CVE NIST</span></a>
+      <a class="navlink {% if active=='defang' %}active{% endif %}" href="/tools/defang" {% if active=='defang' %}aria-current="page"{% endif %} title="Defang Utility"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg><span class="navtext">IoC Defanger</span></a>
+      <a class="navlink {% if active=='http' %}active{% endif %}" href="/http-status" {% if active=='http' %}aria-current="page"{% endif %} title="HTTP Status"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg><span class="navtext">HTTP Status</span></a>
+
+      <div class="navlabel">EXPORTS & INTEGRASI</div>
+      <a class="navlink" href="/api/export/ip.txt" target="_blank" rel="noopener" title="IP Blocklist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="navtext">Firewall Blocklist (.txt)</span></a>
+      <a class="navlink" href="/api/misp/export" target="_blank" rel="noopener" title="MISP Export"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="navtext">MISP JSON Feed</span></a>
+      <a class="navlink {% if active=='api_docs' %}active{% endif %}" href="/api/docs" {% if active=='api_docs' %}aria-current="page"{% endif %} title="API Documentation"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span class="navtext">API &amp; Integrasi</span></a>
+      <a class="navlink {% if active=='sync' %}active{% endif %}" href="/sync" {% if active=='sync' %}aria-current="page"{% endif %} title="Sinkron DB"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="2.5"/><path d="M4 5v6.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V5"/><path d="M4 11.5V18c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6.5"/></svg><span class="navtext">Sinkron DB</span></a>
+      <a class="navlink" href="/api/health" target="_blank" rel="noopener" title="Health JSON"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg><span class="navtext">Health JSON</span></a>
+      <div class="navfoot px-3 pt-4 text-[11px] text-slate-500 leading-relaxed">
+        DB aktif: <b class="text-sky-300">{{ db_active|default('?') }}</b><br>
+        <span class="font-mono text-slate-400">ip_intel_cache</span> •
+        <span class="font-mono text-slate-400">ip_intel_events</span> •
+        <span class="font-mono text-slate-400">enrich_queue</span>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- ===== Konten ===== -->
+  <div class="flex-1 min-w-0">
+    <div class="lg:hidden sticky top-0 z-10 bg-ink/95 backdrop-blur border-b border-line px-4 py-3 flex items-center gap-3">
+      <button id="menuBtn" class="btn btn-ghost px-3 text-sm" style="min-height:44px" onclick="toggleNav(true)" aria-expanded="false" aria-controls="sidebar" aria-label="Buka menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="ml-1">Menu</span></button>
+      <span class="font-mono font-bold">IP<span class="text-orange-500">Intel</span></span>
+    </div>
+    <div class="app-main">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+<button id="expandBtn" class="btn btn-ghost fixed top-4 left-4 z-20 px-2.5" style="min-height:40px;min-width:40px" onclick="setNavCollapsed(false)" aria-expanded="false" aria-controls="sidebar" aria-label="Buka sidebar" title="Buka sidebar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18M11 8l3 3-3 3"/></svg></button>
+<div id="toast" role="status"></div>
+<script>
+function setNavCollapsed(collapsed, save){
+  document.body.classList.toggle('nav-collapsed', !!collapsed);
+  var b = document.getElementById('collapseBtn');
+  if(b) b.setAttribute('aria-expanded', String(!collapsed));
+  var e = document.getElementById('expandBtn');
+  if(e) e.setAttribute('aria-expanded', String(!collapsed));
+  if(save !== false){ try{ localStorage.setItem('ipintel-nav-collapsed', collapsed ? '1' : '0'); }catch(e){} }
+}
+try{
+  if(window.matchMedia('(min-width:1024px)').matches && localStorage.getItem('ipintel-nav-collapsed') === '1') setNavCollapsed(true, false);
+}catch(e){}
+function toggleNav(open){
+  const sb = document.getElementById('sidebar'), sc = document.getElementById('scrim');
+  if(open){ sb.classList.add('open'); sc.classList.add('show'); sc.style.display='block'; }
+  else{ sb.classList.remove('open'); sc.classList.remove('show'); sc.style.display='none'; }
+  const mb = document.getElementById('menuBtn');
+  if(mb) mb.setAttribute('aria-expanded', String(!!open));
+  if(open){ const f = sb.querySelector('a.navlink'); if(f) f.focus({preventScroll:true}); }
+}
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') toggleNav(false); });
+let toastTimer = null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  if(!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function copyText(val, label){
+  if(!val){ toast('Nilai kosong — tidak disalin'); return; }
+  try{ await navigator.clipboard.writeText(val); }
+  catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = val; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(_){}
+    ta.remove();
+  }
+  toast('Tersalin: ' + (val.length > 60 ? val.slice(0,60) + '…' : val));
+  const c = document.getElementById('copied');
+  if(c && label === 'query') c.textContent = 'Tersalin!';
+}
+document.addEventListener('click', function(e){
+  const el = e.target.closest ? e.target.closest('.cp') : null;
+  if(!el) return;
+  e.preventDefault();
+  copyText(el.getAttribute('data-copy') || el.textContent.trim(), 'cell');
+});
+function getApiToken() {
+  try { return localStorage.getItem('ipintel-api-token') || ''; } catch(e) { return ''; }
+}
+function apiHeaders(headers = {}) {
+  const token = getApiToken();
+  const h = { 'Content-Type': 'application/json', ...headers };
+  if(token){ h['Authorization'] = 'Bearer ' + token; h['X-API-Key'] = token; }
+  return h;
+}
+async function apiFetch(url, options = {}) {
+  options.headers = apiHeaders(options.headers || {});
+  let res = await fetch(url, options);
+  if(res.status === 401){
+    const t = prompt('API Token diperlukan / tidak valid. Masukkan token akses API:');
+    if(t){
+      try{ localStorage.setItem('ipintel-api-token', t); }catch(e){}
+      options.headers = apiHeaders(options.headers || {});
+      res = await fetch(url, options);
+    }
+  } else if(res.status === 429){
+    const retryAfter = res.headers.get('Retry-After') || '60';
+    showToast(`Terlalu banyak permintaan (Rate Limit 429). Harap tunggu ${retryAfter} detik sebelum mencoba lagi.`, 'error');
+  }
+  return res;
+}
+
+function showToast(msg, type = 'info') {
+  let container = document.getElementById('toast-container');
+  if(!container){
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px;';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  const accent = type === 'error' ? 'var(--danger)' : 'var(--accent)';
+  toast.style.cssText = `padding: 10px 14px; border-radius: 2px; color: var(--text-main); font: 500 12px/1.5 var(--font-sans); background: var(--bg-card); border: 1px solid var(--border-strong); border-left: 2px solid ${accent}; box-shadow: none; transition: opacity 0.3s ease;`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
+}
+
+function toggleTheme(){
+  const isLight = document.body.classList.toggle('light-mode');
+  try{ localStorage.setItem('ipintel-theme', isLight ? 'light' : 'dark'); }catch(e){}
+}
+try{
+  if(localStorage.getItem('ipintel-theme') === 'light'){
+    document.body.classList.add('light-mode');
+  }
+}catch(e){}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

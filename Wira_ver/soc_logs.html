@@ -1,0 +1,3506 @@
+{% extends "base.html" %}
+{% block title %}SOC Log Reader — IPIntel{% endblock %}
+{% block body_class %}soc-page{% endblock %}
+
+{% block head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body.soc-page {
+    --soc-canvas: #141210;
+    --soc-surface: #1b1815;
+    --soc-surface-2: #221e1a;
+    --soc-line: #37312a;
+    --soc-line-strong: #4a4239;
+    --soc-ink: #f2ece3;
+    --soc-muted: #a89d8f;
+    --soc-subtle: #786e61;
+    --soc-accent: #ff5c35;
+    --soc-accent-soft: #ffb39e;
+    --soc-success: #78bd88;
+    --soc-warning: #d9a441;
+    --soc-danger: #e06b63;
+    --soc-focus: #ff8a67;
+    --soc-radius: 3px;
+    --soc-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --soc-sans: 'Archivo', system-ui, -apple-system, Segoe UI, sans-serif;
+    background: var(--soc-canvas) !important;
+    color: var(--soc-ink);
+    font-family: var(--soc-sans);
+  }
+  body.soc-page.light-mode {
+    --soc-canvas: #f3eee5;
+    --soc-surface: #fbf7ef;
+    --soc-surface-2: #ebe4d8;
+    --soc-line: #d7cdbe;
+    --soc-line-strong: #bdb1a0;
+    --soc-ink: #1b1713;
+    --soc-muted: #6d6357;
+    --soc-subtle: #8f8476;
+    --soc-accent: #d94a22;
+    --soc-accent-soft: #9e3519;
+    --soc-success: #2f7d4a;
+    --soc-warning: #98650d;
+    --soc-danger: #b83b35;
+    --soc-focus: #b83b1c;
+  }
+  body.soc-page .bg-ink { background-color: var(--soc-canvas) !important; }
+  body.soc-page .bg-card { background-color: var(--soc-surface) !important; }
+  body.soc-page .border-line { border-color: var(--soc-line) !important; }
+  body.soc-page #sidebar {
+    background: #100e0c !important;
+    border-right-color: var(--soc-line) !important;
+  }
+  body.soc-page.light-mode #sidebar {
+    background: #e9e2d6 !important;
+  }
+  body.soc-page #sidebar .navlink {
+    border-radius: 2px;
+    border: 0;
+    border-left: 2px solid transparent;
+    color: var(--soc-muted);
+    font-size: 12.5px;
+    padding: 8px 10px;
+    min-height: 38px;
+  }
+  body.soc-page #sidebar .navlink:hover {
+    background: var(--soc-surface);
+    color: var(--soc-ink);
+    border-left-color: var(--soc-line-strong);
+  }
+  body.soc-page #sidebar .navlink.active {
+    background: var(--soc-surface);
+    border-left-color: var(--soc-accent);
+    color: var(--soc-ink);
+  }
+  body.soc-page #sidebar .navlabel {
+    color: var(--soc-subtle);
+    font-family: var(--soc-sans);
+    font-size: 10px;
+    letter-spacing: .08em;
+    padding-top: 1.15rem;
+  }
+  body.soc-page #sidebar .navfoot { color: var(--soc-subtle); }
+  body.soc-page .brand-full .text-\[10px\] {
+    background: var(--soc-surface-2) !important;
+    color: var(--soc-accent-soft) !important;
+    border: 1px solid var(--soc-line);
+    border-radius: 2px !important;
+    white-space: nowrap;
+    letter-spacing: 0;
+    padding: 1px 4px !important;
+    font-size: 9px !important;
+  }
+  body.soc-page .brand-full .font-mono { font-size: 17px !important; }
+  body.soc-page .brand-full > div:nth-child(2) {
+    font-size: 10px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+  }
+  body.soc-page #sidebar .text-sky-400 { color: var(--soc-subtle) !important; }
+  body.soc-page #sidebar .btn-ghost {
+    background: transparent;
+    border-color: var(--soc-line);
+  }
+  body.soc-page .btn {
+    min-height: 36px;
+    border-radius: var(--soc-radius);
+    font-family: var(--soc-sans);
+    font-weight: 600;
+    box-shadow: none;
+    transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+  }
+  body.soc-page .btn:hover { transform: none; }
+  body.soc-page .btn-primary {
+    background: var(--soc-accent);
+    border-color: var(--soc-accent);
+    color: #17120f;
+    box-shadow: none;
+  }
+  body.soc-page .btn-primary:hover {
+    background: #ff7150;
+    border-color: #ff7150;
+  }
+  body.soc-page .btn-ghost {
+    background: transparent;
+    border-color: var(--soc-line);
+    color: var(--soc-ink);
+  }
+  body.soc-page .btn-ghost:hover {
+    background: var(--soc-surface-2);
+    border-color: var(--soc-line-strong);
+  }
+  body.soc-page .field {
+    min-height: 36px;
+    border-radius: var(--soc-radius);
+    background: var(--soc-surface-2);
+    border-color: var(--soc-line);
+    color: var(--soc-ink);
+  }
+  body.soc-page .field:focus {
+    border-color: var(--soc-focus);
+    box-shadow: 0 0 0 2px rgba(255, 92, 53, .2);
+  }
+  body.soc-page a:focus-visible,
+  body.soc-page button:focus-visible,
+  body.soc-page input:focus-visible,
+  body.soc-page select:focus-visible,
+  body.soc-page textarea:focus-visible,
+  body.soc-page summary:focus-visible {
+    outline: 2px solid var(--soc-focus);
+    outline-offset: 2px;
+  }
+  body.soc-page .text-slate-400 { color: var(--soc-muted) !important; }
+  body.soc-page .text-slate-500 { color: var(--soc-subtle) !important; }
+  body.soc-page .text-slate-300 { color: #cfc5b7 !important; }
+  body.soc-page .text-white { color: var(--soc-ink) !important; }
+  body.soc-page.light-mode .text-slate-300 { color: #4c443b !important; }
+  body.soc-page .font-mono { font-family: var(--soc-mono) !important; }
+  body.soc-page [hidden] { display: none !important; }
+  body.soc-page #sectionCards { gap: 8px; }
+
+  .soc-shell {
+    width: min(100%, 1660px);
+    margin: 0 auto;
+    padding: 28px 28px 64px;
+  }
+  .soc-masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 22px;
+  }
+  .soc-titleblock { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+  .soc-mark {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    background: var(--soc-accent);
+    color: #17120f;
+    flex: 0 0 auto;
+    border-radius: 2px;
+  }
+  .soc-kicker {
+    margin: 0 0 4px;
+    color: var(--soc-muted);
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .soc-masthead h1 {
+    margin: 0;
+    font-size: clamp(30px, 3.2vw, 44px);
+    line-height: .98;
+    letter-spacing: -.035em;
+    font-weight: 600;
+  }
+  .soc-dek {
+    margin: 8px 0 0;
+    color: var(--soc-muted);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 56ch;
+  }
+  .soc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .soc-db-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--soc-muted);
+    font-size: 12px;
+    min-height: 36px;
+    padding: 0 10px;
+    border-left: 1px solid var(--soc-line);
+    margin-right: 4px;
+  }
+  .soc-db-status strong { color: var(--soc-ink); font-weight: 600; }
+  .soc-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--soc-success);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(120, 189, 136, .12);
+  }
+  .soc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--soc-line);
+    border-radius: var(--soc-radius);
+    background: transparent;
+    color: var(--soc-ink);
+    font-family: var(--soc-sans);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .soc-btn:hover { background: var(--soc-surface-2); border-color: var(--soc-line-strong); }
+  .soc-btn.primary { background: var(--soc-accent); border-color: var(--soc-accent); color: #17120f; }
+  .soc-btn.primary:hover { background: #ff7150; border-color: #ff7150; }
+  .soc-btn.icon { width: 36px; padding: 0; }
+  .soc-btn.small { min-height: 30px; padding: 0 9px; font-size: 11.5px; }
+  .soc-menu { position: relative; }
+  .soc-menu > summary { list-style: none; }
+  .soc-menu > summary::-webkit-details-marker { display: none; }
+  .soc-menu[open] > summary { background: var(--soc-surface-2); border-color: var(--soc-line-strong); }
+  .soc-menu-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 30;
+    min-width: 190px;
+    padding: 5px;
+    background: var(--soc-surface);
+    border: 1px solid var(--soc-line-strong);
+    border-radius: var(--soc-radius);
+    box-shadow: 0 16px 40px rgba(0,0,0,.35);
+  }
+  .soc-menu-panel button,
+  .soc-menu-panel a {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--soc-ink);
+    font: 500 12px var(--soc-sans);
+    text-align: left;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .soc-menu-panel button:hover,
+  .soc-menu-panel a:hover { background: var(--soc-surface-2); }
+  .soc-menu-panel .danger { color: var(--soc-danger); }
+
+  .soc-readout {
+    display: grid;
+    grid-template-columns: 1.05fr 1.15fr 1.15fr 1fr 1.1fr;
+    background: var(--soc-surface);
+    border: 1px solid var(--soc-line);
+    border-radius: var(--soc-radius);
+    margin-bottom: 18px;
+  }
+  .soc-readout > div {
+    min-width: 0;
+    padding: 15px 17px 14px;
+    border-left: 1px solid var(--soc-line);
+  }
+  .soc-readout > div:first-child { border-left: 0; }
+  .soc-readout span {
+    display: block;
+    color: var(--soc-muted);
+    font-size: 11.5px;
+    line-height: 1.2;
+    margin-bottom: 7px;
+  }
+  .soc-readout strong {
+    display: block;
+    color: var(--soc-ink);
+    font-size: 26px;
+    line-height: 1;
+    letter-spacing: -.03em;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .soc-readout small {
+    display: block;
+    color: var(--soc-subtle);
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .soc-readout > div:nth-child(2) strong { color: var(--soc-accent); }
+
+  .soc-toolbar {
+    border-top: 1px solid var(--soc-line);
+    border-bottom: 1px solid var(--soc-line);
+    margin-bottom: 0;
+  }
+  .soc-toolbar-top,
+  .soc-toolbar-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+  }
+  .soc-toolbar-top { border-bottom: 1px solid var(--soc-line); }
+  .soc-toolbar-bottom { padding-bottom: 11px; }
+  .soc-tabs { display: flex; align-items: center; gap: 2px; }
+  .soc-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--soc-muted);
+    font: 500 12.5px var(--soc-sans);
+    cursor: pointer;
+  }
+  .soc-tab:hover { color: var(--soc-ink); background: var(--soc-surface); }
+  .soc-tab.is-active {
+    background: var(--soc-surface-2);
+    border-color: var(--soc-line);
+    color: var(--soc-ink);
+  }
+  .soc-tab .soc-tab-count {
+    color: var(--soc-accent);
+    font-family: var(--soc-mono);
+    font-size: 11px;
+  }
+  .soc-range { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .soc-range-label { color: var(--soc-subtle); font-size: 11.5px; margin-right: 3px; }
+  .soc-range-btn {
+    min-height: 30px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--soc-muted);
+    font: 500 11.5px var(--soc-sans);
+    cursor: pointer;
+  }
+  .soc-range-btn:hover { color: var(--soc-ink); background: var(--soc-surface); }
+  .soc-range-btn.is-active {
+    background: var(--soc-surface-2);
+    border-color: var(--soc-line);
+    color: var(--soc-accent-soft);
+  }
+  .soc-date-popover { position: relative; }
+  .soc-date-popover > summary { list-style: none; }
+  .soc-date-popover > summary::-webkit-details-marker { display: none; }
+  .soc-popover-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 30;
+    width: min(360px, 90vw);
+    padding: 12px;
+    background: var(--soc-surface);
+    border: 1px solid var(--soc-line-strong);
+    border-radius: var(--soc-radius);
+    box-shadow: 0 16px 40px rgba(0,0,0,.35);
+  }
+  .soc-popover-panel label {
+    display: block;
+    color: var(--soc-muted);
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .soc-popover-panel input {
+    width: 100%;
+    min-height: 34px;
+    padding: 0 8px;
+    background: var(--soc-surface-2);
+    border: 1px solid var(--soc-line);
+    border-radius: 2px;
+    color: var(--soc-ink);
+    font: 12px var(--soc-mono);
+  }
+  .soc-popover-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+
+  .soc-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 330px;
+    max-width: 520px;
+    min-height: 36px;
+    padding: 0 10px;
+    background: var(--soc-surface-2);
+    border: 1px solid var(--soc-line);
+    border-radius: var(--soc-radius);
+    color: var(--soc-muted);
+  }
+  .soc-search:focus-within { border-color: var(--soc-focus); box-shadow: 0 0 0 2px rgba(255,92,53,.16); }
+  .soc-search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--soc-ink);
+    font: 12px var(--soc-sans);
+  }
+  .soc-search input::placeholder { color: var(--soc-subtle); }
+  .soc-search kbd {
+    border: 1px solid var(--soc-line-strong);
+    border-radius: 2px;
+    padding: 1px 5px;
+    color: var(--soc-subtle);
+    font: 10px var(--soc-mono);
+  }
+  .soc-search-clear {
+    border: 0;
+    background: transparent;
+    color: var(--soc-muted);
+    cursor: pointer;
+    padding: 3px;
+    display: inline-flex;
+  }
+  .soc-search-clear:hover { color: var(--soc-ink); }
+  .soc-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+  .soc-chip {
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--soc-muted);
+    font: 500 11.5px var(--soc-sans);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .soc-chip:hover { color: var(--soc-ink); background: var(--soc-surface); }
+  .soc-chip.is-active {
+    background: var(--soc-surface-2);
+    border-color: var(--soc-line-strong);
+    color: var(--soc-ink);
+  }
+  .soc-filter-meta { color: var(--soc-subtle); font: 11px var(--soc-mono); white-space: nowrap; }
+  .soc-filter-meta strong { color: var(--soc-ink); font-weight: 500; }
+
+  .soc-table-wrap {
+    background: var(--soc-surface);
+    border: 1px solid var(--soc-line);
+    border-top: 0;
+    border-radius: 0 0 var(--soc-radius) var(--soc-radius);
+    overflow: hidden;
+  }
+  .soc-table-scroll { overflow: auto; max-height: min(68vh, 760px); }
+  .soc-table { width: 100%; min-width: 1050px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+  .soc-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--soc-surface-2);
+    color: var(--soc-muted);
+    font: 500 11px var(--soc-sans);
+    text-align: left;
+    padding: 0 12px;
+    height: 38px;
+    border-bottom: 1px solid var(--soc-line-strong);
+    white-space: nowrap;
+  }
+  .soc-table thead th:first-child { padding-left: 16px; }
+  .soc-table thead th:last-child { padding-right: 16px; }
+  .soc-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+  }
+  .soc-sort:hover { color: var(--soc-ink); }
+  .soc-sort .sort-icon { color: var(--soc-accent); font-family: var(--soc-mono); font-size: 10px; }
+  .soc-table tbody td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--soc-line);
+    vertical-align: top;
+    color: var(--soc-ink);
+  }
+  .soc-table tbody tr:last-child td { border-bottom: 0; }
+  .soc-table tbody tr.soc-row { cursor: default; }
+  .soc-table tbody tr.soc-row:hover { background: var(--soc-surface-2); }
+  .soc-table tbody tr.soc-row.is-open { background: var(--soc-surface-2); }
+  .soc-table tbody td:first-child { padding-left: 16px; }
+  .soc-table tbody td:last-child { padding-right: 16px; }
+  .soc-col-hit { width: 55px; }
+  .soc-col-time { width: 165px; }
+  .soc-col-source { width: 140px; }
+  .soc-col-status { width: 58px; }
+  .soc-col-rule { width: 175px; }
+  .soc-col-host { width: 130px; }
+  .soc-col-actions { width: 152px; }
+  .soc-table th.soc-col-actions,
+  .soc-table td.soc-col-actions { padding-left: 8px; padding-right: 8px; }
+  .soc-hit {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 1px;
+    color: var(--soc-muted);
+    font: 500 17px var(--soc-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.04em;
+  }
+  .soc-hit.is-hot { color: var(--soc-accent); }
+  .soc-hit span { font-size: 12px; letter-spacing: 0; margin-left: 1px; }
+  .soc-time { color: var(--soc-muted); font: 10px/1.55 var(--soc-mono); white-space: normal; }
+  .soc-time strong { display: block; color: var(--soc-ink); font-weight: 500; }
+  .soc-time span { display: block; }
+  .soc-ip {
+    display: inline-block;
+    color: var(--soc-accent-soft);
+    font: 500 12px var(--soc-mono);
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .soc-ip:hover { color: var(--soc-accent); text-decoration: underline; text-underline-offset: 2px; }
+  .soc-tag {
+    display: inline-block;
+    margin-top: 4px;
+    color: var(--soc-subtle);
+    font: 10px var(--soc-mono);
+  }
+  .soc-intel {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    border: 0;
+    background: transparent;
+    color: var(--soc-muted);
+    font: 10.5px var(--soc-mono);
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-decoration-color: var(--soc-line-strong);
+    text-underline-offset: 2px;
+  }
+  .soc-intel:hover { color: var(--soc-ink); }
+  .soc-intel.risk-high { color: var(--soc-danger); }
+  .soc-intel.risk-medium { color: var(--soc-warning); }
+  .soc-request-main { display: flex; align-items: baseline; gap: 7px; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .soc-method { color: var(--soc-muted); font: 10px var(--soc-mono); flex: 0 0 auto; }
+  .soc-path {
+    color: var(--soc-ink);
+    font: 12px/1.45 var(--soc-mono);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .soc-request-sub {
+    margin-top: 3px;
+    color: var(--soc-muted);
+    font: 11px/1.45 var(--soc-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .soc-request-sub.is-suspicious { color: var(--soc-accent-soft); }
+  .soc-type {
+    display: inline-block;
+    margin-right: 5px;
+    color: var(--soc-subtle);
+    font: 10px var(--soc-sans);
+    text-transform: none;
+  }
+  .soc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--soc-muted);
+    font: 500 12px var(--soc-mono);
+    white-space: nowrap;
+  }
+  .soc-status::before {
+    content: "";
+    width: 3px;
+    height: 13px;
+    background: var(--soc-line-strong);
+    display: inline-block;
+  }
+  .soc-status.status-403 { color: var(--soc-danger); }
+  .soc-status.status-403::before { background: var(--soc-danger); }
+  .soc-status.status-404 { color: var(--soc-warning); }
+  .soc-status.status-404::before { background: var(--soc-warning); }
+  .soc-status.status-401,
+  .soc-status.status-400 { color: var(--soc-warning); }
+  .soc-status.status-401::before,
+  .soc-status.status-400::before { background: var(--soc-warning); }
+  .soc-status.status-500 { color: var(--soc-danger); }
+  .soc-status.status-500::before { background: var(--soc-danger); }
+  .soc-status.status-200 { color: var(--soc-success); }
+  .soc-status.status-200::before { background: var(--soc-success); }
+  .soc-rule { min-width: 0; }
+  .soc-rule-head { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+  .soc-rule-id { color: var(--soc-accent-soft); font: 11px var(--soc-mono); }
+  .soc-rule-level { color: var(--soc-subtle); font: 10px var(--soc-mono); }
+  .soc-rule-level.level-high { color: var(--soc-danger); }
+  .soc-rule-level.level-medium { color: var(--soc-warning); }
+  .soc-rule-desc {
+    margin-top: 3px;
+    color: var(--soc-ink);
+    font-size: 11.5px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .soc-host { color: var(--soc-ink); font-size: 11.5px; line-height: 1.4; overflow: hidden; }
+  .soc-host-main { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .soc-host small { display: block; margin-top: 3px; color: var(--soc-subtle); font: 10.5px var(--soc-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .soc-row-actions { display: flex; flex-wrap: wrap; gap: 3px; }
+  .soc-action {
+    min-height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--soc-line);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--soc-muted);
+    font: 500 10.5px var(--soc-sans);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .soc-action:hover { background: var(--soc-surface-2); border-color: var(--soc-line-strong); color: var(--soc-ink); }
+  .soc-action.danger:hover { color: var(--soc-danger); border-color: var(--soc-danger); }
+
+  .soc-detail-row td {
+    padding: 0 !important;
+    background: var(--soc-canvas);
+    border-bottom: 1px solid var(--soc-line) !important;
+  }
+  .soc-detail {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    gap: 18px;
+    padding: 16px 18px 18px;
+    border-left: 2px solid var(--soc-accent);
+  }
+  .soc-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px 18px;
+  }
+  .soc-detail-grid div { min-width: 0; }
+  .soc-detail-grid dt {
+    color: var(--soc-subtle);
+    font-size: 10.5px;
+    margin-bottom: 3px;
+  }
+  .soc-detail-grid dd {
+    margin: 0;
+    color: var(--soc-ink);
+    font: 11px/1.45 var(--soc-mono);
+    overflow-wrap: anywhere;
+  }
+  .soc-detail-log {
+    min-width: 0;
+    position: relative;
+  }
+  .soc-detail-log pre {
+    margin: 0;
+    max-height: 150px;
+    overflow: auto;
+    padding: 10px 11px;
+    background: var(--soc-surface);
+    border: 1px solid var(--soc-line);
+    color: var(--soc-muted);
+    font: 10.5px/1.55 var(--soc-mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .soc-detail-log-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+    color: var(--soc-subtle);
+    font-size: 10.5px;
+  }
+  .soc-detail-danger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--soc-line);
+  }
+  .soc-detail-danger p { margin: 0; color: var(--soc-muted); font-size: 11px; line-height: 1.4; }
+  .soc-detail-danger button { margin-left: auto; }
+
+  .soc-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .soc-card {
+    background: var(--soc-surface);
+    border: 1px solid var(--soc-line);
+    border-radius: var(--soc-radius);
+    padding: 14px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .soc-card:hover { border-color: var(--soc-line-strong); }
+  .soc-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .soc-card-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .soc-card-time { color: var(--soc-subtle); font: 10.5px var(--soc-mono); white-space: nowrap; }
+  .soc-card-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .soc-card-source { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+  .soc-card-request { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+  .soc-card-sub { color: var(--soc-muted); font: 11px/1.45 var(--soc-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .soc-card-sub.is-suspicious { color: var(--soc-accent-soft); }
+  .soc-card-foot {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid var(--soc-line);
+  }
+  .soc-card-rule {
+    color: var(--soc-ink);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .soc-card-rule span { color: var(--soc-accent-soft); font-family: var(--soc-mono); }
+  .soc-card-host { color: var(--soc-subtle); font: 10px var(--soc-mono); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .soc-card-foot .soc-row-actions { grid-column: 1 / -1; }
+  @media (max-width: 1060px) {
+    .soc-cards-grid { grid-template-columns: 1fr; }
+  }
+
+  .soc-empty {
+    padding: 52px 24px;
+    text-align: center;
+  }
+  .soc-empty strong { display: block; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+  .soc-empty p { margin: 7px auto 17px; max-width: 46ch; color: var(--soc-muted); font-size: 12.5px; line-height: 1.5; }
+  .soc-empty-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+
+  .soc-page .modal-overlay { background: rgba(10, 9, 8, .78) !important; backdrop-filter: none !important; }
+  .soc-page .modal-overlay > div {
+    background: var(--soc-surface) !important;
+    border-color: var(--soc-line-strong) !important;
+    border-radius: var(--soc-radius) !important;
+    box-shadow: 0 30px 90px rgba(0,0,0,.45) !important;
+  }
+  .soc-page .modal-overlay .bg-ink\/60,
+  .soc-page .modal-overlay .bg-ink\/50,
+  .soc-page .modal-overlay .bg-ink\/40,
+  .soc-page .modal-overlay .bg-ink\/30 { background: var(--soc-surface-2) !important; }
+  .soc-page #jsonModalPre,
+  .soc-page #fullLogModalPre,
+  .soc-page #markdownReportBox {
+    background: var(--soc-canvas) !important;
+    border-color: var(--soc-line) !important;
+    border-radius: 2px !important;
+    color: var(--soc-muted) !important;
+    font-family: var(--soc-mono) !important;
+  }
+  .soc-page #jsonModalPre { color: var(--soc-accent-soft) !important; }
+  .soc-page #fullLogModalPre { color: var(--soc-success) !important; }
+  .soc-page #importPayloadText {
+    background: var(--soc-canvas) !important;
+    border-color: var(--soc-line) !important;
+    border-radius: 2px !important;
+    color: var(--soc-ink) !important;
+  }
+  .soc-page #importPayloadText:focus { border-color: var(--soc-focus) !important; }
+  .soc-page .modal-overlay h3 { font-family: var(--soc-sans) !important; }
+  .soc-import-note {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border: 1px solid var(--soc-line);
+    border-left: 2px solid var(--soc-accent);
+    background: var(--soc-surface-2);
+    color: var(--soc-muted);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .soc-import-note strong { color: var(--soc-ink); font-weight: 600; white-space: nowrap; }
+  .soc-import-note code { color: var(--soc-accent-soft); font-family: var(--soc-mono); }
+  .soc-page #toastBox {
+    border-radius: var(--soc-radius);
+    background: var(--soc-surface);
+    border-color: var(--soc-line-strong);
+    box-shadow: 0 16px 40px rgba(0,0,0,.35);
+    font-family: var(--soc-sans);
+    font-size: 12px;
+    border-left: 3px solid var(--soc-accent);
+  }
+  .soc-page #sectionCards .bg-card,
+  .soc-page #sectionAnalysis {
+    border-radius: var(--soc-radius) !important;
+    border-color: var(--soc-line) !important;
+    box-shadow: none !important;
+  }
+  .soc-page #sectionCards .rounded-xl,
+  .soc-page #sectionCards .rounded-lg { border-radius: 2px !important; }
+  .soc-page #sectionCards .bg-purple-500\/20,
+  .soc-page #sectionCards .bg-orange-500\/20,
+  .soc-page #sectionCards .bg-rose-500\/20,
+  .soc-page #sectionCards .bg-amber-500\/20,
+  .soc-page #sectionCards .bg-emerald-500\/20,
+  .soc-page #sectionCards .bg-slate-700\/40 {
+    background: var(--soc-surface-2) !important;
+  }
+  .soc-page #sectionCards .text-purple-300,
+  .soc-page #sectionCards .text-orange-300,
+  .soc-page #sectionCards .text-sky-400,
+  .soc-page #sectionCards .text-amber-300 { color: var(--soc-muted) !important; }
+  .soc-page #sectionCards .text-rose-400 { color: var(--soc-danger) !important; }
+  .soc-page #sectionCards .text-emerald-400 { color: var(--soc-success) !important; }
+
+  @media (max-width: 1180px) {
+    .soc-shell { padding: 22px 20px 48px; }
+    .soc-readout { grid-template-columns: repeat(2, 1fr); }
+    .soc-readout > div:nth-child(3) { border-left: 0; border-top: 1px solid var(--soc-line); }
+    .soc-readout > div:nth-child(4) { border-top: 1px solid var(--soc-line); }
+    .soc-readout > div:nth-child(5) { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--soc-line); }
+    .soc-detail { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 820px) {
+    .soc-import-note { flex-direction: column; gap: 3px; }
+    .soc-import-note strong { white-space: normal; }
+    .soc-shell { padding: 18px 14px 40px; }
+    .soc-masthead { flex-direction: column; gap: 16px; }
+    .soc-actions { justify-content: flex-start; width: 100%; }
+    .soc-db-status { border-left: 0; padding-left: 0; }
+    .soc-toolbar-top, .soc-toolbar-bottom { align-items: flex-start; }
+    .soc-search { max-width: none; flex-basis: 100%; }
+    .soc-filter-meta { margin-left: auto; }
+    .soc-table-scroll { max-height: none; overflow: visible; }
+    .soc-table { display: block; min-width: 0; }
+    .soc-table thead { display: none; }
+    .soc-table tbody { display: block; }
+    .soc-table tbody tr { display: block; }
+    .soc-table tbody tr.soc-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      grid-template-areas:
+        "hit time status"
+        "source source source"
+        "request request request"
+        "rule rule rule"
+        "actions actions actions";
+      gap: 7px 10px;
+      align-items: start;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--soc-line);
+    }
+    .soc-table tbody tr.soc-row:hover { background: var(--soc-surface-2); }
+    .soc-table tbody td {
+      display: block;
+      width: auto !important;
+      padding: 0 !important;
+      border: 0;
+    }
+    .soc-row .soc-col-hit { grid-area: hit; align-self: center; }
+    .soc-row .soc-col-time { grid-area: time; justify-self: end; text-align: right; align-self: center; }
+    .soc-row .soc-col-status { grid-area: status; justify-self: end; align-self: center; }
+    .soc-row td:nth-child(3) { grid-area: source; }
+    .soc-row td:nth-child(4) { grid-area: request; }
+    .soc-row td:nth-child(6) { grid-area: rule; }
+    .soc-row td.soc-col-host { display: none; }
+    .soc-row td.soc-col-actions { grid-area: actions; }
+    .soc-row-actions { gap: 4px; }
+    .soc-table tbody tr.soc-detail-row { display: block; }
+    .soc-table tbody tr.soc-detail-row td { display: block; padding: 0 !important; border: 0 !important; }
+    .soc-detail { padding: 13px 14px; }
+    .soc-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .soc-masthead h1 { font-size: 34px; }
+    .soc-readout strong { font-size: 23px; }
+    .soc-readout > div { padding: 12px; }
+    .soc-actions .soc-btn { flex: 1 1 auto; }
+    .soc-actions .soc-db-status { flex-basis: 100%; }
+    .soc-tabs { width: 100%; }
+    .soc-tab { flex: 1; justify-content: center; }
+    .soc-range { width: 100%; }
+    .soc-detail { padding: 14px; }
+    .soc-detail-grid { grid-template-columns: 1fr; }
+    .soc-detail-danger { align-items: flex-start; flex-direction: column; }
+    .soc-detail-danger button { margin-left: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body.soc-page *, body.soc-page *::before, body.soc-page *::after {
+      transition-duration: .01ms !important;
+      animation-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="soc-shell">
+  <header class="soc-masthead">
+    <div class="soc-titleblock">
+      <div class="soc-mark" aria-hidden="true">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><path d="M4 6h16M4 12h11M4 18h16"/></svg>
+      </div>
+      <div>
+        <p class="soc-kicker">Wazuh alert evidence</p>
+        <h1>SOC Log Reader</h1>
+        <p class="soc-dek">Satu baris untuk setiap pola log. Hit menghitung kemunculan dengan isi yang sama; rentang waktu tetap tersimpan.</p>
+      </div>
+    </div>
+    <div class="soc-actions">
+      <div class="soc-db-status" title="Jumlah grup log di database">
+        <span class="soc-dot" aria-hidden="true"></span>
+        <span>Postgres</span>
+        <strong id="dbCountBadge">{{ initial_alerts|length }}</strong>
+        <span>grup</span>
+      </div>
+      <button type="button" class="soc-btn primary" onclick="openIngestModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Impor alert
+      </button>
+      <button type="button" class="soc-btn" onclick="enrichAllIps()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="2.5"/></svg>
+        Enrich IP
+      </button>
+      <details class="soc-menu">
+        <summary class="soc-btn">
+          Ekspor
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="soc-menu-panel">
+          <button type="button" onclick="exportTableToExcel()">Excel (.xlsx)</button>
+          <button type="button" onclick="exportTableToWord()">Word (.docx)</button>
+          <button type="button" onclick="copyTableAsTabSeparated()">Salin tabel</button>
+        </div>
+      </details>
+      <details class="soc-menu">
+        <summary class="soc-btn icon" aria-label="Menu lainnya" title="Menu lainnya">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+        </summary>
+        <div class="soc-menu-panel">
+          <button type="button" onclick="loadPresetData('u8')">Muat contoh SQLi</button>
+          <button type="button" onclick="loadPresetData('j2')">Muat contoh Judol</button>
+          <button type="button" onclick="reloadAlertsFromDB()">Muat ulang data</button>
+          <button type="button" class="danger" onclick="confirmClearDatabase()">Kosongkan database</button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <section class="soc-readout" aria-label="Ringkasan log">
+    <div>
+      <span>Grup log</span>
+      <strong id="kpiTotalAlerts">0</strong>
+      <small id="kpiTotalSub">baris unik setelah dedup</small>
+    </div>
+    <div>
+      <span>Total kemunculan</span>
+      <strong id="kpiTotalHits">0</strong>
+      <small>hit dari seluruh alert</small>
+    </div>
+    <div>
+      <span>Grup berulang</span>
+      <strong id="kpiRepeatedGroups">0</strong>
+      <small id="kpiMaxHit">maks 1x</small>
+    </div>
+    <div>
+      <span>IP sumber</span>
+      <strong id="kpiUniqueIps">-</strong>
+      <small id="kpiIpList">-</small>
+    </div>
+    <div>
+      <span>Level tertinggi</span>
+      <strong id="kpiMaxLevel">-</strong>
+      <small id="kpiRuleDesc">-</small>
+    </div>
+  </section>
+
+  <section class="soc-toolbar" aria-label="Filter dan tampilan log">
+    <div class="soc-toolbar-top">
+      <div class="soc-tabs" role="tablist" aria-label="Tampilan data">
+        <button type="button" role="tab" aria-selected="true" class="soc-tab is-active" id="tabBtnBreakdown" onclick="switchTab('breakdown')">
+          Tabel <span class="soc-tab-count" id="countBreakdown">0</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" class="soc-tab" id="tabBtnCards" onclick="switchTab('cards')">
+          Kartu
+        </button>
+        <button type="button" role="tab" aria-selected="false" class="soc-tab" id="tabBtnAnalysis" onclick="switchTab('analysis')">
+          Laporan
+        </button>
+      </div>
+      <div class="soc-range" aria-label="Rentang waktu">
+        <span class="soc-range-label">Rentang</span>
+        <button type="button" onclick="handleRangeChange('7')" class="soc-range-btn {% if days_limit=='7' and not from_date and not to_date %}is-active{% endif %}">7 hari</button>
+        <button type="button" onclick="handleRangeChange('30')" class="soc-range-btn {% if days_limit=='30' and not from_date and not to_date %}is-active{% endif %}">30 hari</button>
+        <button type="button" onclick="handleRangeChange('60')" class="soc-range-btn {% if days_limit=='60' and not from_date and not to_date %}is-active{% endif %}">60 hari</button>
+        <button type="button" onclick="handleRangeChange('all')" class="soc-range-btn {% if days_limit=='all' %}is-active{% endif %}">Semua</button>
+        <details class="soc-date-popover">
+          <summary class="soc-btn small">
+            {% if from_date or to_date %}Tanggal aktif{% else %}Tanggal{% endif %}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="soc-popover-panel">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <label for="fromDateInput">Dari</label>
+                <input type="date" id="fromDateInput" value="{{ from_date }}">
+              </div>
+              <div>
+                <label for="toDateInput">Sampai</label>
+                <input type="date" id="toDateInput" value="{{ to_date }}">
+              </div>
+            </div>
+            <div class="soc-popover-actions">
+              <button type="button" class="soc-btn small" onclick="handleRangeChange('all')">Reset</button>
+              <button type="button" class="soc-btn primary small" onclick="applyCustomDateRange()">Terapkan</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="soc-toolbar-bottom">
+      <label class="soc-search" for="searchInput">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="searchInput" type="search" autocomplete="off" placeholder="Cari IP, path, payload, rule, host…" oninput="handleSearch(this.value)" aria-label="Cari log">
+        <kbd aria-hidden="true">/</kbd>
+        <button type="button" id="searchClear" class="soc-search-clear hidden" onclick="clearSearch()" aria-label="Hapus pencarian">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </label>
+      <div class="soc-filters" role="group" aria-label="Filter cepat">
+        <button type="button" class="soc-chip is-active" data-filter="all" onclick="setFilter('all', this)" aria-pressed="true">Semua</button>
+        <button type="button" class="soc-chip" data-filter="403" onclick="setFilter('403', this)" aria-pressed="false">403</button>
+        <button type="button" class="soc-chip" data-filter="404" onclick="setFilter('404', this)" aria-pressed="false">404</button>
+        <button type="button" class="soc-chip" data-filter="repeat" onclick="setFilter('repeat', this)" aria-pressed="false">Berulang</button>
+        <button type="button" class="soc-chip" data-filter="nonhttp" onclick="setFilter('nonhttp', this)" aria-pressed="false">Non-HTTP</button>
+        <button type="button" class="soc-chip" data-filter="googlebot" onclick="setFilter('googlebot', this)" aria-pressed="false">Bot</button>
+        <button type="button" class="soc-chip" data-filter="curl" onclick="setFilter('curl', this)" aria-pressed="false">curl</button>
+      </div>
+      <div class="soc-filter-meta"><strong id="visibleCount">0</strong> dari <strong id="totalCount">0</strong> grup</div>
+    </div>
+  </section>
+
+  <section id="sectionBreakdown" class="soc-table-wrap" role="tabpanel" aria-labelledby="tabBtnBreakdown">
+    <div class="soc-table-scroll" tabindex="0" aria-label="Tabel log; pada layar sedang, geser horizontal untuk melihat kolom lainnya">
+      <table class="soc-table">
+        <thead>
+          <tr>
+            <th scope="col" class="soc-col-hit" aria-sort="none">
+              <button type="button" class="soc-sort" onclick="setSort('hit')">Hit <span class="sort-icon" id="sortHitIcon" aria-hidden="true"></span></button>
+            </th>
+            <th scope="col" class="soc-col-time" aria-sort="descending">
+              <button type="button" class="soc-sort" onclick="setSort('time')">Waktu <span class="sort-icon" id="sortTimeIcon" aria-hidden="true">↓</span></button>
+            </th>
+            <th scope="col" class="soc-col-source" aria-sort="none">
+              <button type="button" class="soc-sort" onclick="setSort('source')" title="Urutkan berdasarkan IP sumber">Sumber <span class="sort-icon" id="sortSourceIcon" aria-hidden="true"></span></button>
+            </th>
+            <th scope="col">Permintaan / peristiwa</th>
+            <th scope="col" class="soc-col-status">Status</th>
+            <th scope="col" class="soc-col-rule" aria-sort="none">
+              <button type="button" class="soc-sort" onclick="setSort('level')">Rule <span class="sort-icon" id="sortLevelIcon" aria-hidden="true"></span></button>
+            </th>
+            <th scope="col" class="soc-col-host">Host</th>
+            <th scope="col" class="soc-col-actions">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="breakdownTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Hidden compatibility fields for the analysis/export helpers. -->
+  <span id="kpiHttpStatus" hidden></span>
+  <span id="kpiVerdictSub" hidden></span>
+  <span id="kpiTenant" hidden></span>
+  <span id="kpiAgent" hidden></span>
+
+  <!-- TAB 2: Detail Cards View -->
+  <div id="sectionCards" class="hidden flex flex-col gap-3"></div>
+
+  <!-- TAB 3: Incident Analysis Report View -->
+  <div id="sectionAnalysis" class="hidden bg-card border border-line rounded-xl p-5 flex flex-col gap-4">
+    <div class="flex justify-between items-center border-b border-line pb-3">
+      <h2 class="text-base font-bold text-white flex items-center gap-2 font-mono">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Laporan investigasi SOC
+      </h2>
+      <button onclick="copyReportMarkdown()" class="btn btn-primary px-3 py-1.5 text-xs text-white font-semibold flex items-center gap-1.5">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Salin Markdown
+      </button>
+    </div>
+    <div id="analysisContent"></div>
+  </div>
+
+  <!-- Quick Manual Log Parser Strip -->
+  <details class="soc-quicklog" style="margin-top:14px;background:var(--soc-surface);border:1px solid var(--soc-line);border-radius:var(--soc-radius)">
+    <summary style="list-style:none;display:flex;align-items:center;gap:8px;min-height:42px;padding:0 13px;cursor:pointer;color:var(--soc-muted);font-size:12px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      Input satu baris access log / syslog / AppArmor
+      <span style="margin-left:auto;color:var(--soc-subtle);font:10px var(--soc-mono)">manual</span>
+    </summary>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 13px 13px">
+      <input type="text" id="quickLogInput" placeholder='127.0.0.1 - - [20/Oct/2026:07:38:28 +0700] "GET /index.php?id=1 HTTP/2.0" 403 153 "-" "curl/7.74.0"' class="field" style="flex:1 1 420px;padding:0 10px;font-family:var(--soc-mono);font-size:11px;color:var(--soc-accent-soft)">
+      <button type="button" onclick="processQuickLog()" class="soc-btn primary">Pisahkan &amp; simpan</button>
+    </div>
+  </details>
+
+</div>
+
+<!-- Modal View Raw JSON -->
+<div id="jsonModal" class="modal-overlay hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-card border border-line rounded-xl max-w-3xl w-full flex flex-col shadow-2xl overflow-hidden max-h-[90vh]">
+    <div class="px-5 py-3.5 border-b border-line flex justify-between items-center bg-ink/60">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2 font-mono">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Raw Wazuh Alert JSON: <span id="jsonModalAlertId" class="text-orange-400 text-xs">-</span>
+      </h3>
+      <button onclick="closeJsonModal()" class="text-slate-400 hover:text-white text-base">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto">
+      <pre id="jsonModalPre" class="bg-ink border border-line rounded-lg p-3 font-mono text-xs text-sky-300 overflow-x-auto select-all max-h-[520px] whitespace-pre-wrap"></pre>
+    </div>
+    <div class="px-5 py-3 border-t border-line bg-ink/40 flex justify-between items-center">
+      <button onclick="copyJsonModalContent()" class="btn btn-primary px-3 py-1.5 text-xs text-white font-semibold flex items-center gap-1.5">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Salin JSON
+      </button>
+      <button onclick="closeJsonModal()" class="btn btn-ghost px-4 py-1.5 text-xs text-slate-300">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Full Log (semua bentuk log) -->
+<div id="fullLogModal" class="modal-overlay hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-card border border-line rounded-xl max-w-4xl w-full flex flex-col shadow-2xl overflow-hidden max-h-[90vh]">
+    <div class="px-5 py-3.5 border-b border-line flex justify-between items-center bg-ink/60">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2 font-mono">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        Full Log: <span id="fullLogModalAlertId" class="text-orange-400 text-xs">-</span>
+      </h3>
+      <button onclick="closeFullLogModal()" class="text-slate-400 hover:text-white text-base">✕</button>
+    </div>
+    <div class="p-4 overflow-y-auto">
+      <pre id="fullLogModalPre" class="bg-ink border border-line rounded-lg p-3 font-mono text-xs text-emerald-200 overflow-x-auto select-all max-h-[520px] whitespace-pre-wrap"></pre>
+    </div>
+    <div class="px-5 py-3 border-t border-line bg-ink/40 flex justify-between items-center">
+      <button onclick="copyFullLogModalContent()" class="btn btn-primary px-3 py-1.5 text-xs text-white font-semibold flex items-center gap-1.5">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Salin Log
+      </button>
+      <button onclick="closeFullLogModal()" class="btn btn-ghost px-4 py-1.5 text-xs text-slate-300">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ingest Alerts -->
+<div id="ingestModal" class="modal-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-card border border-line rounded-xl max-w-2xl w-full flex flex-col shadow-2xl overflow-hidden max-h-[90vh]">
+    <div class="px-5 py-4 border-b border-line flex justify-between items-center bg-ink/50">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2 font-mono">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Impor alert Wazuh
+      </h3>
+      <button onclick="closeIngestModal()" class="text-slate-400 hover:text-white text-base">✕</button>
+    </div>
+    <div class="p-5 flex flex-col gap-3 overflow-y-auto">
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-slate-400">
+            Pilih satu atau beberapa file Wazuh / Elasticsearch (.json, .txt, .log), atau tempel teks alert di bawah.
+          </p>
+          <label class="btn btn-primary px-3 py-1 text-xs text-white cursor-pointer inline-flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Pilih file
+            <input type="file" id="jsonFileInput" accept=".json,.txt,.log,.ndjson,application/json,text/plain" multiple class="hidden" onchange="handleJsonFileUpload(event)">
+          </label>
+        </div>
+        <div id="fileImportStatus" class="text-[11px] text-emerald-400 font-mono break-all"></div>
+        <textarea id="importPayloadText" class="w-full h-40 bg-ink border border-line rounded-lg p-3 font-mono text-xs text-slate-200 outline-none focus:border-sky-400" placeholder='Tempelkan JSON alert, access log, syslog, atau AppArmor log di sini...'></textarea>
+        <p class="text-[10px] text-slate-500">
+          File <code>.txt</code> hasil export Elasticsearch/Wazuh didukung, termasuk JSON dengan baris baru di dalam <code>full_log</code>. File <code>.zip</code> harap diekstrak dulu.
+        </p>
+      </div>
+      <div class="soc-import-note">
+        <strong>Impor bersifat menambah.</strong>
+        <span>Data lama tidak dihapus. <code>_id</code> Wazuh yang sama tidak menambah Hit; konten identik dengan <code>_id</code> berbeda digabung dan Hit bertambah.</span>
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t border-line bg-ink/30 flex justify-between">
+      <button onclick="closeIngestModal()" class="btn btn-ghost px-4 py-1.5 text-xs text-slate-300">Batal</button>
+      <button onclick="processManualIngest()" class="btn btn-primary px-4 py-1.5 text-xs text-white font-semibold">Impor &amp; dedup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal IPIntel Deep Dive -->
+<div id="intelModal" class="modal-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-card border border-line rounded-xl max-w-lg w-full flex flex-col shadow-2xl overflow-hidden">
+    <div class="px-5 py-4 border-b border-line flex justify-between items-center bg-ink/50">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2 font-mono">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Profil IPIntel: <span id="intelModalIp" class="text-orange-400">-</span>
+      </h3>
+      <button onclick="closeIntelModal()" class="text-slate-400 hover:text-white text-base">✕</button>
+    </div>
+    <div class="p-5 flex flex-col gap-3" id="intelModalBody"></div>
+    <div class="px-5 py-3 border-t border-line bg-ink/30 flex justify-between">
+      <a id="intelPlatformLink" href="#" class="btn btn-primary px-3 py-1.5 text-xs text-white font-semibold flex items-center gap-1.5">
+        Buka di IPIntel Dashboard
+      </a>
+      <button onclick="closeIntelModal()" class="btn btn-ghost px-4 py-1.5 text-xs text-slate-300">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Box -->
+<div id="toastBox" role="status" aria-live="polite" class="fixed bottom-6 right-6 z-50 bg-card border border-line px-4 py-3 rounded-xl text-xs text-white shadow-2xl transition-all duration-300 transform translate-y-20 opacity-0 pointer-events-none font-mono">
+  <span id="toastMsg">Notifikasi</span>
+</div>
+
+<script>
+  
+  // Date Range & Historical Filtering Handlers
+  async function handleRangeChange(val) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('day');
+    url.searchParams.delete('from');
+    url.searchParams.delete('to');
+    if (val === 'all') {
+      url.searchParams.set('days', 'all');
+    } else {
+      url.searchParams.set('days', val);
+    }
+    window.location.href = url.toString();
+  }
+
+  async function handleDaySelect(dayStr) {
+    if (!dayStr) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('from');
+    url.searchParams.delete('to');
+    url.searchParams.delete('days');
+    url.searchParams.set('day', dayStr);
+    window.location.href = url.toString();
+  }
+
+  async function applyCustomDateRange() {
+    const from = document.getElementById('fromDateInput').value;
+    const to = document.getElementById('toDateInput').value;
+    if (!from && !to) {
+      showToast('Pilih tanggal awal atau akhir terlebih dahulu.');
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('day');
+    url.searchParams.delete('days');
+    if (from) url.searchParams.set('from', from);
+    if (to) url.searchParams.set('to', to);
+    window.location.href = url.toString();
+  }
+
+  const PRESETS = {
+
+    u8: {
+  "app": "hetsi-masking",
+  "version": 4,
+  "mapKey": "u8ukdcnc",
+  "maskedAt": "2026-10-20T06:56:25.284Z",
+  "sourceFile": "upload.json",
+  "mode": "json",
+  "total": 3,
+  "mappings": 7,
+  "stats": {
+    "agents": 1,
+    "hosts": 1,
+    "tenants": 1,
+    "internalIps": 1,
+    "clientUsers": 0
+  },
+  "note": "Token [[TYPE-KEY-N]] dapat di-unmask menggunakan kunci masking via workflow 2 (tanpa database). IP publik penyerang tidak dimask (IOC). Token [REDACTED]/[EMAIL]/[JWT_REDACTED] satu arah.",
+  "unmapVault": "wNAXB+KEAn92ZKKhNWQ2zUJKmNzJ/xLDW/qB99EvQO6FlY7gbtSjlmlgg5IIHc568sFgRKAXnOpsSJAEQkhChJs5MTw8MJB82LvPCm8rDOFM3qFYp3Kh14r2NAD6W+mpkXHwou5K2YvkeAOIwsz4IqwRPazQf9uZ/ioordtJtwS1zk2NEhPRHjikkQKR0fO/Dl5Nnqh0QOUAESlx/9bu5weQiHJdo/so1uka0Z399+lKNQO/arr4k9yLcHA5boWn2qEqqG0arLVtnRjfcUVnFDHs3Eu23Jl4HR1nxUxNoPVT9h58PWrgityt1xkAhZEgOaGDeDvepzxDDcyrmYNAFyn0JGK4KkWzwnzxkhWan/lyyvfBdPZYqTaIBJYVLD7JUTIFPvEM0+RQEr4O4FwqMkPwkDV9EgnZIftqcQhu2JaTMR43Q3G8KO0IDA==",
+  "alerts": [
+    {
+      "@timestamp": "2026-10-20T00:38:51.348Z",
+      "data": {
+        "url": "/index.php?id=1+UNION+SELECT+user(),database()",
+        "protocol": "GET",
+        "srcip": "[[INTERNALIP1-u8ukdcnc-7]]",
+        "id": "403"
+      },
+      "id": "1792456729.1531879",
+      "full_log": "[[INTERNALIP1-u8ukdcnc-7]] - - [20/Oct/2026:07:38:28 +0700] \"GET /index.php?id=1+UNION+SELECT+user(),database() HTTP/2.0\" 403 153 \"-\" \"curl/7.74.0\"",
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "agent": {
+        "hostname": "[[CLIENTHOST-u8ukdcnc-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-u8ukdcnc-6]]",
+        "id": "029",
+        "name": "[[CLIENTAGENT-u8ukdcnc-1]]",
+        "ip": "[[CLIENTIP-u8ukdcnc-2]]",
+        "labels": {
+          "tenant": "[[CLIENTORG-u8ukdcnc-4]]"
+        },
+        "type": "filebeat",
+        "version": "7.10.2"
+      },
+      "rule": {
+        "firedtimes": 3,
+        "pci_dss": [
+          "6.5",
+          "11.4",
+          "6.5.1"
+        ],
+        "gdpr": [
+          "IV_35.7.d"
+        ],
+        "tsc": [
+          "CC6.6",
+          "CC7.1",
+          "CC8.1",
+          "CC6.1",
+          "CC6.8",
+          "CC7.2",
+          "CC7.3"
+        ],
+        "level": 7,
+        "id": "31103",
+        "nist_800_53": [
+          "SA.11",
+          "SI.4"
+        ],
+        "mitre": {
+          "id": [
+            "T1190"
+          ],
+          "tactic": [
+            "Initial Access"
+          ],
+          "technique": [
+            "Exploit Public-Facing Application"
+          ]
+        },
+        "mail": false,
+        "groups": [
+          "web",
+          "accesslog",
+          "attack",
+          "sql_injection"
+        ],
+        "description": "SQL injection attempt."
+      },
+      "input": {
+        "type": "log"
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-u8ukdcnc-5]]",
+        "node": "manager-master"
+      },
+      "timestamp": "2026-10-20T00:38:49.042+0000",
+      "manager": {
+        "name": "[[CLIENTHOST-u8ukdcnc-3]]"
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "location": "/var/log/nginx/indigoes_access.log",
+      "log": {
+        "offset": 2178986,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-u8ukdcnc-4]]-2026.10",
+      "_id": "FnK_VqEBZFv8M_wJLqSW"
+    },
+    {
+      "@timestamp": "2026-10-20T00:34:30.268Z",
+      "id": "1792456468.1320171",
+      "location": "/var/log/nginx/indigoes_access.log",
+      "agent": {
+        "type": "filebeat",
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-u8ukdcnc-3]]",
+        "id": "029",
+        "name": "[[CLIENTAGENT-u8ukdcnc-1]]",
+        "ip": "[[CLIENTIP-u8ukdcnc-2]]",
+        "labels": {
+          "tenant": "[[CLIENTORG-u8ukdcnc-4]]"
+        },
+        "ephemeral_id": "[[CLIENTEPHEMERAL-u8ukdcnc-6]]"
+      },
+      "manager": {
+        "name": "[[CLIENTHOST-u8ukdcnc-3]]"
+      },
+      "full_log": "123.253.78.154 - - [20/Oct/2026:07:34:08 +0700] \"GET /index.php?id=1+UNION+SELECT+user(),database() HTTP/2.0\" 403 153 \"-\" \"curl/8.18.0\"",
+      "log": {
+        "offset": 1863851,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "input": {
+        "type": "log"
+      },
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "rule": {
+        "mail": false,
+        "pci_dss": [
+          "6.5",
+          "11.4",
+          "6.5.1"
+        ],
+        "gdpr": [
+          "IV_35.7.d"
+        ],
+        "nist_800_53": [
+          "SA.11",
+          "SI.4"
+        ],
+        "description": "SQL injection attempt.",
+        "level": 7,
+        "mitre": {
+          "technique": [
+            "Exploit Public-Facing Application"
+          ],
+          "id": [
+            "T1190"
+          ],
+          "tactic": [
+            "Initial Access"
+          ]
+        },
+        "firedtimes": 2,
+        "tsc": [
+          "CC6.6",
+          "CC7.1",
+          "CC8.1",
+          "CC6.1",
+          "CC6.8",
+          "CC7.2",
+          "CC7.3"
+        ],
+        "id": "31103",
+        "groups": [
+          "web",
+          "accesslog",
+          "attack",
+          "sql_injection"
+        ]
+      },
+      "data": {
+        "protocol": "GET",
+        "srcip": "123.253.78.154",
+        "id": "403",
+        "url": "/index.php?id=1+UNION+SELECT+user(),database()"
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-u8ukdcnc-5]]",
+        "node": "manager-master"
+      },
+      "timestamp": "2026-10-20T00:34:28.714+0000",
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-u8ukdcnc-4]]-2026.10",
+      "_id": "WJO7VqEBIO4ALlrCMpvn"
+    },
+    {
+      "@timestamp": "2026-10-20T00:27:22.171Z",
+      "id": "1792456040.1084369",
+      "cluster": {
+        "node": "manager-master",
+        "name": "[[SOCCLUSTER-u8ukdcnc-5]]"
+      },
+      "location": "/var/log/nginx/indigoes_access.log",
+      "log": {
+        "offset": 1503982,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "full_log": "[[INTERNALIP1-u8ukdcnc-7]] - - [20/Oct/2026:07:26:58 +0700] \"GET /index.php?id=1+UNION+SELECT+user(),database() HTTP/2.0\" 403 153 \"-\" \"curl/7.74.0\"",
+      "timestamp": "2026-10-20T00:27:20.248+0000",
+      "input": {
+        "type": "log"
+      },
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "data": {
+        "url": "/index.php?id=1+UNION+SELECT+user(),database()",
+        "protocol": "GET",
+        "srcip": "[[INTERNALIP1-u8ukdcnc-7]]",
+        "id": "403"
+      },
+      "rule": {
+        "level": 7,
+        "groups": [
+          "web",
+          "accesslog",
+          "attack",
+          "sql_injection"
+        ],
+        "gdpr": [
+          "IV_35.7.d"
+        ],
+        "id": "31103",
+        "mitre": {
+          "id": [
+            "T1190"
+          ],
+          "tactic": [
+            "Initial Access"
+          ],
+          "technique": [
+            "Exploit Public-Facing Application"
+          ]
+        },
+        "pci_dss": [
+          "6.5",
+          "11.4",
+          "6.5.1"
+        ],
+        "description": "SQL injection attempt.",
+        "firedtimes": 1,
+        "mail": false,
+        "tsc": [
+          "CC6.6",
+          "CC7.1",
+          "CC8.1",
+          "CC6.1",
+          "CC6.8",
+          "CC7.2",
+          "CC7.3"
+        ],
+        "nist_800_53": [
+          "SA.11",
+          "SI.4"
+        ]
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "manager": {
+        "name": "[[CLIENTHOST-u8ukdcnc-3]]"
+      },
+      "agent": {
+        "labels": {
+          "tenant": "[[CLIENTORG-u8ukdcnc-4]]"
+        },
+        "type": "filebeat",
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-u8ukdcnc-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-u8ukdcnc-6]]",
+        "id": "029",
+        "name": "[[CLIENTAGENT-u8ukdcnc-1]]",
+        "ip": "[[CLIENTIP-u8ukdcnc-2]]"
+      },
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-u8ukdcnc-4]]-2026.10",
+      "_id": "vZO0VqEBIO4ALlrCqpqm"
+    }
+  ]
+},
+    j2: {
+  "app": "hetsi-masking",
+  "version": 4,
+  "mapKey": "j2xb8338",
+  "maskedAt": "2026-10-20T06:55:47.287Z",
+  "sourceFile": "upload.json",
+  "mode": "json",
+  "total": 7,
+  "mappings": 6,
+  "stats": {
+    "agents": 1,
+    "hosts": 1,
+    "tenants": 1,
+    "internalIps": 0,
+    "clientUsers": 0
+  },
+  "note": "Token [[TYPE-KEY-N]] dapat di-unmask menggunakan kunci masking via workflow 2 (tanpa database). IP publik penyerang tidak dimask (IOC). Token [REDACTED]/[EMAIL]/[JWT_REDACTED] satu arah.",
+  "unmapVault": "qjnDmN1j1QovaVFd3qCAB9rm1/DSQ8FWUe5fN8Vliz0HOQrwvjuUxLh9emN9D0+eA29ZB/Ntju02ACLeLq9HxPPb9h0Ibd5XCQWWo+GmQab3M/SKGatE+rrSijOpLvcJAScA/gkza05R1ssVGVYVHVjO5mjjf1HV7MsE98C9U+p5uRvbITZuTMc0vkVBDrEXf7kgJtzJgL2B5hylHsfSeb1z9afL81R9Rk5qF1h0bOCIz1Gi2tac6ZgF8NNRAgzBFnsIg3JCrS5K82EYBlJ4D2+OmZH0eo9RcEtQAfw+dEjMX7mjcITHbLxXu3dDsNPmPC11Cg3Mr+1LZcMpR/htla5EJNZBcKkyS9UL5KbYyPsYU5ylvXB7/fXAU9RSyfOAWl3tyw==",
+  "alerts": [
+    {
+      "@timestamp": "2026-10-20T02:38:43.861Z",
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "full_log": "66.249.70.163 - - [20/Oct/2026:10:38:42 +0800] \"GET /public/devil/?zgdx=MAXWIN88JUAL-CHARGER-KABEL/JUAL-TAS-TOTE-PRIA/BELI-SABUN-PEMBERSIH-BAYI/AKSESORIS-INTERIOR-MOBIL/BELI-TAS-ANAK/ HTTP/1.1\" 404 5315 \"-\" \"Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\"",
+      "input": {
+        "type": "log"
+      },
+      "agent": {
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-j2xb8338-3]]",
+        "id": "026",
+        "name": "[[CLIENTAGENT-j2xb8338-1]]",
+        "ip": "[[CLIENTIP-j2xb8338-2]]",
+        "labels": {
+          "tenant": "[[CLIENTORG-j2xb8338-4]]"
+        },
+        "ephemeral_id": "[[CLIENTEPHEMERAL-j2xb8338-6]]",
+        "type": "filebeat"
+      },
+      "id": "1792463922.9857644",
+      "log": {
+        "offset": 13851677,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-j2xb8338-5]]",
+        "node": "manager-master"
+      },
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "rule": {
+        "mail": false,
+        "groups": [
+          "web",
+          "judol"
+        ],
+        "level": 10,
+        "description": "Request ke URL berbau judol: /public/devil/?zgdx=MAXWIN88JUAL-CHARGER-KABEL/JUAL-TAS-TOTE-PRIA/BELI-SABUN-PEMBERSIH-BAYI/AKSESORIS-INTERIOR-MOBIL/BELI-TAS-ANAK/",
+        "id": "100023",
+        "firedtimes": 1
+      },
+      "location": "/var/log/apache2/access_sebatik.log",
+      "manager": {
+        "name": "[[CLIENTHOST-j2xb8338-3]]"
+      },
+      "timestamp": "2026-10-20T02:38:42.811+0000",
+      "data": {
+        "srcip": "66.249.70.163",
+        "id": "404",
+        "url": "/public/devil/?zgdx=MAXWIN88JUAL-CHARGER-KABEL/JUAL-TAS-TOTE-PRIA/BELI-SABUN-PEMBERSIH-BAYI/AKSESORIS-INTERIOR-MOBIL/BELI-TAS-ANAK/",
+        "protocol": "GET"
+      },
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-j2xb8338-4]]-2026.10",
+      "_id": "l5MsV6EBIO4ALlrC7qqC"
+    },
+    {
+      "@timestamp": "2026-10-20T01:52:29.610Z",
+      "full_log": "66.249.70.164 - - [20/Oct/2026:09:52:27 +0800] \"GET /public/devil/?zgdx=MAXWIN88BELI-MAINAN-AIR-KOLAM-RENANG/SHOP-MOTORCYCLE-OILS-FLUIDS/BELI-POWER-SUPPLY-UNIT/BELI-JAM-TANGAN-KASUAL-PRIA/SEPATU-LACE-UPS-ANAK-PEREMPUAN HTTP/1.1\" 404 5315 \"-\" \"Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\"",
+      "id": "1792461147.4867723",
+      "data": {
+        "url": "/public/devil/?zgdx=MAXWIN88BELI-MAINAN-AIR-KOLAM-RENANG/SHOP-MOTORCYCLE-OILS-FLUIDS/BELI-POWER-SUPPLY-UNIT/BELI-JAM-TANGAN-KASUAL-PRIA/SEPATU-LACE-UPS-ANAK-PEREMPUAN",
+        "protocol": "GET",
+        "srcip": "66.249.70.164",
+        "id": "404"
+      },
+      "rule": {
+        "firedtimes": 1,
+        "mail": false,
+        "groups": [
+          "web",
+          "judol"
+        ],
+        "level": 10,
+        "description": "Request ke URL berbau judol: /public/devil/?zgdx=MAXWIN88BELI-MAINAN-AIR-KOLAM-RENANG/SHOP-MOTORCYCLE-OILS-FLUIDS/BELI-POWER-SUPPLY-UNIT/BELI-JAM-TANGAN-KASUAL-PRIA/SEPATU-LACE-UPS-ANAK-PEREMPUAN",
+        "id": "100023"
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-j2xb8338-5]]",
+        "node": "manager-master"
+      },
+      "timestamp": "2026-10-20T01:52:27.585+0000",
+      "manager": {
+        "name": "[[CLIENTHOST-j2xb8338-3]]"
+      },
+      "location": "/var/log/apache2/access_sebatik.log",
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "agent": {
+        "name": "[[CLIENTAGENT-j2xb8338-1]]",
+        "ip": "[[CLIENTIP-j2xb8338-2]]",
+        "labels": {
+          "tenant": "[[CLIENTORG-j2xb8338-4]]"
+        },
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-j2xb8338-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-j2xb8338-6]]",
+        "type": "filebeat",
+        "id": "026"
+      },
+      "log": {
+        "offset": 7018254,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "input": {
+        "type": "log"
+      },
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-j2xb8338-4]]-2026.10",
+      "_id": "r3ICV6EBZFv8M_wJmatp"
+    },
+    {
+      "@timestamp": "2026-10-20T00:45:34.419Z",
+      "full_log": "66.249.70.165 - - [20/Oct/2026:08:45:31 +0800] \"GET /public/devil/?zgdx=MAXWIN88BELI-MAINAN-BLASTER/BELI-KOPI-DAN-TEH/BELI-KOPER-ANAK/ALAT-PELANGSING-DAN-PEMIJAT-ELEKTRIK HTTP/1.1\" 404 5315 \"-\" \"Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\"",
+      "log": {
+        "offset": 2419405,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-j2xb8338-5]]",
+        "node": "manager-master"
+      },
+      "input": {
+        "type": "log"
+      },
+      "agent": {
+        "ip": "[[CLIENTIP-j2xb8338-2]]",
+        "labels": {
+          "tenant": "[[CLIENTORG-j2xb8338-4]]"
+        },
+        "hostname": "[[CLIENTHOST-j2xb8338-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-j2xb8338-6]]",
+        "type": "filebeat",
+        "version": "7.10.2",
+        "id": "026",
+        "name": "[[CLIENTAGENT-j2xb8338-1]]"
+      },
+      "rule": {
+        "firedtimes": 1,
+        "mail": false,
+        "groups": [
+          "web",
+          "judol"
+        ],
+        "level": 10,
+        "description": "Request ke URL berbau judol: /public/devil/?zgdx=MAXWIN88BELI-MAINAN-BLASTER/BELI-KOPI-DAN-TEH/BELI-KOPER-ANAK/ALAT-PELANGSING-DAN-PEMIJAT-ELEKTRIK",
+        "id": "100023"
+      },
+      "manager": {
+        "name": "[[CLIENTHOST-j2xb8338-3]]"
+      },
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "data": {
+        "srcip": "66.249.70.165",
+        "id": "404",
+        "url": "/public/devil/?zgdx=MAXWIN88BELI-MAINAN-BLASTER/BELI-KOPI-DAN-TEH/BELI-KOPER-ANAK/ALAT-PELANGSING-DAN-PEMIJAT-ELEKTRIK",
+        "protocol": "GET"
+      },
+      "id": "1792457131.1693010",
+      "timestamp": "2026-10-20T00:45:31.743+0000",
+      "location": "/var/log/apache2/access_sebatik.log",
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-j2xb8338-4]]-2026.10",
+      "_id": "LpPFVqEBIO4ALlrCVZw9"
+    },
+    {
+      "@timestamp": "2026-10-19T21:12:00.586Z",
+      "data": {
+        "id": "404",
+        "url": "/public/devil/?zgdx=MAXWIN88BELI-POPOK-SEKALI-PAKAI/BELI-JAM-TANGAN-OLAHRAGA-PRIA/PAYUNG-PRIA/BELI-KERTAS-KOMPUTER/BUKU/BELI-SARUNG-PELINDUNG-TAS-KAMERA/",
+        "protocol": "GET",
+        "srcip": "66.249.70.163"
+      },
+      "agent": {
+        "labels": {
+          "tenant": "[[CLIENTORG-j2xb8338-4]]"
+        },
+        "type": "filebeat",
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-j2xb8338-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-j2xb8338-6]]",
+        "id": "026",
+        "name": "[[CLIENTAGENT-j2xb8338-1]]",
+        "ip": "[[CLIENTIP-j2xb8338-2]]"
+      },
+      "manager": {
+        "name": "[[CLIENTHOST-j2xb8338-3]]"
+      },
+      "location": "/var/log/apache2/access_sebatik.log",
+      "timestamp": "2026-10-19T21:11:58.580+0000",
+      "rule": {
+        "groups": [
+          "web",
+          "judol"
+        ],
+        "level": 10,
+        "description": "Request ke URL berbau judol: /public/devil/?zgdx=MAXWIN88BELI-POPOK-SEKALI-PAKAI/BELI-JAM-TANGAN-OLAHRAGA-PRIA/PAYUNG-PRIA/BELI-KERTAS-KOMPUTER/BUKU/BELI-SARUNG-PELINDUNG-TAS-KAMERA/",
+        "id": "100023",
+        "firedtimes": 1,
+        "mail": false
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "full_log": "66.249.70.163 - - [20/Oct/2026:05:11:57 +0800] \"GET /public/devil/?zgdx=MAXWIN88BELI-POPOK-SEKALI-PAKAI/BELI-JAM-TANGAN-OLAHRAGA-PRIA/PAYUNG-PRIA/BELI-KERTAS-KOMPUTER/BUKU/BELI-SARUNG-PELINDUNG-TAS-KAMERA/ HTTP/1.1\" 404 540 \"-\" \"Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\"",
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-j2xb8338-5]]",
+        "node": "manager-master"
+      },
+      "log": {
+        "offset": 86961295,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "id": "1792444318.60195389",
+      "input": {
+        "type": "log"
+      },
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-j2xb8338-4]]-2026.10",
+      "_id": "QJMBVqEBIO4ALlrCz44z"
+    },
+    {
+      "@timestamp": "2026-10-19T14:46:35.818Z",
+      "rule": {
+        "level": 10,
+        "description": "Request ke URL berbau judol: /public/devil/?zgdx=SOGOTOGELPERANGKAT-SEPREI/BELI-JAM-TANGAN-ANAK/BELI-AKSESORIS-KAMERA-AKSI/",
+        "id": "100023",
+        "firedtimes": 1,
+        "mail": false,
+        "groups": [
+          "web",
+          "judol"
+        ]
+      },
+      "full_log": "66.249.70.164 - - [19/Oct/2026:22:46:31 +0800] \"GET /public/devil/?zgdx=SOGOTOGELPERANGKAT-SEPREI/BELI-JAM-TANGAN-ANAK/BELI-AKSESORIS-KAMERA-AKSI/ HTTP/1.1\" 404 5193 \"-\" \"Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\"",
+      "input": {
+        "type": "log"
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-j2xb8338-5]]",
+        "node": "manager-master"
+      },
+      "data": {
+        "protocol": "GET",
+        "srcip": "66.249.70.164",
+        "id": "404",
+        "url": "/public/devil/?zgdx=SOGOTOGELPERANGKAT-SEPREI/BELI-JAM-TANGAN-ANAK/BELI-AKSESORIS-KAMERA-AKSI/"
+      },
+      "timestamp": "2026-10-19T14:46:31.963+0000",
+      "log": {
+        "offset": 71712884,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "agent": {
+        "id": "026",
+        "name": "[[CLIENTAGENT-j2xb8338-1]]",
+        "ip": "[[CLIENTIP-j2xb8338-2]]",
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-j2xb8338-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-j2xb8338-6]]",
+        "type": "filebeat",
+        "labels": {
+          "tenant": "[[CLIENTORG-j2xb8338-4]]"
+        }
+      },
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "manager": {
+        "name": "[[CLIENTHOST-j2xb8338-3]]"
+      },
+      "id": "1792421191.50019583",
+      "location": "/var/log/apache2/access_sebatik.log",
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-j2xb8338-4]]-2026.10",
+      "_id": "RnKgVKEBZFv8M_wJ833r"
+    },
+    {
+      "@timestamp": "2026-10-19T13:01:50.983Z",
+      "data": {
+        "id": "404",
+        "url": "/public/devil/?zgdx=MAXWIN88BELI-MAINAN-AIR-KOLAM-RENANG/ALAT-PENGUKUR-KECEPATAN/BELI-LIPSTIKTOPI-ANAK-PEREMPUANJUAL-TONGKAT-HIKING/JUAL-SLIP-ON-LOAFER-PRIA/",
+        "protocol": "GET",
+        "srcip": "66.249.70.165"
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "id": "1792414910.44958371",
+      "manager": {
+        "name": "[[CLIENTHOST-j2xb8338-3]]"
+      },
+      "cluster": {
+        "name": "[[SOCCLUSTER-j2xb8338-5]]",
+        "node": "manager-master"
+      },
+      "location": "/var/log/apache2/access_sebatik.log",
+      "full_log": "66.249.70.165 - - [19/Oct/2026:21:01:48 +0800] \"GET /public/devil/?zgdx=MAXWIN88BELI-MAINAN-AIR-KOLAM-RENANG/ALAT-PENGUKUR-KECEPATAN/BELI-LIPSTIKTOPI-ANAK-PEREMPUANJUAL-TONGKAT-HIKING/JUAL-SLIP-ON-LOAFER-PRIA/ HTTP/1.1\" 404 5315 \"-\" \"Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\"",
+      "timestamp": "2026-10-19T13:01:50.554+0000",
+      "agent": {
+        "name": "[[CLIENTAGENT-j2xb8338-1]]",
+        "ip": "[[CLIENTIP-j2xb8338-2]]",
+        "labels": {
+          "tenant": "[[CLIENTORG-j2xb8338-4]]"
+        },
+        "type": "filebeat",
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-j2xb8338-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-j2xb8338-6]]",
+        "id": "026"
+      },
+      "log": {
+        "offset": 64310180,
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        }
+      },
+      "rule": {
+        "level": 10,
+        "description": "Request ke URL berbau judol: /public/devil/?zgdx=MAXWIN88BELI-MAINAN-AIR-KOLAM-RENANG/ALAT-PENGUKUR-KECEPATAN/BELI-LIPSTIKTOPI-ANAK-PEREMPUANJUAL-TONGKAT-HIKING/JUAL-SLIP-ON-LOAFER-PRIA/",
+        "id": "100023",
+        "firedtimes": 1,
+        "mail": false,
+        "groups": [
+          "web",
+          "judol"
+        ]
+      },
+      "input": {
+        "type": "log"
+      },
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-j2xb8338-4]]-2026.10",
+      "_id": "f3JBVKEBZFv8M_wJDXLB"
+    },
+    {
+      "@timestamp": "2026-10-19T10:43:06.618Z",
+      "rule": {
+        "mail": false,
+        "groups": [
+          "web",
+          "judol"
+        ],
+        "level": 10,
+        "description": "Request ke URL berbau judol: /public/devil/?zgdx=MAXWIN88JUAL-CHARGER-KABEL/JUAL-TAS-TOTE-PRIA/JUAL-KENDALI-GERAKAN/SHOP-AUTOMOTIVE-GREASES-LUBRICANTS/BELI-RANSEL-ANAK/PAKAIAN-DALAM-PRIA-THONGS-LAINNYA/BELI-YO-YO-KENDAMA/",
+        "id": "100023",
+        "firedtimes": 1
+      },
+      "agent": {
+        "version": "7.10.2",
+        "hostname": "[[CLIENTHOST-j2xb8338-3]]",
+        "ephemeral_id": "[[CLIENTEPHEMERAL-j2xb8338-6]]",
+        "id": "026",
+        "name": "[[CLIENTAGENT-j2xb8338-1]]",
+        "ip": "[[CLIENTIP-j2xb8338-2]]",
+        "labels": {
+          "tenant": "[[CLIENTORG-j2xb8338-4]]"
+        },
+        "type": "filebeat"
+      },
+      "full_log": "66.249.70.163 - - [19/Oct/2026:18:43:02 +0800] \"GET /public/devil/?zgdx=MAXWIN88JUAL-CHARGER-KABEL/JUAL-TAS-TOTE-PRIA/JUAL-KENDALI-GERAKAN/SHOP-AUTOMOTIVE-GREASES-LUBRICANTS/BELI-RANSEL-ANAK/PAKAIAN-DALAM-PRIA-THONGS-LAINNYA/BELI-YO-YO-KENDAMA/ HTTP/1.1\" 404 5315 \"-\" \"Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\"",
+      "log": {
+        "file": {
+          "path": "/var/ossec/logs/alerts/alerts.json"
+        },
+        "offset": 53824563
+      },
+      "manager": {
+        "name": "[[CLIENTHOST-j2xb8338-3]]"
+      },
+      "cluster": {
+        "node": "manager-master",
+        "name": "[[SOCCLUSTER-j2xb8338-5]]"
+      },
+      "data": {
+        "srcip": "66.249.70.163",
+        "id": "404",
+        "url": "/public/devil/?zgdx=MAXWIN88JUAL-CHARGER-KABEL/JUAL-TAS-TOTE-PRIA/JUAL-KENDALI-GERAKAN/SHOP-AUTOMOTIVE-GREASES-LUBRICANTS/BELI-RANSEL-ANAK/PAKAIAN-DALAM-PRIA-THONGS-LAINNYA/BELI-YO-YO-KENDAMA/",
+        "protocol": "GET"
+      },
+      "input": {
+        "type": "log"
+      },
+      "ecs": {
+        "version": "1.6.0"
+      },
+      "decoder": {
+        "name": "web-accesslog"
+      },
+      "timestamp": "2026-10-19T10:43:03.080+0000",
+      "id": "1792406583.37785689",
+      "location": "/var/log/apache2/access_sebatik.log",
+      "_index": "wazuh-alerts-4.x-[[CLIENTORG-j2xb8338-4]]-2026.10",
+      "_id": "_pPCU6EBIO4ALlrCCFjj"
+    }
+  ]
+}
+  };
+
+
+  // Export & Copy Table Functions for Excel / Word
+  function copyTableAsTabSeparated() {
+    const alerts = getDisplayAlerts();
+    if (alerts.length === 0) {
+      showToast('Tidak ada data untuk disalin.');
+      return;
+    }
+
+    let tsv = "No\tHit\tClient IP\tTimestamp\tMethod\tPath / URI\tQuery / Payload\tProtocol\tStatus\tBytes\tReferer\tUser-Agent\tRule ID\tRule Description\n";
+    alerts.forEach((alert, idx) => {
+      const p = getParsed(alert);
+      const srcip = firstNonEmpty(alert.data?.srcip, p.srcip, '-');
+      const rowNum = idx + 1;
+      const ts = formatTimeRange(alert, p).replace(/\t/g, ' ');
+      const method = p.method || '-';
+      const path = p.path || (p.log_type === 'http' ? '/' : '-');
+      const query = (p.log_type === 'http' && p.query) ? '?' + p.query : (p.details || p.message || '');
+      const proto = p.protocol || '-';
+      const status = p.status || '-';
+      const bytes = p.bytes || '-';
+      const ref = p.referer || '-';
+      const ua = (p.ua || '-').replace(/\t/g, ' ');
+      const hit = alert.hit_count || 1;
+
+      const ruleId = alert.rule?.id || '-';
+      const ruleDesc = (alert.rule?.description || '-').replace(/\t/g, ' ');
+      tsv += `${rowNum}\t${hit}\t${srcip}\t${ts}\t${method}\t${path}\t${query.replace(/\t/g, ' ')}\t${proto}\t${status}\t${bytes}\t${ref}\t${ua}\t${ruleId}\t${ruleDesc}\n`;
+    });
+
+    navigator.clipboard.writeText(tsv).then(() => {
+      showToast('Tabel disalin. Tempel langsung ke Excel atau Word.');
+    }).catch(() => {
+      prompt('Salin teks tabel berikut:', tsv);
+    });
+  }
+
+  function viewAlertJson(idx) {
+    const alerts = getDisplayAlerts();
+    const alert = alerts[idx];
+    if (!alert) return;
+    document.getElementById('jsonModalAlertId').innerText = alert._id || alert.id || 'Alert #' + (idx + 1);
+    document.getElementById('jsonModalPre').innerText = JSON.stringify(alert, null, 2);
+    document.getElementById('jsonModal').classList.remove('hidden');
+  }
+
+  function closeJsonModal() {
+    document.getElementById('jsonModal').classList.add('hidden');
+  }
+
+  function copyJsonModalContent() {
+    const content = document.getElementById('jsonModalPre').innerText;
+    copyText(content);
+  }
+
+  function viewFullLog(idx) {
+    const alerts = getDisplayAlerts();
+    const alert = alerts[idx];
+    if (!alert) return;
+    document.getElementById('fullLogModalAlertId').innerText = alert._id || alert.id || 'Alert #' + (idx + 1);
+    document.getElementById('fullLogModalPre').innerText = alert.full_log || '(full_log tidak tersedia)';
+    document.getElementById('fullLogModal').classList.remove('hidden');
+  }
+
+  function closeFullLogModal() {
+    document.getElementById('fullLogModal').classList.add('hidden');
+  }
+
+  function copyFullLogModalContent() {
+    copyText(document.getElementById('fullLogModalPre').innerText);
+  }
+
+  async function exportTableToExcel() {
+    const alerts = getDisplayAlerts();
+    if (alerts.length === 0) {
+      showToast('Tidak ada data untuk di-export.');
+      return;
+    }
+    showToast('Membuat file Excel (.xlsx) murni...');
+    try {
+      const resp = await fetch(BASE_PATH + '/api/soc-logs/export/xlsx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alerts: alerts })
+      });
+      if (!resp.ok) throw new Error('Status ' + resp.status);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `soc-alerts-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast('File Excel (.xlsx) berhasil diunduh.');
+    } catch (e) {
+      showToast('Gagal export Excel: ' + e.message);
+    }
+  }
+
+  async function exportTableToWord() {
+    const alerts = getDisplayAlerts();
+    if (alerts.length === 0) {
+      showToast('Tidak ada data untuk di-export.');
+      return;
+    }
+    showToast('Membuat dokumen Word Landscape (.docx)...');
+    try {
+      const resp = await fetch(BASE_PATH + '/api/soc-logs/export/docx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alerts: alerts })
+      });
+      if (!resp.ok) throw new Error('Status ' + resp.status);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `soc-report-landscape-${new Date().toISOString().slice(0, 10)}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast('File Word (.docx) berhasil diunduh.');
+    } catch (e) {
+      showToast('Gagal export Word: ' + e.message);
+    }
+  }
+
+  // State
+  let alertsData = {{ initial_alerts|tojson if initial_alerts else '[]' }};
+  let isUnmasked = true;
+  let activeTab = 'breakdown';
+  let activeFilter = 'all';
+  let searchQuery = '';
+  let sortKey = 'time';
+  let sortDir = 'desc';
+  let decryptedMap = {};
+  let ipIntelCache = {};
+  let pendingImportFiles = [];
+  const BASE_PATH = window.location.pathname.startsWith('/intel') ? '/intel' : '';
+
+  const LOG_REGEX = /^(\S+)\s+(\S+)\s+(\S+)\s+\[([^\]]+)\]\s+"([A-Z]+)\s+([^"\s]+)(?:\s+(HTTP\/[0-9\.]+))?"\s+(\d{3})\s+(\S+)(?:\s+"([^"]*)"\s+"([^"]*)")?/;
+  const SYSLOG_REGEX = /^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+([\s\S]*)$/;
+
+  function cleanVal(v) {
+    if (v === undefined || v === null) return '';
+    const s = String(v).trim();
+    return (s === '-' || s === 'null' || s === 'None') ? '' : s;
+  }
+
+  function firstNonEmpty(...vals) {
+    for (const v of vals) {
+      const s = cleanVal(v);
+      if (s) return s;
+    }
+    return '-';
+  }
+
+  function firstIpIn(text) {
+    const s = String(text || '');
+    const patterns = [
+      /\bsrcip\s*[=:]\s*["']?([0-9a-fA-F:.]+)/i,
+      /\bsrc\s*[=:]\s*["']?([0-9a-fA-F:.]+)/i,
+      /\bfrom\s+["']?([0-9a-fA-F:.]+)/i,
+      /\bclient(?:\s*ip)?\s*[=:]?\s*["']?([0-9a-fA-F:.]+)/i
+    ];
+    for (const re of patterns) {
+      const m = s.match(re);
+      if (m) return m[1];
+    }
+    const v4 = s.match(/(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/);
+    return v4 ? v4[0] : '';
+  }
+
+  function shortAction(message) {
+    const patterns = [
+      /(Failed password[^,;]*)/i,
+      /(Invalid user[^,;]*)/i,
+      /(Accepted password[^,;]*)/i,
+      /(Accepted publickey[^,;]*)/i,
+      /(Did not receive identification string[^,;]*)/i,
+      /(session (?:opened|closed)[^,;]*)/i,
+      /(Connection (?:closed|reset)[^,;]*)/i,
+      /(authentication failure[^,;]*)/i
+    ];
+    for (const re of patterns) {
+      const m = message.match(re);
+      if (m) return m[1];
+    }
+    return '';
+  }
+
+  function parseSyslogFallback(line) {
+    const m = line.match(SYSLOG_REGEX);
+    if (!m) return null;
+    const ts = m[1], host = m[2], rest = m[3];
+    let program = '', message = rest;
+    const prog = rest.match(/^([A-Za-z0-9_.@\/-]+)(?:\[(\d+)\])?:\s*([\s\S]*)$/);
+    if (prog) {
+      program = prog[1];
+      message = prog[3];
+    }
+    const kv = [];
+    const kvRe = /([A-Za-z_][\w.-]*)=(?:"([^"]*)"|([^\s,]+))/g;
+    let km;
+    while ((km = kvRe.exec(message)) !== null) kv.push(`${km[1]}=${km[2] !== undefined ? km[2] : (km[3] || '')}`);
+    const apparmor = message.match(/\bapparmor="([^"]+)"/i);
+    let action = apparmor ? apparmor[1] : shortAction(message);
+    let path = program || 'syslog';
+    if (apparmor) path = `${program || 'apparmor'}: AppArmor ${action}`;
+    else if (action) path = `${program || 'syslog'}: ${action}`;
+    return {
+      log_type: 'syslog', srcip: firstIpIn(message),
+      timestamp: ts, timestamp_display: ts, timestamp_iso: null,
+      method: '', uri: '', path, query: '', protocol: '', status: '', bytes: '',
+      referer: '', ua: '', message, details: kv.length ? kv.join(', ') : message,
+      hostname: host, program, action
+    };
+  }
+
+  // RC4-drop3072 In-Memory Decryption
+  function decryptRc4Drop3072(b64, key) {
+    try {
+      const binaryString = atob(b64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let idx = 0; idx < len; idx++) bytes[idx] = binaryString.charCodeAt(idx);
+
+      const s = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) s[i] = i;
+      let j = 0;
+      for (let i = 0; i < 256; i++) {
+        j = (j + s[i] + key.charCodeAt(i % key.length)) % 256;
+        const tmp = s[i]; s[i] = s[j]; s[j] = tmp;
+      }
+      let i = 0; j = 0;
+      for (let k = 0; k < 3072; k++) {
+        i = (i + 1) % 256;
+        j = (j + s[i]) % 256;
+        const tmp = s[i]; s[i] = s[j]; s[j] = tmp;
+      }
+      const out = new Uint8Array(len);
+      for (let x = 0; x < len; x++) {
+        i = (i + 1) % 256;
+        j = (j + s[i]) % 256;
+        const tmp = s[i]; s[i] = s[j]; s[j] = tmp;
+        out[x] = bytes[x] ^ s[(s[i] + s[j]) % 256];
+      }
+      return JSON.parse(new TextDecoder('utf-8').decode(out));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function parseAccessLog(line) {
+    if (!line) return null;
+    const m = line.match(LOG_REGEX);
+    if (m) {
+      const rawUri = m[6] || '/';
+      const qIdx = rawUri.indexOf('?');
+      return {
+        log_type: 'http', srcip: m[1] || '', ident: m[2] || '', auth: m[3] || '',
+        timestamp: m[4] || '', timestamp_display: m[4] || '', timestamp_iso: null,
+        method: m[5] || '', uri: rawUri,
+        path: qIdx !== -1 ? rawUri.slice(0, qIdx) : rawUri,
+        query: qIdx !== -1 ? rawUri.slice(qIdx + 1) : '',
+        protocol: m[7] || '', status: m[8] || '',
+        bytes: m[9] || '', referer: m[10] || '', ua: m[11] || '',
+        message: line, details: rawUri, program: '', action: ''
+      };
+    }
+    return parseSyslogFallback(line) || {
+      log_type: 'text', srcip: firstIpIn(line), timestamp: '', timestamp_display: '',
+      timestamp_iso: null, method: '', uri: '', path: '', query: '', protocol: '',
+      status: '', bytes: '', referer: '', ua: '', message: line, details: line,
+      program: '', action: ''
+    };
+  }
+
+  function getParsed(alert) {
+    if (!alert) return {};
+    if (alert._parsed) {
+      // _parsed dari backend sudah lengkap; pastikan data Wazuh jadi fallback.
+      if (!cleanVal(alert._parsed.srcip) && cleanVal(alert.data?.srcip)) alert._parsed.srcip = alert.data.srcip;
+      return alert._parsed;
+    }
+    const p = parseAccessLog(alert.full_log || '') || {};
+    if (!cleanVal(p.srcip) && cleanVal(alert.data?.srcip)) p.srcip = alert.data.srcip;
+    if (p.log_type === 'http' && !p.status && /^\d{3}$/.test(String(alert.data?.id || ''))) p.status = alert.data.id;
+    if (!p.method && alert.data?.protocol && p.log_type === 'http') p.method = alert.data.protocol;
+    if (!p.path && alert.data?.url) p.path = alert.data.url.split('?')[0];
+    if (!p.query && alert.data?.url && alert.data.url.includes('?')) p.query = alert.data.url.split('?').slice(1).join('?');
+    return p;
+  }
+
+  function parseDateSafe(v) {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function fmtClock(d) {
+    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
+  }
+
+  function fmtDate(d, compact = false) {
+    const opts = compact
+      ? { day: '2-digit', month: '2-digit', timeZone: 'Asia/Jakarta' }
+      : { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Jakarta' };
+    return d.toLocaleDateString('id-ID', opts);
+  }
+
+  function formatTimeRange(alert, p, compact = false) {
+    const first = parseDateSafe(alert?.first_seen || alert?.timestamp || p?.timestamp);
+    const last = parseDateSafe(alert?.last_seen || alert?.timestamp || p?.timestamp);
+    if (first && last && first.getTime() !== last.getTime()) {
+      if (fmtDate(first, compact) === fmtDate(last, compact)) return `${fmtDate(first, compact)} · ${fmtClock(first)} s/d ${fmtClock(last)}`;
+      return `${fmtDate(first, compact)} ${fmtClock(first)} s/d ${fmtDate(last, compact)} ${fmtClock(last)}`;
+    }
+    if (first || last) {
+      const one = first || last;
+      return `${fmtDate(one, compact)} · ${fmtClock(one)}`;
+    }
+    if (p?.timestamp_display) return p.timestamp_display;
+    if (p?.timestamp) return p.timestamp;
+    if (alert?.timestamp) {
+      const d = parseDateSafe(alert.timestamp);
+      return d ? `${fmtDate(d)} ${fmtClock(d)}` : alert.timestamp;
+    }
+    return '-';
+  }
+
+  function isPrivateIp(ip) {
+    const s = String(ip || '');
+    if (!s || s === '-') return true;
+    if (s.startsWith('127.') || s.startsWith('10.') || s.startsWith('192.168.') || s.includes('INTERNALIP')) return true;
+    const m = s.match(/^172\.(\d{1,3})\./);
+    return !!(m && Number(m[1]) >= 16 && Number(m[1]) <= 31);
+  }
+
+  // Get active display alerts (filtered + sorted)
+  function getDisplayAlerts() {
+    let list = JSON.parse(JSON.stringify(alertsData));
+
+    list = list.filter(a => {
+      const fullLog = a.full_log || '';
+      const p = getParsed(a);
+      const url = p.path || a.data?.url || '';
+      const srcip = firstNonEmpty(a.data?.srcip, p.srcip, '');
+      const status = p.log_type === 'http'
+        ? (p.status || (String(a.data?.id || '').match(/^\d{3}$/)?.[0]) || (fullLog.match(/"\s+(\d{3})\s+/)?.[1]) || '')
+        : '';
+
+      if (activeFilter === '403' && status !== '403') return false;
+      if (activeFilter === '404' && status !== '404') return false;
+      if (activeFilter === 'repeat' && (Number(a.hit_count) || 1) < 2) return false;
+      if (activeFilter === 'nonhttp' && p.log_type === 'http') return false;
+      if (activeFilter === 'http' && p.log_type !== 'http') return false;
+      if (activeFilter === 'googlebot' && !srcip.startsWith('66.249.') && !fullLog.toLowerCase().includes('googlebot')) return false;
+      if (activeFilter === 'curl' && !fullLog.toLowerCase().includes('curl')) return false;
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match = fullLog.toLowerCase().includes(q) ||
+                      String(url).toLowerCase().includes(q) ||
+                      String(p.query || '').toLowerCase().includes(q) ||
+                      String(p.details || '').toLowerCase().includes(q) ||
+                      String(p.message || '').toLowerCase().includes(q) ||
+                      String(srcip).toLowerCase().includes(q) ||
+                      String(a._id || '').toLowerCase().includes(q) ||
+                      String(a.agent?.name || '').toLowerCase().includes(q) ||
+                      String(a.agent?.labels?.tenant || '').toLowerCase().includes(q) ||
+                      String(a.rule?.id || '').toLowerCase().includes(q) ||
+                      String(a.rule?.description || '').toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+
+    return sortAlerts(list);
+  }
+
+  function sourceSortKey(alert) {
+    const p = getParsed(alert);
+    const src = String(firstNonEmpty(alert.data?.srcip, p.srcip, '') || '').trim();
+    if (!src || src === '-') return '9';
+    const parts = src.split('.');
+    if (parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255)) {
+      return '0' + parts.map(part => String(Number(part)).padStart(3, '0')).join('.');
+    }
+    if (src.includes(':')) return '1' + src.toLowerCase();
+    return '2' + src.toLowerCase();
+  }
+
+  function sortAlerts(list) {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const value = (a) => {
+      if (sortKey === 'hit') return Number(a.hit_count) || 1;
+      if (sortKey === 'level') return Number(a.rule?.level) || 0;
+      if (sortKey === 'source') return sourceSortKey(a);
+      const d = parseDateSafe(a.last_seen || a.first_seen || a.timestamp);
+      return d ? d.getTime() : 0;
+    };
+    return list.sort((a, b) => {
+      const av = value(a), bv = value(b);
+      if (sortKey === 'source') {
+        const aEmpty = av === '9', bEmpty = bv === '9';
+        if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+      }
+      if (av === bv) return 0;
+      return av > bv ? dir : -dir;
+    });
+  }
+
+  function setSort(key) {
+    if (sortKey === key) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+    else { sortKey = key; sortDir = key === 'source' ? 'asc' : 'desc'; }
+    updateSortIndicators();
+    renderBreakdownTable();
+    renderCards();
+  }
+
+  function updateSortIndicators() {
+    const icons = { hit: 'sortHitIcon', time: 'sortTimeIcon', level: 'sortLevelIcon', source: 'sortSourceIcon' };
+    Object.entries(icons).forEach(([key, id]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = sortKey === key ? (sortDir === 'asc' ? '\u2191' : '\u2193') : '';
+      const th = el.closest('th');
+      if (th) th.setAttribute('aria-sort', sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none');
+    });
+  }
+
+  function decodeQuery(q) {
+    let decoded = String(q || '').replace(/\+/g, ' ');
+    try { decoded = decodeURIComponent(decoded); } catch (e) {}
+    return decoded;
+  }
+
+  function logTypeLabel(type) {
+    if (!type || type === 'http') return '';
+    return String(type).toUpperCase();
+  }
+
+  function timeCellHtml(alert, p) {
+    const first = parseDateSafe(alert?.first_seen || alert?.timestamp || p?.timestamp);
+    const last = parseDateSafe(alert?.last_seen || alert?.timestamp || p?.timestamp);
+    if (first && last && first.getTime() !== last.getTime()) {
+      const firstDate = fmtDate(first, true);
+      const lastDate = fmtDate(last, true);
+      const range = firstDate === lastDate
+        ? `${fmtClock(first)} s/d ${fmtClock(last)}`
+        : `${fmtClock(first)} s/d ${lastDate} ${fmtClock(last)}`;
+      return `<div class="soc-time" title="${escapeHtml(formatTimeRange(alert, p))}"><strong>${escapeHtml(firstDate)}</strong><span>${escapeHtml(range)}</span></div>`;
+    }
+    return `<div class="soc-time" title="${escapeHtml(formatTimeRange(alert, p))}">${escapeHtml(formatTimeRange(alert, p, true))}</div>`;
+  }
+
+  // Render TAB 1: Structured Breakdown Table
+  function renderBreakdownTable() {
+    const alerts = getDisplayAlerts();
+    const tbody = document.getElementById('breakdownTableBody');
+    const visible = document.getElementById('visibleCount');
+    const total = document.getElementById('totalCount');
+    if (visible) visible.innerText = alerts.length;
+    if (total) total.innerText = alertsData.length;
+    tbody.innerHTML = '';
+
+    if (alerts.length === 0) {
+      tbody.innerHTML = `
+        <tr><td colspan="8">
+          <div class="soc-empty">
+            <strong>Tidak ada log di tampilan ini.</strong>
+            <p>Database mungkin kosong, atau filter/pencarian sedang menyembunyikan baris. Impor alert baru atau tampilkan semua waktu.</p>
+            <div class="soc-empty-actions">
+              <button type="button" class="soc-btn primary" onclick="openIngestModal()">Impor alert</button>
+              <button type="button" class="soc-btn" onclick="handleRangeChange('all')">Tampilkan semua waktu</button>
+            </div>
+          </div>
+        </td></tr>`;
+      return;
+    }
+
+    alerts.forEach((alert, idx) => {
+      const p = getParsed(alert);
+      const srcip = firstNonEmpty(alert.data?.srcip, p.srcip, '-');
+      const fullLog = alert.full_log || '';
+      const hit = Number(alert.hit_count) || 1;
+      const level = Number(alert.rule?.level) || 0;
+      const tenant = alert.agent?.labels?.tenant || '';
+      const agent = alert.agent?.name || '';
+
+      let catTag = '';
+      if (srcip === '127.0.0.1' || srcip.includes('INTERNALIP')) {
+        catTag = '<span class="soc-tag">LANGSUNG / INTERNAL</span>';
+      } else if (srcip.startsWith('66.249.') || (p.ua && p.ua.toLowerCase().includes('googlebot'))) {
+        catTag = '<span class="soc-tag">CRAWLER</span>';
+      }
+
+      let intelBadge = '';
+      if (!isPrivateIp(srcip) && ipIntelCache[srcip]) {
+        const ab = ipIntelCache[srcip].abuseipdb || {};
+        const score = ab.abuseConfidenceScore ?? 0;
+        const riskClass = score > 50 ? ' risk-high' : (score > 15 ? ' risk-medium' : '');
+        intelBadge = `<button type="button" class="soc-intel${riskClass}" data-ip="${escapeHtml(srcip)}" onclick="openIntelModal(this.dataset.ip)" title="Buka profil IPIntel">${score}% · ${escapeHtml(ab.countryCode || 'ID')}</button>`;
+      } else if (!isPrivateIp(srcip)) {
+        intelBadge = `<button type="button" class="soc-intel" data-ip="${escapeHtml(srcip)}" onclick="openIntelModal(this.dataset.ip)" title="Cek IP ini di IPIntel">Cek IPIntel</button>`;
+      }
+
+      const status = p.log_type === 'http'
+        ? (p.status || (String(alert.data?.id || '').match(/^\d{3}$/)?.[0]) || '')
+        : '';
+      const statusText = p.log_type === 'http' ? (status || '—') : (logTypeLabel(p.log_type) || 'LOG');
+      const statusClass = p.log_type === 'http' && status ? ` status-${status}` : '';
+      const method = p.log_type === 'http' ? (p.method || 'GET') : '';
+      const pathText = p.path || (p.log_type === 'http' ? '/' : (p.program || p.action || '-'));
+      let subText = p.log_type === 'http'
+        ? (p.query ? '?' + decodeQuery(p.query) : '')
+        : (p.details || p.message || '');
+      const subFull = subText;
+      if (subText.length > 240) subText = subText.slice(0, 240) + '…';
+      const suspicious = /UNION|SELECT|user\(\)|database\(\)|MAXWIN|TOGEL|JUDI|alert\(|<script|apparmor="DENIED"|Failed password|Invalid user/i.test(subFull);
+      const typeLabel = logTypeLabel(p.log_type);
+      const ipCell = srcip === '-'
+        ? '<span class="soc-tag">—</span>'
+        : `<button type="button" class="soc-ip" data-ip="${escapeHtml(srcip)}" onclick="openIntelModal(this.dataset.ip)">${escapeHtml(srcip)}</button>`;
+
+      const tr = document.createElement('tr');
+      tr.className = 'soc-row';
+      tr.innerHTML = `
+        <td class="soc-col-hit">
+          <span class="soc-hit ${hit > 1 ? 'is-hot' : ''}" title="Jumlah kemunculan dengan isi yang sama">${hit}<span>×</span></span>
+        </td>
+        <td class="soc-col-time">
+          ${timeCellHtml(alert, p)}
+        </td>
+        <td class="soc-col-source">
+          ${ipCell}
+          ${catTag ? '<br>' + catTag : ''}
+          ${intelBadge}
+        </td>
+        <td>
+          <div class="soc-request-main">
+            ${method ? `<span class="soc-method">${escapeHtml(method)}</span>` : ''}
+            ${typeLabel ? `<span class="soc-type">${escapeHtml(typeLabel)}</span>` : ''}
+            <span class="soc-path">${escapeHtml(pathText)}</span>
+          </div>
+          ${subText ? `<div class="soc-request-sub ${suspicious ? 'is-suspicious' : ''}" title="${escapeHtml(subFull)}">${escapeHtml(subText)}</div>` : ''}
+        </td>
+        <td class="soc-col-status"><span class="soc-status${statusClass}">${escapeHtml(statusText)}</span></td>
+        <td>
+          <div class="soc-rule">
+            <div class="soc-rule-head">
+              <span class="soc-rule-id">${escapeHtml(alert.rule?.id || '-')}</span>
+              <span class="soc-rule-level ${level >= 10 ? 'level-high' : (level >= 7 ? 'level-medium' : '')}">L${level || '-'}</span>
+            </div>
+            <div class="soc-rule-desc" title="${escapeHtml(alert.rule?.description || '')}">${escapeHtml(alert.rule?.description || '-')}</div>
+          </div>
+        </td>
+        <td class="soc-col-host">
+          <div class="soc-host" title="${escapeHtml([tenant, agent].filter(Boolean).join(' / '))}"><span class="soc-host-main">${escapeHtml(agent || tenant || '-')}</span><small>${escapeHtml(tenant || alert.agent?.ip || '')}</small></div>
+        </td>
+        <td class="soc-col-actions">
+          <div class="soc-row-actions">
+            <button type="button" class="soc-action" data-detail-btn="${idx}" aria-expanded="false" aria-controls="detail-${idx}" onclick="toggleDetail(${idx})">Detail</button>
+            <button type="button" class="soc-action" onclick="viewFullLog(${idx})" title="Lihat full_log apa adanya">FULL</button>
+            <button type="button" class="soc-action" onclick="viewAlertJson(${idx})" title="Lihat raw JSON alert">RAW</button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+
+      const detail = document.createElement('tr');
+      detail.className = 'soc-detail-row';
+      detail.id = `detail-${idx}`;
+      detail.hidden = true;
+      const ids = Array.isArray(alert.wazuh_ids) ? alert.wazuh_ids : [];
+      const idsPreview = ids.length ? ids.slice(0, 3).join(', ') + (ids.length > 3 ? ` +${ids.length - 3}` : '') : '-';
+      detail.innerHTML = `
+        <td colspan="8">
+          <div class="soc-detail">
+            <div>
+              <dl class="soc-detail-grid">
+                <div><dt>Metode</dt><dd>${escapeHtml(p.method || '-')}</dd></div>
+                <div><dt>Protokol</dt><dd>${escapeHtml(p.protocol || '-')}</dd></div>
+                <div><dt>Ukuran</dt><dd>${escapeHtml(p.bytes || '-')}</dd></div>
+                <div><dt>Status</dt><dd>${escapeHtml(statusText)}</dd></div>
+                <div><dt>Referer</dt><dd>${escapeHtml(p.referer || '-')}</dd></div>
+                <div><dt>User-Agent</dt><dd title="${escapeHtml(p.ua || '')}">${escapeHtml(p.ua || '-')}</dd></div>
+                <div><dt>Wazuh IDs</dt><dd title="${escapeHtml(ids.join(', '))}">${escapeHtml(idsPreview)}</dd></div>
+                <div><dt>Signature</dt><dd title="${escapeHtml(alert.log_signature || alert._id || '')}">${escapeHtml((alert.log_signature || alert._id || '-').slice(0, 20))}</dd></div>
+                <div><dt>Tenant</dt><dd>${escapeHtml(tenant || '-')}</dd></div>
+              </dl>
+              <div class="soc-detail-danger">
+                <p>Hapus grup ini berarti menghapus <strong>${hit}</strong> kemunculan dan seluruh ID Wazuh yang tergabung.</p>
+                <button type="button" class="soc-action danger" data-id="${escapeHtml(alert._id || '')}" data-ids="${escapeHtml(JSON.stringify(alert._group_row_ids || []))}" onclick="deleteAlert(this.dataset.id, ${hit}, JSON.parse(this.dataset.ids || '[]'))">Hapus grup</button>
+              </div>
+            </div>
+            <div class="soc-detail-log">
+              <div class="soc-detail-log-head">
+                <span>full_log</span>
+                <button type="button" class="soc-action" onclick="copyText(this.closest('.soc-detail').querySelector('.soc-detail-log pre').innerText)">Salin log</button>
+              </div>
+              <pre>${escapeHtml(fullLog || '(full_log tidak tersedia)')}</pre>
+            </div>
+          </div>
+        </td>`;
+      tbody.appendChild(detail);
+    });
+  }
+
+  function toggleDetail(idx) {
+    const row = document.getElementById(`detail-${idx}`);
+    const btn = document.querySelector(`[data-detail-btn="${idx}"]`);
+    if (!row) return;
+    const open = row.hidden;
+    row.hidden = !open;
+    if (btn) {
+      btn.setAttribute('aria-expanded', String(open));
+      const main = btn.closest('tr');
+      if (main) main.classList.toggle('is-open', open);
+    }
+  }
+
+  async function deleteAlert(id, hits, ids = []) {
+    if (!id && !(ids && ids.length)) return;
+    const message = `Hapus grup ini?\n\n${hits || 1} kemunculan dan semua ID Wazuh yang tergabung akan dihapus permanen.`;
+    if (!confirm(message)) return;
+    try {
+      const resp = await fetch(BASE_PATH + '/api/soc-logs/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ids })
+      });
+      const res = await resp.json();
+      if (!resp.ok || !res.success) throw new Error(res.error || 'gagal menghapus');
+      const removed = new Set([id, ...(ids || [])].filter(Boolean).map(String));
+      alertsData = alertsData.filter(a => !removed.has(String(a._id)) && !(a._group_row_ids || []).some(rid => removed.has(String(rid))));
+      refreshAll();
+      showToast(`Grup dihapus: ${res.deleted_hits || hits || 1} kemunculan.`);
+    } catch (e) {
+      showToast('Gagal menghapus grup: ' + e.message);
+    }
+  }
+
+  // Render TAB 2: Card view
+  function renderCards() {
+    const alerts = getDisplayAlerts();
+    const container = document.getElementById('sectionCards');
+    container.innerHTML = '';
+
+    if (alerts.length === 0) {
+      container.innerHTML = `
+        <div class="soc-empty">
+          <strong>Tidak ada kartu untuk filter ini.</strong>
+          <p>Ubah filter atau tampilkan semua waktu untuk melihat grup log lainnya.</p>
+          <div class="soc-empty-actions">
+            <button type="button" class="soc-btn primary" onclick="openIngestModal()">Impor alert</button>
+            <button type="button" class="soc-btn" onclick="handleRangeChange('all')">Tampilkan semua waktu</button>
+          </div>
+        </div>`;
+      return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'soc-cards-grid';
+    container.appendChild(grid);
+
+    alerts.forEach((alert, idx) => {
+      const p = getParsed(alert);
+      const srcip = firstNonEmpty(alert.data?.srcip, p.srcip, '-');
+      const fullLog = alert.full_log || '';
+      const hit = Number(alert.hit_count) || 1;
+      const level = Number(alert.rule?.level) || 0;
+      const tenant = alert.agent?.labels?.tenant || '';
+      const agent = alert.agent?.name || '';
+      const status = p.log_type === 'http'
+        ? (p.status || (String(alert.data?.id || '').match(/^\d{3}$/)?.[0]) || '')
+        : '';
+      const statusText = p.log_type === 'http' ? (status || '—') : (logTypeLabel(p.log_type) || 'LOG');
+      const statusClass = p.log_type === 'http' && status ? ` status-${status}` : '';
+      const method = p.log_type === 'http' ? (p.method || 'GET') : '';
+      const pathText = p.path || (p.log_type === 'http' ? '/' : (p.program || p.action || '-'));
+      let sub = p.log_type === 'http'
+        ? (p.query ? '?' + decodeQuery(p.query) : '')
+        : (p.details || p.message || '');
+      const subFull = sub;
+      if (sub.length > 220) sub = sub.slice(0, 220) + '…';
+      const suspicious = /UNION|SELECT|user\(\)|database\(\)|MAXWIN|TOGEL|JUDI|alert\(|<script|apparmor="DENIED"|Failed password|Invalid user/i.test(subFull);
+
+      let catTag = '';
+      if (srcip === '127.0.0.1' || srcip.includes('INTERNALIP')) catTag = '<span class="soc-tag">LANGSUNG / INTERNAL</span>';
+      else if (srcip.startsWith('66.249.') || (p.ua && p.ua.toLowerCase().includes('googlebot'))) catTag = '<span class="soc-tag">CRAWLER</span>';
+
+      let intelBadge = '';
+      if (!isPrivateIp(srcip) && ipIntelCache[srcip]) {
+        const ab = ipIntelCache[srcip].abuseipdb || {};
+        const score = ab.abuseConfidenceScore ?? 0;
+        const riskClass = score > 50 ? ' risk-high' : (score > 15 ? ' risk-medium' : '');
+        intelBadge = `<button type="button" class="soc-intel${riskClass}" data-ip="${escapeHtml(srcip)}" onclick="openIntelModal(this.dataset.ip)" title="Buka profil IPIntel">${score}% · ${escapeHtml(ab.countryCode || 'ID')}</button>`;
+      } else if (!isPrivateIp(srcip)) {
+        intelBadge = `<button type="button" class="soc-intel" data-ip="${escapeHtml(srcip)}" onclick="openIntelModal(this.dataset.ip)" title="Cek IP ini di IPIntel">Cek IPIntel</button>`;
+      }
+
+      const card = document.createElement('article');
+      card.className = 'soc-card';
+      card.innerHTML = `
+        <div class="soc-card-top">
+          <div class="soc-card-id">
+            <span class="soc-hit ${hit > 1 ? 'is-hot' : ''}" title="Jumlah kemunculan">${hit}<span>×</span></span>
+            <span class="soc-status${statusClass}">${escapeHtml(statusText)}</span>
+            <span class="soc-rule-level ${level >= 10 ? 'level-high' : (level >= 7 ? 'level-medium' : '')}">L${level || '-'}</span>
+          </div>
+          <span class="soc-card-time">${escapeHtml(formatTimeRange(alert, p, true))}</span>
+        </div>
+        <div class="soc-card-main">
+          <div class="soc-card-source">
+            ${srcip === '-' ? '<span class="soc-tag">—</span>' : `<button type="button" class="soc-ip" data-ip="${escapeHtml(srcip)}" onclick="openIntelModal(this.dataset.ip)">${escapeHtml(srcip)}</button>`}
+            ${intelBadge}${catTag}
+          </div>
+          <div class="soc-card-request">
+            ${method ? `<span class="soc-method">${escapeHtml(method)}</span>` : ''}
+            ${p.log_type && p.log_type !== 'http' ? `<span class="soc-type">${escapeHtml(logTypeLabel(p.log_type))}</span>` : ''}
+            <span class="soc-path">${escapeHtml(pathText)}</span>
+          </div>
+          ${sub ? `<div class="soc-card-sub ${suspicious ? 'is-suspicious' : ''}" title="${escapeHtml(subFull)}">${escapeHtml(sub)}</div>` : ''}
+        </div>
+        <div class="soc-card-foot">
+          <div class="soc-card-rule"><span>${escapeHtml(alert.rule?.id || '-')}</span> ${escapeHtml(alert.rule?.description || '')}</div>
+          <div class="soc-card-host">${escapeHtml(tenant || agent || '-')}${tenant && agent ? ' / ' + escapeHtml(agent) : ''}</div>
+          <div class="soc-row-actions">
+            <button type="button" class="soc-action" onclick="openDetailFromCard(${idx})">Buka detail</button>
+            <button type="button" class="soc-action" onclick="viewFullLog(${idx})">FULL</button>
+            <button type="button" class="soc-action" onclick="viewAlertJson(${idx})">RAW</button>
+          </div>
+        </div>`;
+      grid.appendChild(card);
+    });
+  }
+
+  function openDetailFromCard(idx) {
+    switchTab('breakdown');
+    const row = document.getElementById(`detail-${idx}`);
+    if (row && row.hidden) toggleDetail(idx);
+    requestAnimationFrame(() => {
+      const btn = document.querySelector(`[data-detail-btn="${idx}"]`);
+      if (btn) btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }
+
+  // Render Stats & KPIs
+  function renderStats() {
+    const totalHits = alertsData.reduce((sum, a) => sum + (Number(a.hit_count) || 1), 0);
+    const repeatedGroups = alertsData.reduce((n, a) => n + ((Number(a.hit_count) || 1) > 1 ? 1 : 0), 0);
+    const maxHit = alertsData.reduce((m, a) => Math.max(m, Number(a.hit_count) || 1), 0);
+    document.getElementById('kpiTotalAlerts').innerText = alertsData.length.toLocaleString('id-ID');
+    document.getElementById('kpiTotalSub').innerText = 'baris unik setelah dedup';
+    const totalHitsEl = document.getElementById('kpiTotalHits');
+    if (totalHitsEl) totalHitsEl.innerText = totalHits.toLocaleString('id-ID');
+    const repeatedEl = document.getElementById('kpiRepeatedGroups');
+    if (repeatedEl) repeatedEl.innerText = repeatedGroups.toLocaleString('id-ID');
+    const maxHitEl = document.getElementById('kpiMaxHit');
+    if (maxHitEl) maxHitEl.innerText = repeatedGroups ? `maks ${maxHit.toLocaleString('id-ID')}×` : 'tidak ada pengulangan';
+    document.getElementById('dbCountBadge').innerText = alertsData.length.toLocaleString('id-ID');
+    document.getElementById('countBreakdown').innerText = alertsData.length.toLocaleString('id-ID');
+
+    const statuses = {};
+    const srcIps = new Set();
+    let maxLevel = 0;
+    let ruleDesc = '';
+    let tenant = '';
+    let agent = '';
+
+    alertsData.forEach(a => {
+      const p = getParsed(a);
+      const code = p.log_type === 'http'
+        ? (p.status || (String(a.data?.id || '').match(/^\d{3}$/)?.[0]) || '')
+        : '';
+      if (code) statuses[code] = (statuses[code] || 0) + 1;
+      const ip = firstNonEmpty(a.data?.srcip, p.srcip, '');
+      if (ip && ip !== '-') srcIps.add(ip);
+      const lvl = a.rule?.level || 0;
+      if (lvl > maxLevel) {
+        maxLevel = lvl;
+        ruleDesc = a.rule?.description || '';
+      }
+      if (!tenant) tenant = a.agent?.labels?.tenant || '';
+      if (!agent) agent = a.agent?.name || '';
+    });
+
+    const statusList = Object.entries(statuses).map(([k, v]) => `${k} (${v} baris)`).join(', ') || '-';
+    const verdict = statuses['403'] ? 'Diblokir server/WAF' : (statuses['404'] ? 'Target tidak ditemukan (404)' : 'Normal');
+
+    document.getElementById('kpiMaxLevel').innerText = maxLevel ? `L${maxLevel}` : '-';
+    document.getElementById('kpiRuleDesc').innerText = ruleDesc ? ruleDesc.slice(0, 54) + (ruleDesc.length > 54 ? '…' : '') : '-';
+
+    if (isUnmasked && decryptedMap) {
+      if (decryptedMap[tenant]) tenant = decryptedMap[tenant];
+      if (decryptedMap[agent]) agent = decryptedMap[agent];
+    }
+    const uniqueIpsEl = document.getElementById('kpiUniqueIps');
+    if (uniqueIpsEl) uniqueIpsEl.innerText = srcIps.size.toLocaleString('id-ID');
+    const ipListEl = document.getElementById('kpiIpList');
+    if (ipListEl) ipListEl.innerText = [...srcIps].slice(0, 3).join(', ') || '-';
+
+    const httpEl = document.getElementById('kpiHttpStatus');
+    if (httpEl) httpEl.innerText = statusList;
+    const verdictEl = document.getElementById('kpiVerdictSub');
+    if (verdictEl) verdictEl.innerText = verdict;
+    const tenantEl = document.getElementById('kpiTenant');
+    if (tenantEl) tenantEl.innerText = tenant || 'Multitenant';
+    const agentEl = document.getElementById('kpiAgent');
+    if (agentEl) agentEl.innerText = `Host: ${agent || 'wazuh-agent'}`;
+    updateSortIndicators();
+  }
+
+  // Render Analysis Tab (Markdown)
+  function renderAnalysisReport() {
+    const alerts = alertsData;
+    const totalHits = alerts.reduce((sum, a) => sum + (Number(a.hit_count) || 1), 0);
+    const repeated = alerts.filter(a => (Number(a.hit_count) || 1) > 1).length;
+    const reportMd = `## RINGKASAN INVESTIGASI SOC - WAZUH ALERTS
+- **Grup log unik:** ${alerts.length}
+- **Total kemunculan:** ${totalHits} hit (${repeated} grup berulang)
+- **Status Respon Web:** ${document.getElementById('kpiHttpStatus').innerText}
+- **Tingkat Bahaya Tertinggi:** ${document.getElementById('kpiMaxLevel').innerText}
+- **Target Asset:** ${document.getElementById('kpiTenant').innerText} (${document.getElementById('kpiAgent').innerText})
+
+### Rekapitulasi Baris Log Terurai & Threat Intel:
+${alerts.map((a, i) => {
+  const p = getParsed(a);
+  const ip = firstNonEmpty(a.data?.srcip, p.srcip, '-');
+  const intel = ipIntelCache[ip]?.abuseipdb;
+  const intelNote = intel ? ` [Score: ${intel.abuseConfidenceScore}%, ISP: ${intel.isp}]` : '';
+  const what = p.log_type === 'http'
+    ? `${p.method || '-'} ${p.path || '/'}${p.query ? '?' + p.query : ''}`
+    : `${p.path || p.program || 'log'} ${p.details ? '(' + p.details + ')' : ''}`;
+  const when = formatTimeRange(a, p);
+  return `${i + 1}. [${p.status || '-'}] ${what} dari IP ${ip} | ${when}${intelNote} (_id: ${a._id})`;
+}).join('\n')}
+
+### Catatan Investigasi:
+1. Log identik digabung memakai signature \`full_log\` (timestamp, audit serial, dan PID dinormalisasi) dan tetap menyimpan \`_id\` asli Wazuh. Kolom Hit menunjukkan jumlah kemunculan; kolom Waktu menampilkan rentang pertama sampai terakhir.
+2. Threat Intelligence divalidasi langsung via platform IPIntel (Postgres + AbuseIPDB local container).
+3. Request 403 menandakan proteksi aktif WAF/Web Server. Request 404 pada crawler (Googlebot) membuktikan URI judi online/spam tidak ada di server.
+4. Log non-HTTP (AppArmor, sshd, syslog) tidak dipaksa menjadi GET/200; detail key=value tampil di kolom peristiwa dan full_log bisa dibuka lewat tombol FULL atau Detail.`;
+
+    document.getElementById('analysisContent').innerHTML = `
+      <pre class="bg-ink border border-line rounded-xl p-4 font-mono text-xs text-sky-300 whitespace-pre-wrap leading-relaxed select-all" id="markdownReportBox">${escapeHtml(reportMd)}</pre>
+    `;
+  }
+
+  function copyReportMarkdown() {
+    const el = document.getElementById('markdownReportBox');
+    if (el) copyText(el.innerText);
+  }
+
+  // Enrich All IPs using /api/enrich
+  async function enrichAllIps(silent = false) {
+    const ips = new Set();
+    alertsData.forEach(a => {
+      const p = getParsed(a);
+      const ip = firstNonEmpty(a.data?.srcip, p.srcip, '');
+      if (ip && ip !== '-' && !isPrivateIp(ip)) {
+        ips.add(ip);
+      }
+    });
+
+    const ipList = [...ips];
+    if (ipList.length === 0) {
+      if (!silent) showToast('Tidak ada IP eksternal publik untuk di-enrich.');
+      return;
+    }
+
+    if (!silent) showToast(`Sedang menarik IPIntel untuk ${ipList.length} IP...`);
+
+    try {
+      const resp = await fetch(BASE_PATH + '/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ips: ipList, mode: 'fast' })
+      });
+      if (resp.ok) {
+        const res = await resp.json();
+        if (res && res.ips) {
+          Object.assign(ipIntelCache, res.ips);
+          renderBreakdownTable();
+          renderCards();
+          renderAnalysisReport();
+          if (!silent) showToast(`IPIntel: ${Object.keys(res.ips).length} IP berhasil diperkaya.`);
+        }
+      }
+    } catch (e) {
+      if (!silent) showToast('Gagal menghubungi /api/enrich.');
+    }
+  }
+
+  // Open Deep Dive Modal for an IP
+  function openIntelModal(ip) {
+    const data = ipIntelCache[ip] || {};
+    const abuse = data.abuseipdb || {};
+    const geo = data.geo || {};
+
+    document.getElementById('intelModalIp').innerText = ip;
+    document.getElementById('intelPlatformLink').href = `${BASE_PATH}/ip/${encodeURIComponent(ip)}`;
+
+    const score = abuse.abuseConfidenceScore ?? '-';
+    let scoreColor = '#10b981';
+    if (score > 50) scoreColor = '#f43f5e';
+    else if (score > 15) scoreColor = '#f59e0b';
+
+    const body = document.getElementById('intelModalBody');
+    body.innerHTML = `
+      <div class="bg-ink border border-line rounded-lg p-3 flex items-center justify-between">
+        <div>
+          <div class="text-[10px] text-slate-400 uppercase font-mono">Abuse Confidence Score</div>
+          <div class="text-2xl font-black font-mono" style="color: ${scoreColor};">${score}%</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[10px] text-slate-400 uppercase font-mono">Status Whitelist</div>
+          <div class="text-xs font-bold ${abuse.isWhitelisted ? 'text-emerald-400' : 'text-slate-400'}">
+            ${abuse.isWhitelisted ? 'Terverifikasi (whitelist)' : 'Tidak masuk whitelist'}
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+        <div class="bg-ink border border-line p-2.5 rounded-lg">
+          <div class="text-[10px] text-slate-400 uppercase">Negara / Lokasi</div>
+          <div class="font-bold text-white">${geo.country || abuse.countryCode || '-'} (${geo.countryCode || '-'})</div>
+        </div>
+        <div class="bg-ink border border-line p-2.5 rounded-lg">
+          <div class="text-[10px] text-slate-400 uppercase">ISP / Organisasi</div>
+          <div class="font-bold text-white truncate" title="${escapeHtml(abuse.isp || geo.isp || '-')}">${escapeHtml(abuse.isp || geo.isp || '-')}</div>
+        </div>
+        <div class="bg-ink border border-line p-2.5 rounded-lg">
+          <div class="text-[10px] text-slate-400 uppercase">Total Laporan Abuse</div>
+          <div class="font-bold text-white">${abuse.totalReports ?? 0} Kali</div>
+        </div>
+        <div class="bg-ink border border-line p-2.5 rounded-lg">
+          <div class="text-[10px] text-slate-400 uppercase">Tipe Penggunaan</div>
+          <div class="font-bold text-white truncate">${escapeHtml(abuse.usageType || '-')}</div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('intelModal').classList.remove('hidden');
+  }
+
+  function closeIntelModal() {
+    document.getElementById('intelModal').classList.add('hidden');
+  }
+
+  // Quick Log Parser
+  async function processQuickLog() {
+    const input = document.getElementById('quickLogInput');
+    const line = input.value.trim();
+    if (!line) {
+      showToast('Masukkan baris access log terlebih dahulu.');
+      return;
+    }
+    await postAlertsToDatabase([line]);
+    input.value = '';
+  }
+
+  // ---- Import helpers: file .json/.txt Wazuh/Elasticsearch, NDJSON, raw log ----
+  function sanitizeJsonControlChars(text) {
+    let out = '';
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (!inString) {
+        out += ch;
+        if (ch === '"') inString = true;
+        continue;
+      }
+      if (escaped) {
+        out += ch;
+        escaped = false;
+      } else if (ch === '\\') {
+        out += ch;
+        escaped = true;
+      } else if (ch === '"') {
+        out += ch;
+        inString = false;
+      } else if (ch === '\n') {
+        out += '\\n';
+      } else if (ch === '\r') {
+        out += '\\r';
+      } else if (ch === '\t') {
+        out += '\\t';
+      } else if (ch.charCodeAt(0) < 0x20) {
+        out += '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0');
+      } else {
+        out += ch;
+      }
+    }
+    return out;
+  }
+
+  function loadMaskingMetadata(payload) {
+    if (!payload || !payload.unmapVault || !payload.mapKey) return;
+    const dec = decryptRc4Drop3072(payload.unmapVault, payload.mapKey);
+    if (dec && typeof dec === 'object') {
+      decryptedMap = Object.assign(decryptedMap, dec);
+      updateVaultDrawerUI();
+    }
+  }
+
+  function normalizeAlertItems(payload) {
+    if (Array.isArray(payload)) {
+      return payload
+        .map(item => (item && typeof item === 'object' && item._source) ? item._source : item)
+        .filter(item => item !== null && item !== undefined);
+    }
+    if (!payload || typeof payload !== 'object') return null;
+    loadMaskingMetadata(payload);
+
+    let rawItems = null;
+    if (Array.isArray(payload.alerts)) rawItems = payload.alerts;
+    else if (payload.hits && Array.isArray(payload.hits.hits)) rawItems = payload.hits.hits;
+    else if (payload._source && typeof payload._source === 'object') rawItems = [payload._source];
+    else if (payload.rule || payload.full_log || payload.timestamp || payload['@timestamp']) rawItems = [payload];
+
+    if (!rawItems) return null;
+    return rawItems
+      .map(item => (item && typeof item === 'object' && item._source) ? item._source : item)
+      .filter(item => item !== null && item !== undefined);
+  }
+
+  function parseAlertText(txt) {
+    let text = String(txt || '').replace(/^\uFEFF/, '').trim();
+    if (!text) return [];
+    let parsed;
+    let parseError = null;
+
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      parseError = err;
+      try {
+        // File Wazuh sering punya newline/tab mentah di dalam full_log.
+        parsed = JSON.parse(sanitizeJsonControlChars(text));
+      } catch (err2) {
+        parseError = err2;
+        const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        if (lines.length > 1) {
+          const objects = [];
+          let allJson = true;
+          for (const line of lines) {
+            try {
+              objects.push(JSON.parse(sanitizeJsonControlChars(line)));
+            } catch (lineErr) {
+              allJson = false;
+              break;
+            }
+          }
+          if (allJson) parsed = objects;
+        }
+        if (parsed === undefined) {
+          // Teks log mentah (bukan JSON) tetap boleh diimpor baris per baris.
+          if (!text.startsWith('{') && !text.startsWith('[')) return lines;
+          throw new Error('JSON tidak valid: ' + (parseError?.message || 'format tidak dikenali'));
+        }
+      }
+    }
+
+    const items = normalizeAlertItems(parsed);
+    if (!items || items.length === 0) {
+      throw new Error('Tidak ada alert yang dikenali di dalam file/teks.');
+    }
+    return items;
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function buildImportBatches(items) {
+    const maxItems = 150;
+    const maxBytes = 600000;
+    const batches = [];
+    let batch = [];
+    let bytes = 0;
+    for (const item of items) {
+      let size = 1;
+      try { size = JSON.stringify(item).length + 1; } catch (e) {}
+      if (batch.length > 0 && (batch.length >= maxItems || bytes + size > maxBytes)) {
+        batches.push(batch);
+        batch = [];
+        bytes = 0;
+      }
+      batch.push(item);
+      bytes += size;
+    }
+    if (batch.length > 0) batches.push(batch);
+    return batches;
+  }
+
+  async function importSelectedFiles(files) {
+    let inserted = 0;
+    let duplicates = 0;
+    let failed = 0;
+    let okFiles = 0;
+    const errors = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      showToast(`Memproses ${i + 1}/${files.length}: ${file.name}`);
+      try {
+        const text = await file.text();
+        const items = parseAlertText(text);
+        const result = await postAlertsToDatabase(items, { skipReload: true, silent: true });
+        inserted += result.inserted;
+        duplicates += result.duplicates;
+        failed += result.failed;
+        okFiles++;
+      } catch (e) {
+        errors.push(`${file.name}: ${e.message}`);
+        console.error('Import file gagal:', file.name, e);
+      }
+    }
+
+    await reloadAlertsFromDB();
+    await enrichAllIps(true);
+
+    let summary = `${okFiles}/${files.length} file: ${inserted} log baru, ${duplicates} duplikat.`;
+    if (failed) summary += ` ${failed} alert dilewati.`;
+    if (errors.length) summary += ` ${errors.length} file gagal (detail di console).`;
+    showToast(summary);
+    if (errors.length) console.warn('File yang gagal diimpor:\n' + errors.join('\n'));
+    return { inserted, duplicates, failed, okFiles, errors };
+  }
+
+  // Modal Ingest
+  async function processManualIngest() {
+    if (pendingImportFiles.length > 0) {
+      const files = pendingImportFiles.slice();
+      closeIngestModal();
+      await importSelectedFiles(files);
+      return;
+    }
+
+    const txt = document.getElementById('importPayloadText').value.trim();
+    if (!txt) {
+      showToast('Silakan pilih file atau tempel teks/JSON alert.');
+      return;
+    }
+
+    let items;
+    try {
+      items = parseAlertText(txt);
+    } catch (e) {
+      showToast('Gagal: ' + e.message);
+      return;
+    }
+
+    closeIngestModal();
+    document.getElementById('importPayloadText').value = '';
+    await postAlertsToDatabase(items);
+  }
+
+  // POST alerts to PostgreSQL /api/soc-logs (dipotong per batch agar aman)
+  async function postAlertsToDatabase(items, options = {}) {
+    const opts = Object.assign({ skipReload: false, silent: false }, options);
+    if (!Array.isArray(items) || items.length === 0) {
+      if (!opts.silent) showToast('Tidak ada alert untuk disimpan.');
+      return { inserted: 0, duplicates: 0, failed: 0, received: 0 };
+    }
+
+    const batches = buildImportBatches(items);
+    let inserted = 0;
+    let duplicates = 0;
+    let failed = 0;
+    let received = 0;
+
+    try {
+      for (let i = 0; i < batches.length; i++) {
+        if (!opts.silent && batches.length > 1) {
+          showToast(`Mengirim batch ${i + 1}/${batches.length}...`);
+        }
+        const resp = await fetch(BASE_PATH + '/api/soc-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batches[i])
+        });
+        const responseText = await resp.text();
+        let res = null;
+        try { res = JSON.parse(responseText); } catch (e) {}
+        if (!resp.ok || !res || !res.success) {
+          const detail = (res && res.error) ? res.error : (responseText ? responseText.slice(0, 240) : 'tanpa respons');
+          throw new Error(`HTTP ${resp.status}: ${detail}`);
+        }
+        inserted += Number(res.inserted || 0);
+        duplicates += Number(res.duplicates_merged ?? res.duplicates_skipped ?? 0);
+        failed += Number(res.failed || 0);
+        received += Number(res.received || batches[i].length);
+      }
+
+      if (!opts.skipReload) {
+        await reloadAlertsFromDB();
+        await enrichAllIps(true);
+      }
+      if (!opts.silent) {
+        showToast(`Postgres: ${inserted} log baru, ${duplicates} duplikat di-dedup (by _id / signature full_log)${failed ? `, ${failed} gagal` : ''}.`);
+      }
+      return { inserted, duplicates, failed, received };
+    } catch (e) {
+      if (!opts.skipReload) {
+        await reloadAlertsFromDB();
+        await enrichAllIps(true);
+      }
+      if (!opts.silent) showToast('Impor gagal: ' + e.message);
+      throw e;
+    }
+  }
+
+  async function reloadAlertsFromDB() {
+    try {
+      const resp = await fetch(BASE_PATH + '/api/soc-logs');
+      const data = await resp.json();
+      alertsData = data.alerts || [];
+      refreshAll();
+    } catch (e) {}
+  }
+
+  // Load Presets
+  async function loadPresetData(key) {
+    const preset = PRESETS[key];
+    if (!preset) return;
+
+    if (preset.unmapVault && preset.mapKey) {
+      const dec = decryptRc4Drop3072(preset.unmapVault, preset.mapKey);
+      if (dec) decryptedMap = Object.assign(decryptedMap, dec);
+      updateVaultDrawerUI();
+    }
+
+    await postAlertsToDatabase(preset.alerts);
+  }
+
+  // Clear Database
+  async function confirmClearDatabase() {
+    if (!confirm('Yakin ingin mengosongkan seluruh wazuh_alerts di PostgreSQL?')) return;
+    try {
+      const resp = await fetch(BASE_PATH + '/api/soc-logs/clear', { method: 'POST' });
+      const res = await resp.json();
+      if (res.success) {
+        alertsData = [];
+        refreshAll();
+        showToast('Database wazuh_alerts berhasil dikosongkan.');
+      }
+    } catch (e) {
+      showToast('Gagal mengosongkan database: ' + e.message);
+    }
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    const tabs = {
+      breakdown: 'tabBtnBreakdown',
+      cards: 'tabBtnCards',
+      analysis: 'tabBtnAnalysis'
+    };
+    Object.entries(tabs).forEach(([key, id]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('is-active', key === tab);
+      el.setAttribute('aria-selected', String(key === tab));
+    });
+    document.getElementById('sectionBreakdown').classList.toggle('hidden', tab !== 'breakdown');
+    document.getElementById('sectionCards').classList.toggle('hidden', tab !== 'cards');
+    document.getElementById('sectionAnalysis').classList.toggle('hidden', tab !== 'analysis');
+    if (tab === 'cards') renderCards();
+    if (tab === 'analysis') renderAnalysisReport();
+  }
+
+  function setFilter(f, btn) {
+    activeFilter = f;
+    document.querySelectorAll('.soc-chip').forEach(b => {
+      const active = b === btn;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
+    renderBreakdownTable();
+    renderCards();
+  }
+
+  function handleSearch(val) {
+    searchQuery = val.trim();
+    const clear = document.getElementById('searchClear');
+    if (clear) clear.classList.toggle('hidden', !searchQuery);
+    renderBreakdownTable();
+    renderCards();
+  }
+
+  function clearSearch() {
+    const input = document.getElementById('searchInput');
+    if (input) input.value = '';
+    handleSearch('');
+    if (input) input.focus();
+  }
+
+  function toggleUnmask() {
+    isUnmasked = !isUnmasked;
+    const dot = document.getElementById('unmaskDot');
+    const label = document.getElementById('unmaskLabel');
+    if (dot) dot.className = isUnmasked ? 'w-2.5 h-2.5 rounded-full bg-emerald-500' : 'w-2.5 h-2.5 rounded-full bg-slate-500';
+    if (label) label.innerText = isUnmasked ? 'Unmasked' : 'Masked';
+    refreshAll();
+  }
+
+  function toggleVaultDrawer() {
+    const drawer = document.getElementById('vaultDrawer');
+    if (drawer) drawer.classList.toggle('hidden');
+  }
+
+  function updateVaultDrawerUI() {
+    const keys = Object.keys(decryptedMap || {});
+    const count = document.getElementById('vaultKeyCount');
+    if (count) count.innerText = keys.length;
+    const grid = document.getElementById('vaultMappingGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (const k of keys) {
+      const div = document.createElement('div');
+      div.className = 'bg-ink border border-line rounded p-1.5 font-mono flex justify-between';
+      div.innerHTML = `<span class="text-rose-400 text-[10px]">${escapeHtml(k)}</span> <span aria-hidden="true">→</span> <span class="text-emerald-400 font-bold">${escapeHtml(decryptedMap[k])}</span>`;
+      grid.appendChild(div);
+    }
+  }
+
+  function openIngestModal() { document.getElementById('ingestModal').classList.remove('hidden'); }
+  function closeIngestModal() {
+    document.getElementById('ingestModal').classList.add('hidden');
+    pendingImportFiles = [];
+    const input = document.getElementById('jsonFileInput');
+    if (input) input.value = '';
+    const status = document.getElementById('fileImportStatus');
+    if (status) status.innerText = '';
+  }
+
+  function copyText(str) {
+    navigator.clipboard.writeText(str).then(() => showToast('Berhasil disalin ke clipboard!'))
+    .catch(() => prompt('Salin teks:', str));
+  }
+
+  function showToast(msg) {
+    const box = document.getElementById('toastBox');
+    document.getElementById('toastMsg').innerText = msg;
+    box.classList.remove('translate-y-20', 'opacity-0');
+    setTimeout(() => box.classList.add('translate-y-20', 'opacity-0'), 2500);
+  }
+
+  function escapeHtml(s) {
+    if (typeof s !== 'string') return String(s || '');
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function escapeForSingleQuote(s) {
+    if (!s) return '';
+    return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
+  }
+
+  function refreshAll() {
+    renderStats();
+    renderBreakdownTable();
+    renderCards();
+    renderAnalysisReport();
+    updateVaultDrawerUI();
+  }
+
+  // Startup
+  
+  function handleJsonFileUpload(event) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    pendingImportFiles = files;
+    const pasteBox = document.getElementById('importPayloadText');
+    if (pasteBox) pasteBox.value = '';
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    const names = files.slice(0, 3).map(file => file.name).join(', ');
+    const more = files.length > 3 ? ` +${files.length - 3} file lain` : '';
+    const status = document.getElementById('fileImportStatus');
+    if (status) {
+      status.innerText = `${files.length} file (${formatFileSize(totalBytes)}): ${names}${more}. Klik "Impor & dedup".`;
+    }
+    showToast(`${files.length} file siap diimpor.`);
+  }
+
+  document.addEventListener('keydown', function(e) {
+    const tag = (e.target && e.target.tagName || '').toLowerCase();
+    const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable;
+    if (e.key === '/' && !typing) {
+      e.preventDefault();
+      document.getElementById('searchInput')?.focus();
+    }
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.soc-menu[open], .soc-date-popover[open]').forEach(el => el.removeAttribute('open'));
+      closeJsonModal();
+      closeFullLogModal();
+      closeIntelModal();
+      closeIngestModal();
+    }
+  });
+
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.classList.add('hidden');
+    });
+  });
+
+  document.addEventListener('click', function(e) {
+    const action = e.target.closest?.('.soc-menu-panel button, .soc-menu-panel a, .soc-popover-actions button');
+    if (action) action.closest('details')?.removeAttribute('open');
+    document.querySelectorAll('.soc-menu[open], .soc-date-popover[open]').forEach(el => {
+      if (!el.contains(e.target)) el.removeAttribute('open');
+    });
+  });
+
+  window.onload = function() {
+    // Initial seeds for unmask keys if available
+    if (PRESETS.u8.unmapVault && PRESETS.u8.mapKey) {
+      decryptedMap = Object.assign(decryptedMap, decryptRc4Drop3072(PRESETS.u8.unmapVault, PRESETS.u8.mapKey) || {});
+    }
+    if (PRESETS.j2.unmapVault && PRESETS.j2.mapKey) {
+      decryptedMap = Object.assign(decryptedMap, decryptRc4Drop3072(PRESETS.j2.unmapVault, PRESETS.j2.mapKey) || {});
+    }
+    updateSortIndicators();
+    refreshAll();
+    enrichAllIps(true);
+  };
+</script>
+{% endblock %}
