@@ -144,9 +144,9 @@
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1792637876.7145517,
-    "seen": 1792642166.6201522,
-    "ast_hash": "a9bb40ae78c266387a2e153a8abc3d6d",
+    "mtime": 1792655027.388371,
+    "seen": 1792655147.4405909,
+    "ast_hash": "a0a9942ebd611f599758961351282c48",
     "semantic_hash": ""
   },
   "docs/ui-ux-redesign/AUDIT.md": {
