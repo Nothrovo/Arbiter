@@ -1,0 +1,252 @@
+{
+  "command": "IMPECCABLE_HOME=/home/nothrovo/.hermes/profiles/luna-hernandez/cache/impeccable sh /home/nothrovo/.hermes/profiles/luna-hernandez/skills/creative/impeccable/scripts/impeccable detect --json app/index.html",
+  "exitCode": 2,
+  "provenance": "Transcribed findings fields from the one successful detector tool response; no rerun. All tool-reported lines were 0. Shared descriptions/names omitted.",
+  "counts": {
+    "total": 25,
+    "byAntipattern": {
+      "low-contrast": 13,
+      "dark-glow": 2,
+      "tiny-text": 3,
+      "cramped-padding": 1,
+      "undersized-ui-text": 5,
+      "overused-font": 1
+    },
+    "bySeverity": {
+      "advisory": 1,
+      "warning": 24
+    },
+    "byCategory": {
+      "quality": 22,
+      "slop": 3
+    },
+    "uniqueSignatureCount": 11
+  },
+  "findings": [
+    {
+      "ordinal": 1,
+      "antipattern": "low-contrast",
+      "severity": "advisory",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "3.8:1 (need 4.5:1) — text #ffffff on #7170ff (gradient on div.brand-logo)"
+    },
+    {
+      "ordinal": 2,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 3,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "3.8:1 (need 4.5:1) — text #ffffff on #059669"
+    },
+    {
+      "ordinal": 4,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 5,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "3.8:1 (need 4.5:1) — text #ffffff on #059669"
+    },
+    {
+      "ordinal": 6,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "3.8:1 (need 4.5:1) — text #ffffff on #059669"
+    },
+    {
+      "ordinal": 7,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 8,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 9,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 10,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 11,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 12,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "4.1:1 (need 4.5:1) — text #ffffff on #0284c7"
+    },
+    {
+      "ordinal": 13,
+      "antipattern": "low-contrast",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "3.8:1 (need 4.5:1) — text #ffffff on #059669"
+    },
+    {
+      "ordinal": 14,
+      "antipattern": "dark-glow",
+      "severity": "warning",
+      "category": "slop",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "Zero-offset box-shadow glow (#0284c7)"
+    },
+    {
+      "ordinal": 15,
+      "antipattern": "tiny-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "11px body text"
+    },
+    {
+      "ordinal": 16,
+      "antipattern": "tiny-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "11.5px body text"
+    },
+    {
+      "ordinal": 17,
+      "antipattern": "cramped-padding",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "<div> \"table-card\": children flush against border+bg on all sides (no inset)"
+    },
+    {
+      "ordinal": 18,
+      "antipattern": "undersized-ui-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "10.5px functional text \"📋 Salin Asli\" (below 11px floor)"
+    },
+    {
+      "ordinal": 19,
+      "antipattern": "undersized-ui-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "10.5px functional text \"🛡️ Salin Sanitized (Aman AI Cloud)\" (below 11px floor)"
+    },
+    {
+      "ordinal": 20,
+      "antipattern": "undersized-ui-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "10.5px functional text \"📋 Salin Asli\" (below 11px floor)"
+    },
+    {
+      "ordinal": 21,
+      "antipattern": "undersized-ui-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "10.5px functional text \"🛡️ Salin Sanitized (Aman AI Cloud)\" (below 11px floor)"
+    },
+    {
+      "ordinal": 22,
+      "antipattern": "undersized-ui-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "10.5px functional text \"1 Hit\" (below 11px floor)"
+    },
+    {
+      "ordinal": 23,
+      "antipattern": "tiny-text",
+      "severity": "warning",
+      "category": "quality",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "11px body text"
+    },
+    {
+      "ordinal": 24,
+      "antipattern": "overused-font",
+      "severity": "warning",
+      "category": "slop",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "Primary font: inter"
+    },
+    {
+      "ordinal": 25,
+      "antipattern": "dark-glow",
+      "severity": "warning",
+      "category": "slop",
+      "file": "/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html",
+      "line": 0,
+      "snippet": "Zero-offset box-shadow glow (#0284c7)"
+    }
+  ]
+}

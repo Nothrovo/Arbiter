@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>Arbiter — Investigation Desk</title>
+  <link rel="stylesheet" href="/static/styles/tokens.css">
+  <link rel="stylesheet" href="/static/styles/base.css">
+  <link rel="stylesheet" href="/static/styles/shell.css">
+  <link rel="stylesheet" href="/static/styles/components.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Lewati ke area kerja</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Navigasi workspace">
+      <button class="button icon-button sidebar-close" id="close-navigation" aria-label="Tutup navigasi"></button>
+      <div>
+        <a class="wordmark" href="#/triage" aria-label="Arbiter — Triage"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 19 8-15 8 15M7 14h10M12 4v17M7 21h10"/></svg>Arbiter</a>
+        <p class="brand-description">Investigation desk</p>
+      </div>
+      <nav class="primary-nav" aria-label="Utama">
+        <a class="nav-link" data-page="triage" href="#/triage"><span data-icon="inbox"></span>Triage</a>
+        <a class="nav-link" data-page="incidents" href="#/incidents"><span data-icon="cases"></span>Insiden</a>
+        <a class="nav-link" data-page="imports" href="#/imports"><span data-icon="upload"></span>Impor</a>
+        <a class="nav-link" data-page="reports" href="#/reports"><span data-icon="report"></span>Laporan</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <p class="privacy-note"><span data-icon="shield"></span><span>Data tetap di workspace lokal.</span></p>
+        <button class="text-button meta" id="help-button">Panduan singkat</button>
+      </div>
+    </aside>
+    <button class="nav-scrim" id="nav-scrim" tabindex="-1" aria-label="Tutup navigasi"></button>
+    <div class="workspace" id="workspace">
+      <header class="utility-bar">
+        <div class="workspace-switcher">
+          <button class="button icon-button mobile-menu" id="open-navigation" aria-label="Buka navigasi" aria-controls="sidebar" aria-expanded="false"></button>
+          <label for="workspace-tenant">Workspace</label>
+          <select id="workspace-tenant" name="tenant" aria-label="Pilih tenant"><option value="all">Semua tenant</option></select>
+        </div>
+        <div class="utility-actions">
+          <span class="connection" id="connection-state" data-state="checking" role="status"><span class="status-dot" aria-hidden="true"></span><span class="connection-label">Memeriksa koneksi…</span></span>
+          <button class="button icon-button" id="refresh-workspace" aria-label="Perbarui area kerja"></button>
+        </div>
+      </header>
+      <main class="page-content" id="main-content" tabindex="-1"><div class="skeleton-list" aria-label="Memuat workspace" aria-busy="true"><div class="skeleton-row"><span></span><span></span><span></span></div></div></main>
+    </div>
+  </div>
+  <div id="notifications" aria-live="polite" aria-atomic="true"></div>
+  <dialog class="app-dialog" id="help-dialog" aria-labelledby="help-title">
+    <div class="dialog-header"><h2 id="help-title">Alur investigasi</h2><button class="button icon-button" data-close-dialog aria-label="Tutup panduan"></button></div>
+    <div class="stack">
+      <p><strong>Triage</strong> untuk memeriksa antrean. Pilih alert untuk batch review atau buka detail tanpa kehilangan filter.</p>
+      <p><strong>Insiden</strong> menyatukan bukti, kronologi, analisis dan rekomendasi. Status review alert berbeda dari status penyelesaian kasus.</p>
+      <p><strong>Impor</strong> menerima file atau teks Wazuh. Hasil validasi server tetap menjadi acuan.</p>
+      <p><strong>Laporan</strong> menampilkan scope dan preview sebelum diunduh atau disalin. Tinjau informasi sensitif sebelum membagikan hasil.</p>
+      <p class="meta">Severity alert mengikuti level Wazuh: Critical 12–15, High 10–11, Medium 7–9, Low 0–6. Intel tanpa deteksi bukan jaminan aman.</p>
+    </div>
+  </dialog>
+  <noscript><p>Aktifkan JavaScript untuk membuka workspace Arbiter.</p></noscript>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

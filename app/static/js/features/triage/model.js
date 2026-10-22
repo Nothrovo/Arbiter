@@ -1,0 +1,17 @@
+import {esc, severity, formatTime} from '../../ui/primitives.js';
+export function intelSummary(alert) {
+  if (!alert.source_ip) return 'Tanpa source IP';
+  if (alert.abuse_score === null || alert.abuse_score === undefined) return 'Belum ada cache';
+  if (Number(alert.abuse_score) === 0 && !Number(alert.vt_malicious)) return 'Tidak ada deteksi di cache';
+  return `Abuse ${Number(alert.abuse_score)}%${Number(alert.vt_malicious) ? ` · VT ${Number(alert.vt_malicious)}` : ''}`;
+}
+export function renderQueue(items, {selectedIds = [], activeId, query, showIntel = true}) {
+  const selected = new Set(selectedIds);
+  const sort = (key, label, className = '') => `<th class="${className}"${query.sort_by === key ? ` aria-sort="${query.sort === 'asc' ? 'ascending' : 'descending'}"` : ''}><button class="sort-button" data-sort="${key}" aria-pressed="${query.sort_by === key}">${label}${query.sort_by === key ? (query.sort === 'asc' ? ' ↑' : ' ↓') : ''}</button></th>`;
+  const select = a => `<label class="checkbox-label"><input type="checkbox" data-select="${Number(a.id)}" aria-label="Pilih alert ${esc(a.alert_id || a.id)}" ${selected.has(a.id) ? 'checked' : ''}></label>`;
+  const details = a => `${query.tenant === 'all' ? `${esc(a.tenant || 'Default')} · ` : ''}${esc(a.agent_name || 'Asset tidak diketahui')} · Rule ${esc(a.rule_id || '—')}`;
+  const reviewed = a => `<span class="meta">${a.is_reviewed ? 'Direview' : 'Belum direview'}</span>`;
+  const rows = items.map(a => `<tr data-row="${Number(a.id)}" aria-selected="${selected.has(a.id)}" class="${Number(activeId) === a.id ? 'inspected' : ''}"><td>${select(a)}</td><td><time datetime="${esc(a.timestamp || '')}" class="meta num">${esc(formatTime(a.timestamp))}</time></td><td>${severity(a.rule_level)}</td><td class="event-cell"><button class="event-title" data-inspect="${Number(a.id)}">${esc(a.description || 'Alert tanpa deskripsi')}</button><div class="event-sub">${details(a)}</div></td>${showIntel ? `<td><span class="mono">${esc(a.source_ip || '—')}</span><div class="meta">${esc(intelSummary(a))}</div></td>` : ''}<td class="numeric">${Number(a.hit_count) || 1}</td><td>${reviewed(a)}</td></tr>`).join('');
+  const mobile = items.map(a => `<article class="mobile-alert ${selected.has(a.id) ? 'is-selected' : ''}" data-row="${a.id}">${select(a)}<div>${severity(a.rule_level)}<button class="event-title" data-inspect="${a.id}">${esc(a.description || 'Alert tanpa deskripsi')}</button><div class="event-sub">${details(a)}</div><div class="meta mono">${esc(a.source_ip || 'Tanpa source IP')}</div><div class="meta">${esc(formatTime(a.timestamp))} · ${a.is_reviewed ? 'Direview' : 'Belum direview'}</div></div><div class="alert-count">${Number(a.hit_count) || 1} hits</div></article>`).join('');
+  return `<div class="table-region desktop-alerts" tabindex="0" aria-label="Antrean alert"><table class="data-table"><thead><tr><th class="select-col"><label class="checkbox-label"><input type="checkbox" data-select-page aria-label="Pilih semua alert di halaman ini"></label></th>${sort('timestamp','Waktu','time-col')}${sort('severity','Severity','severity-col')}<th>Event / asset</th>${showIntel ? '<th class="source-col">Source / intel</th>' : ''}${sort('hits','Hits','hits-col numeric')}<th class="review-col">Review</th></tr></thead><tbody>${rows}</tbody></table></div><div class="mobile-alerts" aria-label="Antrean alert mobile"><label class="checkbox-label"><input type="checkbox" data-select-page aria-label="Pilih semua alert di halaman ini">Pilih halaman ini</label>${mobile}</div>`;
+}

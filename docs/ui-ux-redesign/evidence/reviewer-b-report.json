@@ -1,0 +1,298 @@
+{
+  "assessment": "B",
+  "scope": "Independent source + isolated browser UI assessment; no Assessment A consulted",
+  "productionFilesModified": [],
+  "guidelines": "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md (fresh full extraction)",
+  "browser": {
+    "engine": "Chrome/145.0.7632.6 headless Linux",
+    "session": "arbiter-assessment-b",
+    "url": "http://127.0.0.1:8766/before.html",
+    "fixture": "Empty fixture; no database connection; external fonts blocked",
+    "limitations": [
+      "No production/API requests, no database rows, no .env, no port8000.",
+      "Physical touch, other browsers, populated row content/performance, inspector data flows and actual exports not exercised.",
+      "Mobile is CDP device emulation, not a physical device.",
+      "Fixture adds a review banner:31px desktop,46px at390,61px at320; mobile visual viewport auto-expands to443 due overflow."
+    ]
+  },
+  "findings": [
+    {
+      "id": "B1",
+      "severity": "P1",
+      "category": "Accessibility",
+      "locations": [
+        "app/index.html:331-340",
+        "app/index.html:401-403"
+      ],
+      "issue": "Nine quick-filter/selection spans and three sortable table headers are pointer-only.",
+      "evidence": "All 12 have tabIndex -1 and no keyboard role/handler; Enter on 403 chip leaves it inactive.",
+      "recommendation": "Use buttons for chips/header sorting, expose pressed/sort state."
+    },
+    {
+      "id": "B2",
+      "severity": "P1",
+      "category": "Accessibility",
+      "locations": [
+        "app/index.html:449-453",
+        "app/index.html:486-493",
+        "app/index.html:573-577",
+        "app/index.html:1104-1106",
+        "app/index.html:1331-1333"
+      ],
+      "issue": "Modals have no dialog semantics or keyboard/focus lifecycle.",
+      "evidence": "All three lack role=dialog, aria-modal and labelledby. Opening ingest leaves focus on trigger; Tab moves to background search; Escape does not close; two Tabs after final modal button reach background Refresh; closing does not restore trigger focus. Background remains non-inert and body overflow visible.",
+      "recommendation": "Native dialog or labelled accessible dialog with initial focus, trapping, Escape, restore focus, background inert and scroll containment."
+    },
+    {
+      "id": "B3",
+      "severity": "P1",
+      "category": "Accessibility",
+      "locations": [
+        "app/index.html:349-363",
+        "app/index.html:400",
+        "app/index.html:463-476",
+        "app/index.html:552",
+        "app/index.html:580-607"
+      ],
+      "issue": "Form controls lack programmatic label associations.",
+      "evidence": "All 14 static input/select/textarea elements have labels.length=0 and no aria-label. AX names are empty for visible three selects and master checkbox; search receives only placeholder fallback name. Modal label elements have no for attributes.",
+      "recommendation": "Associate persistent labels using for/id, give select-all and per-row checkboxes action-specific names."
+    },
+    {
+      "id": "B4",
+      "severity": "P1",
+      "category": "Accessibility",
+      "locations": [
+        "app/index.html:164",
+        "app/index.html:166"
+      ],
+      "issue": "Small white primary and success button text fails AA contrast.",
+      "evidence": "Measured CSS backgrounds #0284c7 and #059669; independent WCAG math gives 4.0953:1 and 3.7682:1 against white. Detector reports 8 blue and 4 green occurrences.",
+      "recommendation": "Darken fills or choose text/fill pairs at least 4.5:1."
+    },
+    {
+      "id": "B5",
+      "severity": "P1",
+      "category": "Responsive",
+      "locations": [
+        "app/index.html:46-66",
+        "app/index.html:81-85",
+        "app/index.html:178",
+        "app/index.html:231"
+      ],
+      "issue": "Page-level overflow and compressed mobile header/workflow; card grid also exceeds narrow content width.",
+      "evidence": "True mobile emulation: document client/scroll width 390/443 and 320/443. Header scrollWidth 427. Workflow scrollWidth 418 in 340/270px client area. At 320 search remains 280px; cards empty child is 340px in 272px grid. No CSS media rules.",
+      "recommendation": "Wrap/collapse status header and workflow, fluid search width/min-width:0, card minmax(min(100%,340px),1fr), keep table overflow local."
+    },
+    {
+      "id": "B6",
+      "severity": "P2",
+      "category": "Responsive / hierarchy",
+      "locations": [
+        "app/index.html:296-377",
+        "app/index.html:395"
+      ],
+      "issue": "Dense stacked tools displace results and mix filter, selection and export actions.",
+      "evidence": "Desktop 1440x900 has 30 visible clickable controls and table-card y395; mobile 390x844 table-card y921.5 (Chrome shrinks page to 443 CSS-pixel visual width); 320x740 y1047. Fixture notice contributes 31/46/61px respectively.",
+      "recommendation": "Prioritize ingest/search/triage, separate selection actions, group exports, progressively disclose secondary tools."
+    },
+    {
+      "id": "B7",
+      "severity": "P2",
+      "category": "Responsive / legibility",
+      "locations": [
+        "app/index.html:105",
+        "app/index.html:130",
+        "app/index.html:139",
+        "app/index.html:160",
+        "app/index.html:519-532",
+        "app/index.html:935-936"
+      ],
+      "issue": "Compact controls and undersized functional copy.",
+      "evidence": "Desktop all 18 visible native controls and 27/30 click targets have one dimension below 44px. True 390px mobile: 17/18 native and 26/30 click targets below44. View buttons 22px high, quick chips26.5px, checkbox13x13px. Inspector copy text10.5px; row review buttons10px. 44px is design target, not automatic WCAG2.2 AA failure.",
+      "recommendation": "Increase coarse-pointer hit areas, readable labels and row controls while preserving desktop density."
+    },
+    {
+      "id": "B8",
+      "severity": "P2",
+      "category": "Accessibility / interaction",
+      "locations": [
+        "app/index.html:317-319",
+        "app/index.html:365",
+        "app/index.html:380",
+        "app/index.html:620",
+        "app/index.html:742-750",
+        "app/index.html:778-786"
+      ],
+      "issue": "Async feedback and toggle selection state are not conveyed accessibly.",
+      "evidence": "No aria-live/status/alert regions, no pressed/selected state on chips/view controls, no aria-sort on header sort controls.",
+      "recommendation": "Polite status/toast announcements, proper button states and aria-sort; meaningful close labels."
+    },
+    {
+      "id": "B9",
+      "severity": "P2",
+      "category": "Interaction",
+      "locations": [
+        "app/index.html:723-729",
+        "app/index.html:742-751",
+        "app/index.html:778-789",
+        "app/index.html:374-375",
+        "app/index.html:1416-1474"
+      ],
+      "issue": "Filter/view state is not shareable and exports have inconsistent scoping.",
+      "evidence": "Activating403+cards leaves URL unchanged; reload resets both. Changing403+unreviewed leaves DOCX/XLSX hrefs at bare /api/export/docx and /api/export/xlsx. Source clipboard exports omit search/review/preset; some also omit selected case. No export click or actual data queried.",
+      "recommendation": "Centralize active scope in URL/request builder and apply consistently to results, reports and exports."
+    },
+    {
+      "id": "B10",
+      "severity": "P2",
+      "category": "Interaction",
+      "locations": [
+        "app/index.html:1283-1296",
+        "app/index.html:1314-1321"
+      ],
+      "issue": "Clipboard success toast can lie on permission/error failure.",
+      "evidence": "Fixture-only fault injection rejected navigator.clipboard.writeText with NotAllowedError; copyRawJson still displayed Raw JSON tersalin ke clipboard! and emitted unhandled rejection. No clipboard write occurred.",
+      "recommendation": "Await all clipboard writes, catch rejection, show actionable retry/fallback."
+    },
+    {
+      "id": "B11",
+      "severity": "P2",
+      "category": "Interaction",
+      "locations": [
+        "app/index.html:287",
+        "app/index.html:667-678"
+      ],
+      "issue": "Live Sync remains green when health request fails.",
+      "evidence": "With fetch locally stubbed to reject, pollHealth left green Live Sync (5s) unchanged; catch is empty. This was a deliberate offline fault, not a backend test.",
+      "recommendation": "Track last successful sync and visibly announce stale/offline/retrying state."
+    },
+    {
+      "id": "B12",
+      "severity": "P3",
+      "category": "Interaction polish",
+      "locations": [
+        "app/index.html:106",
+        "app/index.html:142",
+        "app/index.html:161"
+      ],
+      "issue": "transition: all used without a reduced-motion variant.",
+      "evidence": "Under prefers-reduced-motion:reduce, button/chip/tab transitions remain0.15s; zero CSS media rules. Only short transitions observed, no long/autoplay motion.",
+      "recommendation": "Name transition properties and respect reduced-motion preference."
+    }
+  ],
+  "findingCounts": {
+    "P1": 5,
+    "P2": 6,
+    "P3": 1
+  },
+  "detector": {
+    "command": "IMPECCABLE_HOME=/home/nothrovo/.hermes/profiles/luna-hernandez/cache/impeccable sh /home/nothrovo/.hermes/profiles/luna-hernandez/skills/creative/impeccable/scripts/impeccable detect --json app/index.html",
+    "attempts": 1,
+    "exitCode": 2,
+    "result": "Completed with JSON findings, not launcher failure",
+    "total": 25,
+    "severityCounts": {
+      "warning": 24,
+      "advisory": 1
+    },
+    "categoryCounts": {
+      "quality": 22,
+      "slop": 3
+    },
+    "antipatternCounts": {
+      "low-contrast": 13,
+      "dark-glow": 2,
+      "tiny-text": 3,
+      "cramped-padding": 1,
+      "undersized-ui-text": 5,
+      "overused-font": 1
+    },
+    "toolLocation": "Every finding file=/home/nothrovo/Documents/SGU/Project/Arbiter/app/index.html line=0; tool gave no useful per-element lines",
+    "rawFieldsFile": "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-detector-findings.json",
+    "verifiedMapping": [
+      {
+        "finding": "low-contrast",
+        "count": 13,
+        "manualLocations": [
+          "app/index.html:59-61",
+          "app/index.html:164",
+          "app/index.html:166"
+        ],
+        "notes": "1 advisory gradient-white brand,8 blue warnings,4 green warnings. Solid button failures confirmed; gradient is advisory."
+      },
+      {
+        "finding": "dark-glow",
+        "count": 2,
+        "manualLocations": [
+          "app/index.html:62"
+        ],
+        "notes": "Same signature duplicated; one unique source logo halo verified, not two distinct glows."
+      },
+      {
+        "finding": "tiny-text",
+        "count": 3,
+        "manualLocations": [
+          "app/index.html:65",
+          "app/index.html:85",
+          "app/index.html:387"
+        ],
+        "notes": "11/11.5px styling verified; exact three DOM nodes not identified by detector."
+      },
+      {
+        "finding": "undersized-ui-text",
+        "count": 5,
+        "manualLocations": [
+          "app/index.html:519-520",
+          "app/index.html:531-532",
+          "app/index.html:198",
+          "app/index.html:542"
+        ],
+        "notes": "10.5px inspector copy controls4,1Hit badge1."
+      },
+      {
+        "finding": "overused-font",
+        "count": 1,
+        "manualLocations": [
+          "app/index.html:9",
+          "app/index.html:38"
+        ],
+        "notes": "Inter declared; stylistic warning, not a functional defect. Isolated browser blocks external font load."
+      },
+      {
+        "finding": "cramped-padding",
+        "count": 1,
+        "manualLocations": [
+          "app/index.html:181-187",
+          "app/index.html:395-415"
+        ],
+        "notes": "Likely false positive for intentional edge-to-edge table shell: actual th/td have9px12px padding."
+      }
+    ]
+  },
+  "positiveEvidence": [
+    "Semantic main/header/table and native controls used for most actions; h1, language and zoom-enabled viewport present.",
+    "Table overflow is contained in .table-scroll; empty state gives an ingestion next step.",
+    "Dark color-scheme and explicit native select background/text exist; fonts preconnect declared.",
+    "Input focus has cyan border replacement; do not claim globally absent focus styling.",
+    "No heavy images or autoplay animations in reviewed source."
+  ],
+  "createdEvidenceFiles": [
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-layouts.json",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-fixed-layouts.json",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-accessibility.json",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-interactions.json",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-semantics-state.json",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-clipboard-fault.json",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-detector-findings.json",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-desktop.png",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-mobile.png",
+    "/home/nothrovo/.hermes/profiles/luna-hernandez/cache/browser-use/workspace/sa-1-4223871c/arbiter-b-mobile-modal.png"
+  ],
+  "issuesEncountered": [
+    "First graphify call blocked because of malformed workdir argument; corrected graphify query ran successfully before any source read.",
+    "First browser evidence persistence attempt used unavailable workspace variable; corrected explicit provided workspace path.",
+    "Screenshot helper overwrites shot.png; unique copies saved before subsequent captures.",
+    "Impeccable context not rerun per delegation; detect via sh succeeded once."
+  ]
+}

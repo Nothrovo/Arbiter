@@ -1,0 +1,105 @@
+{
+  "AUDIT.md": {
+    "exists": true,
+    "bytes": 15645
+  },
+  "BLUEPRINT.md": {
+    "exists": true,
+    "bytes": 21109
+  },
+  "DESIGN.md": {
+    "exists": true,
+    "bytes": 11078
+  },
+  "README.md": {
+    "exists": true,
+    "bytes": 3012
+  },
+  "tokens.css": {
+    "exists": true,
+    "bytes": 635
+  },
+  "tokens.json": {
+    "exists": true,
+    "bytes": 5188
+  },
+  "json_parse": "all JSON artifacts valid",
+  "local_markdown_links": "valid",
+  "detector_counts": {
+    "occurrences": 25,
+    "by_rule": {
+      "low-contrast": 13,
+      "dark-glow": 2,
+      "tiny-text": 3,
+      "cramped-padding": 1,
+      "undersized-ui-text": 5,
+      "overused-font": 1
+    },
+    "by_severity": {
+      "advisory": 1,
+      "warning": 24
+    }
+  },
+  "nielsen_score": {
+    "sum": 19,
+    "maximum": 40
+  },
+  "proposal_component_contrast": [
+    {
+      "component": "button-primary",
+      "ratio": 17.32,
+      "AA_normal_text": true
+    },
+    {
+      "component": "button-primary-hover",
+      "ratio": 9.519,
+      "AA_normal_text": true
+    },
+    {
+      "component": "button-secondary",
+      "ratio": 14.238,
+      "AA_normal_text": true
+    },
+    {
+      "component": "page",
+      "ratio": 17.32,
+      "AA_normal_text": true
+    },
+    {
+      "component": "panel",
+      "ratio": 16.287,
+      "AA_normal_text": true
+    },
+    {
+      "component": "metadata",
+      "ratio": 8.951,
+      "AA_normal_text": true
+    },
+    {
+      "component": "severity-critical",
+      "ratio": 7.475,
+      "AA_normal_text": true
+    },
+    {
+      "component": "severity-warning",
+      "ratio": 8.42,
+      "AA_normal_text": true
+    },
+    {
+      "component": "status-success",
+      "ratio": 8.46,
+      "AA_normal_text": true
+    },
+    {
+      "component": "status-info",
+      "ratio": 8.545,
+      "AA_normal_text": true
+    }
+  ],
+  "legacy_solid_button_contrast": {
+    "#0284c7": 4.0953,
+    "#059669": 3.7682
+  },
+  "production_source_untouched": true,
+  "limits": "Proposal and isolated empty-fixture audit only. No production functionality, DB records or real exports tested."
+}

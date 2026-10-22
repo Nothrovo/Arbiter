@@ -1,0 +1,33 @@
+{
+  "scope": "Isolated empty fixture; review notice is 31px on desktop and wraps taller on mobile; fonts blocked; geometry only, not full screenshot validation",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440,
+      "tableTop": 395,
+      "controlsTop": 256
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "scrollWidth": 768,
+      "tableTop": 502,
+      "controlsTop": 322
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 443,
+      "tableTop": 941,
+      "controlsTop": 589
+    },
+    {
+      "width": 320,
+      "height": 780,
+      "scrollWidth": 443,
+      "tableTop": 1062,
+      "controlsTop": 636
+    }
+  ]
+}

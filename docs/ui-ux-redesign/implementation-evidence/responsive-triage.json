@@ -1,0 +1,58 @@
+[
+  {
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1430,
+    "firstRowTop": 246,
+    "banner": 35,
+    "head": "Triage"
+  },
+  {
+    "width": 1280,
+    "height": 720,
+    "scrollWidth": 1270,
+    "firstRowTop": 246,
+    "banner": 35,
+    "head": "Triage"
+  },
+  {
+    "width": 768,
+    "height": 1024,
+    "scrollWidth": 758,
+    "firstRowTop": 242,
+    "banner": 35,
+    "head": "Triage"
+  },
+  {
+    "width": 414,
+    "height": 896,
+    "scrollWidth": 404,
+    "firstRowTop": 338,
+    "banner": 49,
+    "head": "Triage"
+  },
+  {
+    "width": 390,
+    "height": 844,
+    "scrollWidth": 380,
+    "firstRowTop": 338,
+    "banner": 49,
+    "head": "Triage"
+  },
+  {
+    "width": 375,
+    "height": 812,
+    "scrollWidth": 365,
+    "firstRowTop": 338,
+    "banner": 49,
+    "head": "Triage"
+  },
+  {
+    "width": 320,
+    "height": 780,
+    "scrollWidth": 310,
+    "firstRowTop": 338,
+    "banner": 49,
+    "head": "Triage"
+  }
+]

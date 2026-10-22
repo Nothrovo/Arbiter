@@ -1,0 +1,19 @@
+# Environments & Secrets
+.env
+.env.local
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# OS & Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

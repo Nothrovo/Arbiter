@@ -1,0 +1,360 @@
+{
+  "communities": {
+    "0": [
+      "app_core_normalize_alert",
+      "app_core_rationale_20",
+      "app_parser",
+      "app_parser_as_dict",
+      "app_parser_build_log_signature",
+      "app_parser_clean_val",
+      "app_parser_extract_alerts",
+      "app_parser_first_ip_in",
+      "app_parser_kv_details",
+      "app_parser_normalize_log_for_signature",
+      "app_parser_parse_export",
+      "app_parser_parse_log_line",
+      "app_parser_parse_timestamp_iso",
+      "app_parser_parse_to_datetime",
+      "app_parser_py_any",
+      "app_parser_rationale_1",
+      "app_parser_rationale_122",
+      "app_parser_rationale_202",
+      "app_parser_rationale_387",
+      "app_parser_rationale_423",
+      "app_parser_rationale_452",
+      "app_parser_rationale_476",
+      "app_parser_rationale_98",
+      "app_parser_short_action_desc",
+      "app_parser_valid_ip",
+      "datetime",
+      "hashlib",
+      "ipaddress",
+      "re",
+      "tests_test_dedup",
+      "tests_test_dedup_dedupsafeguardtests",
+      "tests_test_dedup_dedupsafeguardtests_test_different_query_payload_produces_different_signature",
+      "tests_test_dedup_dedupsafeguardtests_test_normalize_alert_safeguards_default_review_flag",
+      "tests_test_dedup_dedupsafeguardtests_test_same_log_different_timestamps_produce_identical_signature",
+      "tests_test_parser",
+      "tests_test_parser_parserunittests",
+      "tests_test_parser_parserunittests_test_access_log_parser",
+      "tests_test_parser_parserunittests_test_apparmor_syslog_without_bogus_path",
+      "tests_test_parser_parserunittests_test_export_parser_with_control_chars",
+      "tests_test_parser_parserunittests_test_signature_normalization",
+      "tests_test_parser_parserunittests_test_sshd_ip_extraction"
+    ],
+    "1": [
+      "app_database_get_db",
+      "app_exports_generate_markdown_report",
+      "app_exports_rationale_72",
+      "app_main",
+      "app_main_add_group_members",
+      "app_main_api_sanitize_logs",
+      "app_main_batch_update_review",
+      "app_main_create_group",
+      "app_main_delete_group",
+      "app_main_export_docx",
+      "app_main_export_gdocs_html",
+      "app_main_export_markdown",
+      "app_main_export_tsv",
+      "app_main_export_xlsx",
+      "app_main_get_alerts_for_export",
+      "app_main_get_suggestions",
+      "app_main_get_tenants",
+      "app_main_health_check",
+      "app_main_import_file",
+      "app_main_import_text",
+      "app_main_index_page",
+      "app_main_list_alerts",
+      "app_main_list_groups",
+      "app_main_process_alerts_ingest",
+      "app_main_py_any",
+      "app_main_rationale_1",
+      "app_main_remove_group_member",
+      "app_main_update_alert_review",
+      "app_main_update_group",
+      "delete",
+      "fastapi_responses",
+      "get",
+      "post",
+      "put",
+      "uploadfile",
+      "uuid"
+    ],
+    "2": [
+      "app_exports",
+      "app_exports_generate_docx_landscape_report",
+      "app_exports_generate_gdocs_html_report",
+      "app_exports_generate_tsv_table",
+      "app_exports_generate_xlsx_workbook",
+      "app_exports_py_any",
+      "app_exports_rationale_1",
+      "app_exports_rationale_124",
+      "app_exports_rationale_245",
+      "app_exports_rationale_27",
+      "app_exports_rationale_330",
+      "app_main_export_csv",
+      "bytesio",
+      "csv",
+      "docx",
+      "docx_enum_section",
+      "docx_shared",
+      "html",
+      "io",
+      "openpyxl",
+      "openpyxl_styles",
+      "openpyxl_utils",
+      "tests_test_exports",
+      "tests_test_exports_exporttests",
+      "tests_test_exports_exporttests_setup",
+      "tests_test_exports_exporttests_test_generate_docx_landscape_report",
+      "tests_test_exports_exporttests_test_generate_gdocs_html_report",
+      "tests_test_exports_exporttests_test_generate_markdown_report",
+      "tests_test_exports_exporttests_test_generate_tsv_table",
+      "tests_test_exports_exporttests_test_generate_xlsx_workbook"
+    ],
+    "3": [
+      "app_config",
+      "app_database",
+      "app_database_get_db_connection",
+      "app_database_ingest_alert_with_dedup",
+      "app_database_init_database",
+      "app_database_py_any",
+      "app_database_rationale_1",
+      "app_database_rationale_117",
+      "app_database_rationale_123",
+      "app_database_rationale_93",
+      "app_main_lifespan",
+      "connection",
+      "contextlib",
+      "fastapi",
+      "os",
+      "pathlib",
+      "psycopg",
+      "psycopg_rows"
+    ],
+    "4": [
+      "app_core",
+      "app_core_local_ai_suggest_groups",
+      "app_core_localaiunavailable",
+      "app_core_ollama_request",
+      "app_core_py_any",
+      "app_core_rationale_1",
+      "app_core_rationale_104",
+      "app_core_rationale_130",
+      "app_core_rationale_134",
+      "app_core_suggest_groups",
+      "app_core_suggestions_with_fallback",
+      "collections",
+      "json",
+      "runtimeerror"
+    ],
+    "5": [
+      "app_privacy",
+      "app_privacy_py_any",
+      "app_privacy_rationale_1",
+      "app_privacy_rationale_13",
+      "app_privacy_sanitize_text",
+      "app_privacy_sanitize_text_replace_ip",
+      "tests_test_privacy",
+      "tests_test_privacy_privacytests",
+      "tests_test_privacy_privacytests_test_redacts_emails",
+      "tests_test_privacy_privacytests_test_redacts_localhost",
+      "tests_test_privacy_privacytests_test_redacts_passwords_and_tokens",
+      "tests_test_privacy_privacytests_test_redacts_private_ip",
+      "tests_test_privacy_privacytests_test_redacts_public_ip",
+      "typing"
+    ],
+    "6": [
+      "fastapi_testclient",
+      "tests_test_api",
+      "tests_test_api_apiintegrationtests",
+      "tests_test_api_apiintegrationtests_setupclass",
+      "tests_test_api_apiintegrationtests_teardownclass",
+      "tests_test_api_apiintegrationtests_test_alert_review_flag_and_batch_review",
+      "tests_test_api_apiintegrationtests_test_create_group_and_all_export_formats",
+      "tests_test_api_apiintegrationtests_test_health_check",
+      "tests_test_api_apiintegrationtests_test_import_text_and_safeguard_duplicate_wazuh_id",
+      "tests_test_api_apiintegrationtests_test_sanitize_logs_endpoint",
+      "unittest"
+    ],
+    "7": [
+      "init_db",
+      "init_db_idx_wazuh_alerts_reviewed",
+      "init_db_idx_wazuh_alerts_rule_id",
+      "init_db_idx_wazuh_alerts_sig",
+      "init_db_idx_wazuh_alerts_source_ip",
+      "init_db_idx_wazuh_alerts_tenant",
+      "init_db_idx_wazuh_alerts_timestamp",
+      "init_db_public_ip_intel_cache",
+      "init_db_wazuh_alert_group_members",
+      "init_db_wazuh_alerts",
+      "init_db_wazuh_analysis_groups"
+    ],
+    "8": [
+      "app_init",
+      "app_init_rationale_1"
+    ],
+    "9": [
+      "start",
+      "start_sh__entry"
+    ],
+    "10": [
+      "tests_init"
+    ]
+  },
+  "cohesion": {
+    "0": 0.11219512195121951,
+    "1": 0.13174603174603175,
+    "2": 0.10344827586206896,
+    "3": 0.12418300653594772,
+    "4": 0.24175824175824176,
+    "5": 0.2087912087912088,
+    "6": 0.18181818181818182,
+    "7": 0.32727272727272727,
+    "8": 1.0,
+    "9": 1.0,
+    "10": 1.0
+  },
+  "gods": [
+    {
+      "id": "app_database_get_db",
+      "label": "get_db()",
+      "degree": 21
+    },
+    {
+      "id": "app_parser_parse_log_line",
+      "label": "parse_log_line()",
+      "degree": 18
+    },
+    {
+      "id": "app_core_normalize_alert",
+      "label": "normalize_alert()",
+      "degree": 14
+    },
+    {
+      "id": "app_privacy_sanitize_text",
+      "label": "sanitize_text()",
+      "degree": 13
+    },
+    {
+      "id": "app_parser_build_log_signature",
+      "label": "build_log_signature()",
+      "degree": 12
+    },
+    {
+      "id": "app_parser_parse_export",
+      "label": "parse_export()",
+      "degree": 11
+    },
+    {
+      "id": "app_parser_normalize_log_for_signature",
+      "label": "normalize_log_for_signature()",
+      "degree": 10
+    },
+    {
+      "id": "app_main_get_alerts_for_export",
+      "label": "_get_alerts_for_export()",
+      "degree": 9
+    },
+    {
+      "id": "app_exports_generate_tsv_table",
+      "label": "generate_tsv_table()",
+      "degree": 9
+    },
+    {
+      "id": "app_exports_generate_xlsx_workbook",
+      "label": "generate_xlsx_workbook()",
+      "degree": 9
+    }
+  ],
+  "surprises": [
+    {
+      "source": "_process_alerts_ingest()",
+      "target": "normalize_alert()",
+      "source_files": [
+        "app/main.py",
+        "app/core.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "import_file()",
+      "target": "parse_export()",
+      "source_files": [
+        "app/main.py",
+        "app/parser.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "import_text()",
+      "target": "parse_export()",
+      "source_files": [
+        "app/main.py",
+        "app/parser.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "api_sanitize_logs()",
+      "target": "sanitize_text()",
+      "source_files": [
+        "app/main.py",
+        "app/privacy.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "export_docx()",
+      "target": "generate_docx_landscape_report()",
+      "source_files": [
+        "app/main.py",
+        "app/exports.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `sanitize_text()` connect `Community 5` to `Community 0`, `Community 1`?",
+      "why": "High betweenness centrality (0.090) - this node is a cross-community bridge."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 0` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.11219512195121951 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `normalize_alert()` connect `Community 0` to `Community 1`, `Community 4`?",
+      "why": "High betweenness centrality (0.053) - this node is a cross-community bridge."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 1` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.13174603174603175 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 2` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.10344827586206896 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 3` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.12418300653594772 - nodes in this community are weakly interconnected."
+    }
+  ]
+}

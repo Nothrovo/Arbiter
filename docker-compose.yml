@@ -1,0 +1,38 @@
+services:
+  arbiter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arbiter
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      PORT: 8000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://nothrovo@127.0.0.1:5432/abuseip}
+    volumes:
+      - ./app:/app/app
+
+  # Standalone PostgreSQL container (for users without local Postgres)
+  # Run with: docker compose --profile standalone up -d
+  db:
+    image: postgres:16-alpine
+    container_name: arbiter-db
+    profiles: ["standalone"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: arbiter
+      POSTGRES_USER: arbiter
+      POSTGRES_PASSWORD: arbiter_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - arbiter_pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arbiter -d arbiter"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  arbiter_pgdata:

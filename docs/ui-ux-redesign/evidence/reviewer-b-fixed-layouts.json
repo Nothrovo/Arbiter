@@ -1,0 +1,110 @@
+[
+  {
+    "width": 390,
+    "height": 844,
+    "docWidth": 443,
+    "bannerHeight": 46,
+    "table": {
+      "x": 24,
+      "y": 940.5,
+      "width": 327,
+      "height": 201.25,
+      "scrollWidth": 325,
+      "clientWidth": 325
+    },
+    "header": {
+      "x": 0,
+      "y": 46,
+      "width": 375,
+      "height": 148,
+      "scrollWidth": 427,
+      "clientWidth": 375
+    },
+    "workflow": {
+      "x": 24,
+      "y": 212,
+      "width": 327,
+      "height": 125.5,
+      "scrollWidth": 418,
+      "clientWidth": 325
+    },
+    "controls": {
+      "x": 24,
+      "y": 588.5,
+      "width": 327,
+      "height": 290,
+      "scrollWidth": 325,
+      "clientWidth": 325
+    },
+    "search": {
+      "x": 39,
+      "y": 636.5,
+      "width": 280,
+      "height": 30,
+      "scrollWidth": 278,
+      "clientWidth": 278
+    },
+    "tenant": {
+      "x": 24,
+      "y": 351.5,
+      "width": 327,
+      "height": 87,
+      "scrollWidth": 406,
+      "clientWidth": 327
+    }
+  },
+  {
+    "width": 320,
+    "height": 740,
+    "docWidth": 443,
+    "bannerHeight": 61,
+    "table": {
+      "x": 24,
+      "y": 1062,
+      "width": 257,
+      "height": 201.25,
+      "scrollWidth": 255,
+      "clientWidth": 255
+    },
+    "header": {
+      "x": 0,
+      "y": 61,
+      "width": 305,
+      "height": 148,
+      "scrollWidth": 427,
+      "clientWidth": 305
+    },
+    "workflow": {
+      "x": 24,
+      "y": 227,
+      "width": 257,
+      "height": 125.5,
+      "scrollWidth": 418,
+      "clientWidth": 255
+    },
+    "controls": {
+      "x": 24,
+      "y": 636,
+      "width": 257,
+      "height": 364,
+      "scrollWidth": 294,
+      "clientWidth": 255
+    },
+    "search": {
+      "x": 39,
+      "y": 684,
+      "width": 280,
+      "height": 30,
+      "scrollWidth": 278,
+      "clientWidth": 278
+    },
+    "tenant": {
+      "x": 24,
+      "y": 366.5,
+      "width": 257,
+      "height": 87,
+      "scrollWidth": 406,
+      "clientWidth": 257
+    }
+  }
+]

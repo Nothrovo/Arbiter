@@ -1,0 +1,194 @@
+[
+  {
+    "route": "#/triage?tenant=Synthetic+Lab",
+    "width": 1440,
+    "scrollWidth": 1430,
+    "h1": "Triage",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/triage?tenant=Synthetic+Lab",
+    "width": 390,
+    "scrollWidth": 380,
+    "h1": "Triage",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/triage?tenant=Synthetic+Lab",
+    "width": 320,
+    "scrollWidth": 310,
+    "h1": "Triage",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/incidents?tenant=Synthetic+Lab",
+    "width": 1440,
+    "scrollWidth": 1430,
+    "h1": "Insiden",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/incidents?tenant=Synthetic+Lab",
+    "width": 390,
+    "scrollWidth": 380,
+    "h1": "Insiden",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/incidents?tenant=Synthetic+Lab",
+    "width": 320,
+    "scrollWidth": 310,
+    "h1": "Insiden",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/incidents/00000000-0000-4000-8000-000000000001?tenant=Synthetic+Lab",
+    "width": 1440,
+    "scrollWidth": 1430,
+    "h1": "Synthetic credential attack investigation",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/incidents/00000000-0000-4000-8000-000000000001?tenant=Synthetic+Lab",
+    "width": 390,
+    "scrollWidth": 380,
+    "h1": "Synthetic credential attack investigation",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/incidents/00000000-0000-4000-8000-000000000001?tenant=Synthetic+Lab",
+    "width": 320,
+    "scrollWidth": 310,
+    "h1": "Synthetic credential attack investigation",
+    "unlabelled": [],
+    "overflowing": [
+      {
+        "text": "Simpan perubahan",
+        "right": 345
+      },
+      {
+        "text": "Analisis & rekomendasi",
+        "right": 344
+      }
+    ]
+  },
+  {
+    "route": "#/imports?tenant=Synthetic+Lab",
+    "width": 1440,
+    "scrollWidth": 1430,
+    "h1": "Impor alert",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/imports?tenant=Synthetic+Lab",
+    "width": 390,
+    "scrollWidth": 380,
+    "h1": "Impor alert",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/imports?tenant=Synthetic+Lab",
+    "width": 320,
+    "scrollWidth": 310,
+    "h1": "Impor alert",
+    "unlabelled": [],
+    "overflowing": []
+  },
+  {
+    "route": "#/reports?tenant=Synthetic+Lab",
+    "width": 1440,
+    "scrollWidth": 1430,
+    "h1": "Laporan",
+    "unlabelled": [],
+    "overflowing": [
+      {
+        "text": "",
+        "right": 1487
+      },
+      {
+        "text": "",
+        "right": 1487
+      },
+      {
+        "text": "",
+        "right": 1487
+      },
+      {
+        "text": "",
+        "right": 1487
+      },
+      {
+        "text": "",
+        "right": 1487
+      }
+    ]
+  },
+  {
+    "route": "#/reports?tenant=Synthetic+Lab",
+    "width": 390,
+    "scrollWidth": 380,
+    "h1": "Laporan",
+    "unlabelled": [],
+    "overflowing": [
+      {
+        "text": "",
+        "right": 449
+      },
+      {
+        "text": "",
+        "right": 449
+      },
+      {
+        "text": "",
+        "right": 449
+      },
+      {
+        "text": "",
+        "right": 449
+      },
+      {
+        "text": "",
+        "right": 449
+      }
+    ]
+  },
+  {
+    "route": "#/reports?tenant=Synthetic+Lab",
+    "width": 320,
+    "scrollWidth": 310,
+    "h1": "Laporan",
+    "unlabelled": [],
+    "overflowing": [
+      {
+        "text": "",
+        "right": 379
+      },
+      {
+        "text": "",
+        "right": 379
+      },
+      {
+        "text": "",
+        "right": 379
+      },
+      {
+        "text": "",
+        "right": 379
+      },
+      {
+        "text": "",
+        "right": 379
+      }
+    ]
+  }
+]

@@ -1,0 +1,524 @@
+{
+  "app/__init__.py": {
+    "mtime": 1792637922.3456314,
+    "seen": 1792639534.403415,
+    "ast_hash": "7429f9059f2c1af4b825547679a47608",
+    "semantic_hash": "7429f9059f2c1af4b825547679a47608"
+  },
+  "app/config.py": {
+    "mtime": 1792637288.7167609,
+    "seen": 1792639534.403422,
+    "ast_hash": "76bb5d880c096a772e4a70321c94946a",
+    "semantic_hash": "76bb5d880c096a772e4a70321c94946a"
+  },
+  "app/core.py": {
+    "mtime": 1792637430.5286875,
+    "seen": 1792639534.4034252,
+    "ast_hash": "7208a3efa70bff9a9b8afd2f6f1059ee",
+    "semantic_hash": "7208a3efa70bff9a9b8afd2f6f1059ee"
+  },
+  "app/database.py": {
+    "mtime": 1792637495.9394855,
+    "seen": 1792639534.4034278,
+    "ast_hash": "e17d18112a4d6cdc8dff3b11e9c7e5d6",
+    "semantic_hash": "e17d18112a4d6cdc8dff3b11e9c7e5d6"
+  },
+  "app/exports.py": {
+    "mtime": 1792637576.9323676,
+    "seen": 1792639534.4034302,
+    "ast_hash": "80433d388b4c8a563010cb1d286b1bcb",
+    "semantic_hash": "80433d388b4c8a563010cb1d286b1bcb"
+  },
+  "app/main.py": {
+    "mtime": 1792646968.5223563,
+    "seen": 1792647602.4045343,
+    "ast_hash": "112b5c4e42bde593431e27214188921e",
+    "semantic_hash": ""
+  },
+  "app/parser.py": {
+    "mtime": 1792637462.0907023,
+    "seen": 1792639534.4034357,
+    "ast_hash": "088a5bb8d9773716d205c41aad8cb27d",
+    "semantic_hash": "088a5bb8d9773716d205c41aad8cb27d"
+  },
+  "app/privacy.py": {
+    "mtime": 1792637299.222428,
+    "seen": 1792639534.403439,
+    "ast_hash": "cd17c8d46d2506c482367a960950f792",
+    "semantic_hash": "cd17c8d46d2506c482367a960950f792"
+  },
+  "init-db.sql": {
+    "mtime": 1792637832.8597307,
+    "seen": 1792639534.4034414,
+    "ast_hash": "cf347e00357b0ba8570c2c4ccef74e0a",
+    "semantic_hash": "cf347e00357b0ba8570c2c4ccef74e0a"
+  },
+  "start.sh": {
+    "mtime": 1792637883.354438,
+    "seen": 1792639534.4034452,
+    "ast_hash": "f59b5fa23c28839b1d584de142422c4e",
+    "semantic_hash": "f59b5fa23c28839b1d584de142422c4e"
+  },
+  "tests/__init__.py": {
+    "mtime": 1792637926.7487276,
+    "seen": 1792639534.4034476,
+    "ast_hash": "66b98c7302cb2d41072d291347dbe3d7",
+    "semantic_hash": "66b98c7302cb2d41072d291347dbe3d7"
+  },
+  "tests/test_api.py": {
+    "mtime": 1792637687.1392667,
+    "seen": 1792639534.4034507,
+    "ast_hash": "2a01c92072ee4fe35dc0c29642527929",
+    "semantic_hash": "2a01c92072ee4fe35dc0c29642527929"
+  },
+  "tests/test_dedup.py": {
+    "mtime": 1792637446.0588155,
+    "seen": 1792639534.403453,
+    "ast_hash": "5dde0c9bcde88bdc7375962290444621",
+    "semantic_hash": "5dde0c9bcde88bdc7375962290444621"
+  },
+  "tests/test_exports.py": {
+    "mtime": 1792637564.855876,
+    "seen": 1792639534.4034555,
+    "ast_hash": "9d62908f888b59e09f9d00e738b1dd4d",
+    "semantic_hash": "9d62908f888b59e09f9d00e738b1dd4d"
+  },
+  "tests/test_parser.py": {
+    "mtime": 1792637367.9697328,
+    "seen": 1792639534.4034572,
+    "ast_hash": "a1843b29332765ff87194a4b38681742",
+    "semantic_hash": "a1843b29332765ff87194a4b38681742"
+  },
+  "tests/test_privacy.py": {
+    "mtime": 1792637307.6247225,
+    "seen": 1792639534.4034603,
+    "ast_hash": "2166dbb7834334d65dced563b6a36ab2",
+    "semantic_hash": "2166dbb7834334d65dced563b6a36ab2"
+  },
+  "docs/ui-ux-redesign/evidence/baseline-1280.json": {
+    "mtime": 1792641119.210214,
+    "seen": 1792642166.620088,
+    "ast_hash": "5317963135b53eb2a6142b6378bbfe72",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/evidence/baseline-responsive.json": {
+    "mtime": 1792642094.8296876,
+    "seen": 1792642166.6200924,
+    "ast_hash": "b6a4f8efa4a107c74eba4792d27f7e7b",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/evidence/detector-findings.json": {
+    "mtime": 1792640751.9479775,
+    "seen": 1792642166.6200957,
+    "ast_hash": "b024b41caf242625d2b700e90ae915d3",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/evidence/reviewer-b-fixed-layouts.json": {
+    "mtime": 1792640558.0311856,
+    "seen": 1792642166.6200993,
+    "ast_hash": "3209c95862cb355fb47b9d8d91b925e3",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/evidence/reviewer-b-report.json": {
+    "mtime": 1792640877.5332117,
+    "seen": 1792642166.620103,
+    "ast_hash": "513b7fc8b6b91ba7f7f0af82f391c192",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/evidence/verification.json": {
+    "mtime": 1792642143.2443318,
+    "seen": 1792642166.6201062,
+    "ast_hash": "684ca0a3c9d6d643faef05a950416b79",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1792637969.0359101,
+    "seen": 1792642166.6201456,
+    "ast_hash": "f35f05c1099bd5b87927f112fa06cd32",
+    "semantic_hash": ""
+  },
+  "app/index.html": {
+    "mtime": 1792643469.9575896,
+    "seen": 1792643659.289239,
+    "ast_hash": "221687c363410673b1eafde1bc7f388d",
+    "semantic_hash": ""
+  },
+  "docker-compose.yml": {
+    "mtime": 1792637876.7145517,
+    "seen": 1792642166.6201522,
+    "ast_hash": "a9bb40ae78c266387a2e153a8abc3d6d",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/AUDIT.md": {
+    "mtime": 1792642049.2611473,
+    "seen": 1792642166.6201556,
+    "ast_hash": "d027797042c777b69df5a8149d2d678c",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/BLUEPRINT.md": {
+    "mtime": 1792640952.5119603,
+    "seen": 1792642166.620159,
+    "ast_hash": "53a58f61f2b00a4f6b173126d446aaf2",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/DESIGN.md": {
+    "mtime": 1792640803.402002,
+    "seen": 1792642166.6201625,
+    "ast_hash": "17846046e73d390da02a2a177fa8528b",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/README.md": {
+    "mtime": 1792649574.056179,
+    "seen": 1792649581.1812115,
+    "ast_hash": "5bcc2151a833194243f012b19a0dbed9",
+    "semantic_hash": ""
+  },
+  "requirements.txt": {
+    "mtime": 1792637851.8660493,
+    "seen": 1792642166.6201696,
+    "ast_hash": "49e1d26a86e8f685d5f8d8188c9e8109",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/evidence/before-1280.png": {
+    "mtime": 1792641119.346294,
+    "seen": 1792642166.6201732,
+    "ast_hash": "2bfdc52046b4df8791aca4a5d264b81a",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/evidence/before-mobile.png": {
+    "mtime": 1792640608.6747415,
+    "seen": 1792642166.6201768,
+    "ast_hash": "d64695125c75a4bac8db8185a8484936",
+    "semantic_hash": ""
+  },
+  "app/query.py": {
+    "mtime": 1792643568.8180482,
+    "seen": 1792643659.2890885,
+    "ast_hash": "1b1755b2d1a20ef0019b56ea56c438bf",
+    "semantic_hash": ""
+  },
+  "app/static/js/api/client.js": {
+    "mtime": 1792642924.3740623,
+    "seen": 1792643659.2890916,
+    "ast_hash": "43c7e524b84f6be38b547a93a9c43361",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/imports/model.js": {
+    "mtime": 1792642989.441396,
+    "seen": 1792643659.2890944,
+    "ast_hash": "8ee220788ab33f254550b77f6adf1a2f",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/imports/render.js": {
+    "mtime": 1792643098.7460787,
+    "seen": 1792643659.2890973,
+    "ast_hash": "bcaea76deb0dae2bd3b4cdd1c3dfd210",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/imports/view.js": {
+    "mtime": 1792643385.4851513,
+    "seen": 1792643659.2891002,
+    "ast_hash": "29d6f4f553bf7df8f9eae26145a6802b",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/incidents/model.js": {
+    "mtime": 1792643037.776941,
+    "seen": 1792643659.2891028,
+    "ast_hash": "0e9980218a1e4f36aa25dc5a4a06f8a6",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/incidents/render.js": {
+    "mtime": 1792646199.946441,
+    "seen": 1792647602.4046037,
+    "ast_hash": "2cc9cc43dc9b2ff071b1113b67739406",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/incidents/state.js": {
+    "mtime": 1792647113.4281862,
+    "seen": 1792647602.4046092,
+    "ast_hash": "5ffe60ac21dd54884ab4348c42022db1",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/incidents/view.js": {
+    "mtime": 1792643681.218604,
+    "seen": 1792647602.404615,
+    "ast_hash": "eb44a8a918c591b370dcdfa8c7eccb9d",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/reports/model.js": {
+    "mtime": 1792643603.9386384,
+    "seen": 1792643659.2891126,
+    "ast_hash": "44fb22224b8502a71769976a9683a79b",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/reports/render.js": {
+    "mtime": 1792643457.2015479,
+    "seen": 1792643659.2891152,
+    "ast_hash": "daaa317a290484c1d95138950f2e9de2",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/reports/view.js": {
+    "mtime": 1792643542.3120456,
+    "seen": 1792643659.2891223,
+    "ast_hash": "c5cd3ac29b39a3c4496ca7ca50225050",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/triage/model.js": {
+    "mtime": 1792643518.5337155,
+    "seen": 1792643659.2891243,
+    "ast_hash": "57f3a25f324be50a559d517a04c222a7",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/triage/view.js": {
+    "mtime": 1792647442.0633163,
+    "seen": 1792647602.4046545,
+    "ast_hash": "b9a1baa2db4efcbbd648ce5918e0b37c",
+    "semantic_hash": ""
+  },
+  "app/static/js/router.js": {
+    "mtime": 1792647406.1111212,
+    "seen": 1792647602.40466,
+    "ast_hash": "ea8aab252a101346ad8cbc0321540972",
+    "semantic_hash": ""
+  },
+  "app/static/js/state/scope.js": {
+    "mtime": 1792647307.284744,
+    "seen": 1792647602.4046717,
+    "ast_hash": "36fe5a3186c98b8c30f69f377043b236",
+    "semantic_hash": ""
+  },
+  "app/static/js/state/selection.js": {
+    "mtime": 1792642880.1935935,
+    "seen": 1792643659.2891338,
+    "ast_hash": "d0fa415e8d93adde7443bf5531f1b70d",
+    "semantic_hash": ""
+  },
+  "app/static/js/ui/primitives.js": {
+    "mtime": 1792642984.7709026,
+    "seen": 1792643659.2891362,
+    "ast_hash": "5cf0d681a4b340c23e3ee408c270572c",
+    "semantic_hash": ""
+  },
+  "tests/frontend/client.test.mjs": {
+    "mtime": 1792642897.2764544,
+    "seen": 1792643659.289168,
+    "ast_hash": "b902aece886b58eae26f0415f18af929",
+    "semantic_hash": ""
+  },
+  "tests/frontend/imports-view.test.mjs": {
+    "mtime": 1792643352.0666893,
+    "seen": 1792643659.2891703,
+    "ast_hash": "12762b993f948cf232e0002270770070",
+    "semantic_hash": ""
+  },
+  "tests/frontend/imports.test.mjs": {
+    "mtime": 1792643068.6403449,
+    "seen": 1792643659.2891724,
+    "ast_hash": "2013ee22aa004bef736c7b131c880f0d",
+    "semantic_hash": ""
+  },
+  "tests/frontend/incidents-model.test.mjs": {
+    "mtime": 1792643017.8866494,
+    "seen": 1792643659.2891748,
+    "ast_hash": "fdde1c38be642db058b71f3f2680aaee",
+    "semantic_hash": ""
+  },
+  "tests/frontend/incidents-render.test.mjs": {
+    "mtime": 1792646162.6546676,
+    "seen": 1792647602.4048052,
+    "ast_hash": "44783f1e0e5c563340e4cd16217f3dde",
+    "semantic_hash": ""
+  },
+  "tests/frontend/incidents-state.test.mjs": {
+    "mtime": 1792643503.9157863,
+    "seen": 1792643659.2891796,
+    "ast_hash": "4db1b94946436fbff394546f86411514",
+    "semantic_hash": ""
+  },
+  "tests/frontend/incidents-view.test.mjs": {
+    "mtime": 1792643642.533062,
+    "seen": 1792643659.2891822,
+    "ast_hash": "302d38a38fc67e459c2d5b3d4f64fefa",
+    "semantic_hash": ""
+  },
+  "tests/frontend/primitives.test.mjs": {
+    "mtime": 1792642949.864404,
+    "seen": 1792643659.2891848,
+    "ast_hash": "e3d5f3682400de4d89596020e5eb2536",
+    "semantic_hash": ""
+  },
+  "tests/frontend/reports-view.test.mjs": {
+    "mtime": 1792643503.976709,
+    "seen": 1792643659.2891874,
+    "ast_hash": "aa04b6a1450db8434d0e5e37f0a296d3",
+    "semantic_hash": ""
+  },
+  "tests/frontend/reports.test.mjs": {
+    "mtime": 1792643575.2912776,
+    "seen": 1792643659.2891898,
+    "ast_hash": "45125d87548c93870ae6768631255af5",
+    "semantic_hash": ""
+  },
+  "tests/frontend/router.test.mjs": {
+    "mtime": 1792643009.999275,
+    "seen": 1792643659.2891924,
+    "ast_hash": "483adbff5a1501c0eea93e3938a4d2e5",
+    "semantic_hash": ""
+  },
+  "tests/frontend/scope.test.mjs": {
+    "mtime": 1792642826.5564334,
+    "seen": 1792643659.2891946,
+    "ast_hash": "adc28f3b6224fab8156244a1170f5535",
+    "semantic_hash": ""
+  },
+  "tests/frontend/selection.test.mjs": {
+    "mtime": 1792642862.9722056,
+    "seen": 1792643659.2891982,
+    "ast_hash": "c4ddea73f6d331135973fc783d6d18c3",
+    "semantic_hash": ""
+  },
+  "tests/frontend/shell.test.mjs": {
+    "mtime": 1792643058.1951277,
+    "seen": 1792643659.2892005,
+    "ast_hash": "1ffbe42d0bd0a765f4dc98304efc6efe",
+    "semantic_hash": ""
+  },
+  "tests/frontend/triage.test.mjs": {
+    "mtime": 1792643485.4378922,
+    "seen": 1792643659.2892036,
+    "ast_hash": "05efeeea8c19dde37e6154de6b31a854",
+    "semantic_hash": ""
+  },
+  "tests/test_ui_api.py": {
+    "mtime": 1792646968.657069,
+    "seen": 1792647602.4049506,
+    "ast_hash": "63587c0cb109e8f57f9d4b735c6eb560",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/IMPLEMENTATION-CONTRACT.md": {
+    "mtime": 1792642687.9417677,
+    "seen": 1792643659.289257,
+    "ast_hash": "cad14092706276c067696b32cbbfa41a",
+    "semantic_hash": ""
+  },
+  "app/static/js/app.js": {
+    "mtime": 1792647277.4745374,
+    "seen": 1792647602.4045708,
+    "ast_hash": "44e5b5bca1f3805805bbbe509944dcb9",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/incidents/workspace.js": {
+    "mtime": 1792646058.398036,
+    "seen": 1792647602.40462,
+    "ast_hash": "d46d0ed4ff8866f989f7aec288b18fdd",
+    "semantic_hash": ""
+  },
+  "app/static/js/state/navigation.js": {
+    "mtime": 1792647266.733245,
+    "seen": 1792647602.404665,
+    "ast_hash": "69b7dfa96fcb7d556c9adf82e8989c6b",
+    "semantic_hash": ""
+  },
+  "app/static/js/state/triage.js": {
+    "mtime": 1792646693.1548991,
+    "seen": 1792647602.4046838,
+    "ast_hash": "dfd4c99875cdfd1885f18b9984885aeb",
+    "semantic_hash": ""
+  },
+  "app/static/js/state/workspace.js": {
+    "mtime": 1792645308.7682981,
+    "seen": 1792647602.4046893,
+    "ast_hash": "2803fe0bbaf5d889cdde3ca089975380",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/implementation-evidence/responsive-triage.json": {
+    "mtime": 1792645951.7224438,
+    "seen": 1792647602.4047399,
+    "ast_hash": "b92fb1061d6e4493fcf9909b06b2e809",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/implementation-evidence/route-geometry.json": {
+    "mtime": 1792647492.3557026,
+    "seen": 1792647602.4047449,
+    "ast_hash": "520e8bf4c63e7fbfb2930007b1f2c556",
+    "semantic_hash": ""
+  },
+  "tests/frontend/incidents-policy.test.mjs": {
+    "mtime": 1792647096.9580188,
+    "seen": 1792647602.4047985,
+    "ast_hash": "2c2bb2e6c1a84797655bc6f5bbf0a826",
+    "semantic_hash": ""
+  },
+  "tests/frontend/navigation-state.test.mjs": {
+    "mtime": 1792647243.2079928,
+    "seen": 1792647602.4048247,
+    "ast_hash": "c190dfb409bb7aa0180f7e5e6f810e08",
+    "semantic_hash": ""
+  },
+  "tests/frontend/router-history.test.mjs": {
+    "mtime": 1792647389.6891809,
+    "seen": 1792647602.40485,
+    "ast_hash": "0af13e9d5071392faa88ebfbf69237d1",
+    "semantic_hash": ""
+  },
+  "tests/frontend/scope-edge.test.mjs": {
+    "mtime": 1792647287.8986077,
+    "seen": 1792647602.4048622,
+    "ast_hash": "1925acfdaff7169c3bf9347a4d78022f",
+    "semantic_hash": ""
+  },
+  "tests/frontend/triage-refresh.test.mjs": {
+    "mtime": 1792646225.9794986,
+    "seen": 1792647602.404892,
+    "ast_hash": "138f0043155f0faa125199c8615b2f3f",
+    "semantic_hash": ""
+  },
+  "tests/frontend/workspace.test.mjs": {
+    "mtime": 1792645294.5269384,
+    "seen": 1792647602.4049044,
+    "ast_hash": "9d465a51472eca074a63c7461b1b4840",
+    "semantic_hash": ""
+  },
+  "tests/serve_synthetic_ui.py": {
+    "mtime": 1792645083.5979857,
+    "seen": 1792647602.40491,
+    "ast_hash": "c825a8594fef9dd63c0193100516d157",
+    "semantic_hash": ""
+  },
+  "tests/test_ui_safety.py": {
+    "mtime": 1792646968.9642384,
+    "seen": 1792647602.4049559,
+    "ast_hash": "82f7b4b40a04e7d07c1691a2ea374b9f",
+    "semantic_hash": ""
+  },
+  "app/static/fonts/OFL.txt": {
+    "mtime": 1792645037.2714672,
+    "seen": 1792647602.4049754,
+    "ast_hash": "4d4949dda4b23922e334f0cbf6179065",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/implementation-evidence/triage-desktop.png": {
+    "mtime": 1792647626.6877458,
+    "seen": 1792649525.3417437,
+    "ast_hash": "4ddc397f559d807d08b16de2f234485c",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/implementation-evidence/triage-mobile.png": {
+    "mtime": 1792646114.139928,
+    "seen": 1792647602.40506,
+    "ast_hash": "2bbd940aced2a1e0248540ece3d8c7b6",
+    "semantic_hash": ""
+  },
+  "PRODUCT.md": {
+    "mtime": 1792647778.8368025,
+    "seen": 1792649525.341647,
+    "ast_hash": "ffe9141198e8cecc508f5bfb824ecdba",
+    "semantic_hash": ""
+  },
+  "docs/ui-ux-redesign/implementation-evidence/incident-desktop.png": {
+    "mtime": 1792647665.835594,
+    "seen": 1792649525.3417375,
+    "ast_hash": "b851f1e2a746acff514523692b05fce4",
+    "semantic_hash": ""
+  }
+}
