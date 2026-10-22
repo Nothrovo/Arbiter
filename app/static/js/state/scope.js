@@ -10,6 +10,9 @@ export function queryFrom(params = new URLSearchParams()) {
     group_id: get('group_id') || '',
     sort_by: choices(get('sort_by'), ['timestamp', 'severity', 'hits'], 'timestamp'),
     sort: choices(get('sort'), ['asc', 'desc'], 'desc'),
+    time_from: get('time_from') || '',
+    time_to: get('time_to') || '',
+    time_preset: get('time_preset') || '',
     limit: Math.min(200, Math.max(25, integer(get('limit'),50) || 50)),
     offset: Math.max(0, integer(get('offset'),0) || 0),
   };
@@ -46,6 +49,8 @@ export function scopeDescription(params) {
     if (p.get('filter_preset')) parts.push(`Filter ${p.get('filter_preset')}`);
     if (p.get('status') === 'ungrouped') parts.push('Belum masuk insiden');
     if (p.get('status') === 'grouped') parts.push('Sudah masuk insiden');
+    if (p.get('time_preset')) parts.push(`Waktu: ${p.get('time_preset')}`);
+    else if (p.get('time_from') || p.get('time_to')) parts.push(`Waktu: ${p.get('time_from') || '—'} s/d ${p.get('time_to') || 'kini'}`);
   }
   return parts.join(' · ');
 }

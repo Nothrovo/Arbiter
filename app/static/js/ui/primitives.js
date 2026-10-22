@@ -19,6 +19,7 @@ const paths = {
   more: '<circle cx="3" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="13" cy="8" r=".6"/>',
   shield: '<path d="M8 1 2 4v4c0 3 6 7 6 7s6-4 6-7V4z"/>',
   clock: '<circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/>',
+  database: '<ellipse cx="8" cy="4" rx="6" ry="2.5"/><path d="M2 4v8c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M2 8c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/>',
 };
 export function icon(name) { return `<svg class="icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.chevron}</svg>`; }
 export function severity(value) {
@@ -36,3 +37,9 @@ export function formatTime(value) {
 export function emptyState(title, description, actionHTML = '') { return `<div class="empty-state"><h2>${esc(title)}</h2><p>${esc(description)}</p>${actionHTML ? `<div class="empty-actions">${actionHTML}</div>` : ''}</div>`; }
 export function errorState(message) { return `<div class="error-region" role="alert"><strong>Tidak dapat memuat data</strong><p>${esc(message)}</p><button class="button" data-action="retry">Coba lagi</button></div>`; }
 export function loadingRows(count = 5) { return `<div class="skeleton-list" aria-label="Memuat data" aria-busy="true">${Array.from({length:count}, () => '<div class="skeleton-row"><span></span><span></span><span></span></div>').join('')}</div>`; }
+export function defangText(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/\b(https?):\/\//gi, '$1[://]')
+    .replace(/(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g, '$1.$2.$3[.]$4');
+}

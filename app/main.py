@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import HOST, PORT
 from app.core import normalize_alert, suggestions_with_fallback
+import app.database as db_module
 from app.database import get_db, init_database, ingest_alert_with_dedup
 from app.exports import (
     generate_docx_landscape_report,
@@ -135,6 +136,8 @@ def list_alerts(
     group_id: str | None = None,
     filter_preset: str = "",
     review_status: str = "all",
+    time_from: str = "",
+    time_to: str = "",
     sort: str = "desc",
     sort_by: str = "timestamp",
     limit: int = 500,
@@ -147,6 +150,7 @@ def list_alerts(
     where_sql, params = alert_where(
         q=q, tenant=tenant, status=status, group_id=group_id,
         filter_preset=filter_preset, review_status=review_status,
+        time_from=time_from, time_to=time_to,
     )
 
     # Sort order
@@ -435,11 +439,11 @@ def remove_group_member(group_id: str, alert_pk: int, tenant: str = "all"):
 def get_suggestions(
     use_local_ai: bool = False, tenant: str = "all", q: str = "",
     review_status: str = "all", filter_preset: str = "", status: str = "all",
-    group_id: str | None = None,
+    group_id: str | None = None, time_from: str = "", time_to: str = "",
 ):
     where, params = alert_where(
         tenant=tenant, q=q, review_status=review_status, filter_preset=filter_preset,
-        status=status, group_id=group_id,
+        status=status, group_id=group_id, time_from=time_from, time_to=time_to,
     )
     with get_db() as conn:
         rows = conn.execute(
@@ -462,10 +466,11 @@ MAX_EXPORT_ALERTS = 10_000
 def _get_alerts_for_export(
     group_id: str | None = None, alert_ids: str | None = None, tenant: str = "all",
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
+    time_from: str = "", time_to: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     where, params = alert_where(
         q=q, tenant=tenant, review_status=review_status, filter_preset=filter_preset,
-        status=status, group_id=group_id,
+        status=status, group_id=group_id, time_from=time_from, time_to=time_to,
     )
     clean_pks: list[int] = []
     if alert_ids:
@@ -506,6 +511,7 @@ def _get_alerts_for_export(
 def export_scope(
     group_id: str | None = None, alert_ids: str | None = None, tenant: str = "all",
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
+    time_from: str = "", time_to: str = "",
 ) -> dict[str, Any]:
     # Explicit selection replaces triage filters, never tenant context.
     if alert_ids is not None:
@@ -513,9 +519,10 @@ def export_scope(
             alert_ids = ",".join(str(pk) for pk in positive_ids(alert_ids.split(",")))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        group_id, q, review_status, filter_preset, status = None, "", "all", "", "all"
+        group_id, q, review_status, filter_preset, status, time_from, time_to = None, "", "all", "", "all", "", ""
     return dict(group_id=group_id, alert_ids=alert_ids, tenant=tenant, q=q,
-                review_status=review_status, filter_preset=filter_preset, status=status)
+                review_status=review_status, filter_preset=filter_preset, status=status,
+                time_from=time_from, time_to=time_to)
 
 
 @app.get("/api/export/preview")
@@ -598,6 +605,91 @@ def export_csv(scope: dict[str, Any] = Depends(export_scope)):
 def api_sanitize_logs(payload: dict[str, Any]):
     text = str(payload.get("text") or "").strip()
     return {"sanitized": sanitize_text(text)}
+
+
+@app.get("/api/database/status")
+def api_database_status():
+    if hasattr(db_module, "get_database_status"):
+        with get_db() as conn:
+            return db_module.get_database_status(conn)
+    with get_db() as conn:
+        alerts_n = conn.execute("SELECT count(*) AS n FROM wazuh.alerts").fetchone()["n"]
+        groups_n = conn.execute("SELECT count(*) AS n FROM wazuh.analysis_groups").fetchone()["n"]
+        intel_n = 0
+        try:
+            intel_n = conn.execute("SELECT count(*) AS n FROM public.ip_intel_cache").fetchone()["n"]
+        except Exception:
+            pass
+        tenants = conn.execute("SELECT tenant, count(*) AS count FROM wazuh.alerts GROUP BY tenant").fetchall()
+        return {
+            "status": "ok",
+            "active_profile": {"id": "local", "name": "Laptop (Lokal)", "mode": "read_write", "masked_url": "postgresql://arbiter:***@127.0.0.1:5432/abuseip"},
+            "profiles": [
+                {"id": "local", "name": "Laptop (Lokal)", "mode": "read_write", "description": "PostgreSQL lokal di laptop. Workspace operasional SOC utama.", "masked_url": "postgresql://arbiter:***@127.0.0.1:5432/abuseip", "is_active": True},
+                {"id": "remote", "name": "PC Intel (Remote)", "mode": "read_only", "description": "PostgreSQL pada host IP Intel. Sumber cache reputasi dan telemetri sekunder.", "masked_url": "postgresql://arbiter:***@192.168.1.50:5432/abuseip", "is_active": False},
+            ],
+            "stats": {"alerts": alerts_n, "groups": groups_n, "ip_intel_records": intel_n},
+            "tenants": tenants or [],
+            "table_sizes": {"wazuh.alerts": "N/A", "wazuh.analysis_groups": "N/A"},
+        }
+
+
+@app.post("/api/database/switch")
+def api_database_switch(payload: dict[str, Any]):
+    profile = str(payload.get("profile") or "").strip()
+    if hasattr(db_module, "set_active_profile"):
+        return db_module.set_active_profile(profile)
+    return {"id": profile, "status": "switched"}
+
+
+@app.post("/api/database/test")
+def api_database_test(payload: dict[str, Any]):
+    url = payload.get("url")
+    if hasattr(db_module, "test_db_connection"):
+        return db_module.test_db_connection(url)
+    return {"ok": True, "latency_ms": 1.0, "version": "PostgreSQL Mock"}
+
+
+@app.post("/api/database/config")
+def api_database_config(payload: dict[str, Any]):
+    profile = str(payload.get("profile") or "remote").strip()
+    url = str(payload.get("url") or "").strip()
+    if hasattr(db_module, "update_profile_url"):
+        return db_module.update_profile_url(profile, url)
+    return {"status": "ok"}
+
+
+@app.post("/api/database/purge-alerts")
+def api_database_purge_alerts(payload: dict[str, Any]):
+    older_than_days = payload.get("older_than_days")
+    if older_than_days is not None:
+        try:
+            older_than_days = int(older_than_days)
+        except (ValueError, TypeError):
+            older_than_days = None
+    time_from = payload.get("time_from")
+    time_to = payload.get("time_to")
+    tenant = payload.get("tenant", "all")
+    dry_run = bool(payload.get("dry_run", True))
+    with get_db() as conn:
+        if hasattr(db_module, "purge_alerts"):
+            return db_module.purge_alerts(
+                conn, older_than_days=older_than_days, time_from=time_from,
+                time_to=time_to, tenant=tenant, dry_run=dry_run,
+            )
+        return {"dry_run": dry_run, "count": 0}
+
+
+@app.post("/api/database/purge-incidents")
+def api_database_purge_incidents(payload: dict[str, Any]):
+    status_filter = str(payload.get("status") or "closed_only")
+    dry_run = bool(payload.get("dry_run", True))
+    with get_db() as conn:
+        if hasattr(db_module, "purge_incidents"):
+            return db_module.purge_incidents(
+                conn, status_filter=status_filter, dry_run=dry_run,
+            )
+        return {"dry_run": dry_run, "count": 0}
 
 
 @app.get("/", response_class=HTMLResponse)

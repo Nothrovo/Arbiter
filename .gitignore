@@ -17,3 +17,6 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Graphify ast cache
+graphify-out/cache/ast/

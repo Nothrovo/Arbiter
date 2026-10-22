@@ -16,6 +16,8 @@ export async function mountWorkspace(ctx, route, {events, active}) {
   let selectedVersion = 0;
   let candidatesRequested = false;
   let mounted = false;
+  let showAllLogs = false;
+  const openLogIds = new Set();
   const knownRows = new Map();
   const confirm = message => root.ownerDocument.defaultView.confirm(message);
   const node = selector => root.querySelector(selector);
@@ -64,8 +66,8 @@ export async function mountWorkspace(ctx, route, {events, active}) {
     const open = new Set([...root.querySelectorAll('[data-evidence-region] details[open], [data-candidate-region] details[open]')].map(element => element.querySelector('summary')?.textContent));
     for (const row of [...(evidence?.rows || []), ...candidates.rows, ...selectedRows]) knownRows.set(Number(row.id), row);
     selected();
-    html('[data-evidence-region]', evidence ? renderEvidence(evidence, {selected: state.draft.alert_pks, tenant: state.tenant}) : selectedRows.length ? renderEvidence({rows: selectedRows.filter(row => state.draft.alert_pks.includes(Number(row.id))), total: state.draft.alert_pks.length, offset: 0, hasNext: false}, {selected: state.draft.alert_pks, tenant: state.tenant}) : emptyState('Belum ada bukti yang dimuat', 'Pilih bukti dari Triage atau cari alert dalam scope aktif.'));
-    if (candidatesRequested) html('[data-candidate-region]', renderEvidence(candidates, {selected: state.draft.alert_pks, tenant: state.tenant, kind: 'candidate'}));
+    html('[data-evidence-region]', evidence ? renderEvidence(evidence, {selected: state.draft.alert_pks, tenant: state.tenant, showLogs: showAllLogs, openLogs: [...openLogIds]}) : selectedRows.length ? renderEvidence({rows: selectedRows.filter(row => state.draft.alert_pks.includes(Number(row.id))), total: state.draft.alert_pks.length, offset: 0, hasNext: false}, {selected: state.draft.alert_pks, tenant: state.tenant, showLogs: showAllLogs, openLogs: [...openLogIds]}) : emptyState('Belum ada bukti yang dimuat', 'Pilih bukti dari Triage atau cari alert dalam scope aktif.'));
+    if (candidatesRequested) html('[data-candidate-region]', renderEvidence(candidates, {selected: state.draft.alert_pks, tenant: state.tenant, kind: 'candidate', showLogs: showAllLogs, openLogs: [...openLogIds]}));
     for (const element of root.querySelectorAll('[data-evidence-region] details, [data-candidate-region] details')) if (open.has(element.querySelector('summary')?.textContent)) element.open = true;
     context();
     status();
@@ -187,6 +189,69 @@ export async function mountWorkspace(ctx, route, {events, active}) {
       return;
     }
     const action = event.target.closest?.('[data-action]')?.dataset.action;
+    if (action === 'toggle-all-logs') {
+      showAllLogs = !showAllLogs;
+      const btn = node('#btn-toggle-all-logs');
+      if (btn) btn.textContent = showAllLogs ? 'Sembunyikan semua log' : 'Munculkan full log bukti';
+      if (showAllLogs) {
+        const rows = evidence ? evidence.rows : selectedRows;
+        for (const r of rows) {
+          const aid = Number(r.id);
+          const existing = knownRows.get(aid);
+          if (existing && !existing.full_log) {
+            json(`/api/alerts/${aid}?${new URLSearchParams({tenant: state.tenant})}`, {signal})
+              .then(detail => {
+                if (detail?.raw?.full_log || detail?.full_log) {
+                  existing.full_log = detail.full_log || detail.raw?.full_log;
+                  panels();
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      }
+      panels();
+      return;
+    }
+    if (action === 'toggle-single-log') {
+      const aid = Number(event.target.closest('button')?.dataset.alertId);
+      if (openLogIds.has(aid)) openLogIds.delete(aid);
+      else {
+        openLogIds.add(aid);
+        const existing = knownRows.get(aid);
+        if (existing && !existing.full_log) {
+          json(`/api/alerts/${aid}?${new URLSearchParams({tenant: state.tenant})}`, {signal})
+            .then(detail => {
+              if (detail?.raw?.full_log || detail?.full_log) {
+                existing.full_log = detail.full_log || detail.raw?.full_log;
+                panels();
+              }
+            })
+            .catch(() => {});
+        }
+      }
+      panels();
+      return;
+    }
+    if (action === 'copy-evidence-log' || action === 'copy-evidence-redacted') {
+      const lid = Number(event.target.closest('button')?.dataset.logId);
+      const row = knownRows.get(lid);
+      const text = row?.full_log || row?.raw?.full_log || '';
+      if (!text) { ctx.notify('Log tidak tersedia.', 'error'); return; }
+      if (action === 'copy-evidence-redacted') {
+        try {
+          const d = await json('/api/sanitize-logs', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text}), signal});
+          await navigator.clipboard.writeText(d.sanitized);
+          ctx.notify('Versi tersamarkan disalin.', 'info');
+        } catch { ctx.notify('Gagal menyalin.', 'error'); }
+      } else {
+        try {
+          await navigator.clipboard.writeText(text);
+          ctx.notify('Log lengkap bukti disalin.', 'info');
+        } catch { ctx.notify('Gagal menyalin.', 'error'); }
+      }
+      return;
+    }
     if (action === 'retry') {await initial(); return;}
     if (action === 'selected-retry') {await loadSelected(); return;}
     if (action === 'discard' && !state.pending && state.dirty && confirm('Buang perubahan yang belum disimpan? Narasi dan tautan bukti akan kembali ke versi terakhir yang dimuat atau disimpan.')) {

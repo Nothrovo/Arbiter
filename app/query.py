@@ -32,6 +32,7 @@ def alert_where(
     *, q: str = "", tenant: str = "all", status: str = "all",
     group_id: str | None = None, filter_preset: str = "",
     review_status: str = "all",
+    time_from: str | None = None, time_to: str | None = None,
 ) -> tuple[str, list[Any]]:
     group_id = validated_group_id(group_id)
     clauses: list[str] = []
@@ -67,4 +68,10 @@ def alert_where(
         params.append("%curl%")
     elif filter_preset == "non_http":
         clauses.append("a.parsed_details->>'log_type' != 'http'")
+    if time_from and str(time_from).strip():
+        clauses.append("a.timestamp >= %s")
+        params.append(str(time_from).strip())
+    if time_to and str(time_to).strip():
+        clauses.append("a.timestamp <= %s")
+        params.append(str(time_to).strip())
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params

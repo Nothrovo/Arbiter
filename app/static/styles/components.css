@@ -226,3 +226,21 @@
 .incident-section-nav { max-width:100%; flex-wrap:wrap; overflow:visible; gap:4px 14px; }
 }
 
+/* Database & Evidence Log styles */
+.database-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-panel); padding:20px; display:grid; gap:12px; transition:border-color 150ms var(--ease-out); }
+.database-card.is-active { border-color:var(--control); }
+.database-card h3 { font-size:16px; margin:0; }
+.database-card .description { font-size:13px; color:var(--muted); line-height:1.5; margin:0; }
+.evidence-log-box { background:var(--ground); border:1px solid var(--border); border-radius:var(--radius-control); padding:12px; }
+.evidence-log-box .raw-log { margin-top:8px; max-height:280px; }
+
+/* Triage Queue Expanded Log styles */
+.button.is-active, .button[aria-pressed=true] { background:var(--raised); border-color:var(--control); color:var(--text); }
+.log-expansion-row { background:var(--ground); }
+.log-expansion-cell { padding:8px 16px 14px !important; border-bottom:1px solid var(--border); }
+.queue-log-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-control); padding:10px 14px; display:grid; gap:8px; }
+.queue-log-head { align-items:center; }
+.queue-log-box .raw-log { max-height:260px; margin:0; background:var(--ground); }
+
+
+

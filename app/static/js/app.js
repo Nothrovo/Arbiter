@@ -11,7 +11,7 @@ const selection=createSelection(new URLSearchParams(location.hash.split('?')[1]|
 let currentRoute, controller, cleanup, guard=null, notifyTimer, healthPending=false, lastHealth=null, routeVersion=0;
 const scrollPositions=new Map();
 const navigationMemory=createNavigationMemory();
-const pageTitles={triage:'Triage',incidents:'Insiden',imports:'Impor',reports:'Laporan'};
+const pageTitles={triage:'Triage',incidents:'Insiden',imports:'Impor',reports:'Laporan',database:'Database'};
 for(const el of document.querySelectorAll('[data-icon]'))el.innerHTML=icon(el.dataset.icon);
 document.querySelector('#open-navigation').innerHTML=icon('menu');
 document.querySelector('#close-navigation').innerHTML=icon('close');

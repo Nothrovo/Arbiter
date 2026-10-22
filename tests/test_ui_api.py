@@ -383,6 +383,24 @@ class UIAPIContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422, response.text[:80])
         self.assertEqual(self.db.calls, [])
 
+    def test_database_status_endpoint_returns_profiles_and_telemetry(self):
+        response = self.client.get("/api/database/status")
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("active_profile", data)
+        self.assertIn("profiles", data)
+        self.assertIn("stats", data)
+        self.assertGreaterEqual(data["stats"]["alerts"], 2)
+
+    def test_alerts_support_time_range_filters(self):
+        response = self.client.get("/api/alerts", params={"tenant": "Alpha", "time_from": "2026-01-01T00:00:00Z"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(response.json()["items"]), 2)
+        response_future = self.client.get("/api/alerts", params={"tenant": "Alpha", "time_from": "2099-01-01T00:00:00Z"})
+        self.assertEqual(response_future.status_code, 200)
+        self.assertEqual(len(response_future.json()["items"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

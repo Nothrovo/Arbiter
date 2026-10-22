@@ -9,6 +9,7 @@ services:
     environment:
       PORT: 8000
       DATABASE_URL: ${DATABASE_URL:-postgresql://nothrovo@127.0.0.1:5432/abuseip}
+      REMOTE_DATABASE_URL: ${REMOTE_DATABASE_URL:-postgresql://nothrovo@192.168.1.50:5432/abuseip}
     volumes:
       - ./app:/app/app
 
