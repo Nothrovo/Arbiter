@@ -13,7 +13,7 @@ export function queryFrom(params = new URLSearchParams()) {
     time_from: get('time_from') || '',
     time_to: get('time_to') || '',
     time_preset: get('time_preset') || '',
-    limit: Math.min(1000, Math.max(25, integer(get('limit'),50) || 50)),
+    limit: Math.min(10000, Math.max(1, integer(get('limit'), 50) || 50)),
     offset: Math.max(0, integer(get('offset'),0) || 0),
   };
 }

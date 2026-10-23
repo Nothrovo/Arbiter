@@ -12,11 +12,12 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import HOST, PORT
 from app.core import normalize_alert, suggestions_with_fallback
+from app.intel import enrich_ip, is_valid_ip, sync_remote_cache, upsert_ip_cache
 import app.database as db_module
 from app.database import get_db, init_database, ingest_alert_with_dedup
 from app.exports import (
@@ -44,6 +45,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static"), check_dir=False), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    fav_path = Path(__file__).with_name("static") / "img" / "favicon.svg"
+    return FileResponse(fav_path, media_type="image/svg+xml")
 
 
 @app.get("/api/health")
@@ -146,7 +153,7 @@ def list_alerts(
 ):
     if offset < 0:
         raise HTTPException(status_code=422, detail="offset must be zero or greater.")
-    limit = min(max(limit, 1), 2000)
+    limit = min(max(limit, 1), 10000)
     where_sql, params = alert_where(
         q=q, tenant=tenant, status=status, group_id=group_id,
         filter_preset=filter_preset, review_status=review_status,
@@ -262,6 +269,58 @@ def batch_update_review(payload: dict[str, Any], tenant: str = "all"):
             (is_reviewed, is_reviewed, clean_pks),
         )
     return {"status": "ok", "count": len(clean_pks), "is_reviewed": is_reviewed}
+
+
+@app.post("/api/intel/enrich")
+def enrich_intel(payload: dict[str, Any], tenant: str = "all"):
+    raw_ips = payload.get("ips") or []
+    if isinstance(raw_ips, str):
+        raw_ips = [raw_ips]
+    alert_ids = payload.get("alert_ids") or []
+    if isinstance(alert_ids, (int, str)):
+        alert_ids = [alert_ids]
+
+    target_ips: list[str] = [str(x).strip() for x in raw_ips if str(x).strip()]
+
+    if alert_ids:
+        clean_pks = positive_ids(alert_ids)
+        if clean_pks:
+            with get_db() as conn:
+                where_clause = "WHERE id = ANY(%s)"
+                params: list[Any] = [clean_pks]
+                if tenant and tenant != "all":
+                    where_clause += " AND tenant = %s"
+                    params.append(tenant)
+                rows = conn.execute(
+                    f"SELECT DISTINCT source_ip FROM wazuh.alerts {where_clause} AND source_ip IS NOT NULL AND source_ip != ''",
+                    params,
+                ).fetchall()
+                for r in rows:
+                    ip_val = (r["source_ip"] or "").strip()
+                    if ip_val and ip_val not in target_ips:
+                        target_ips.append(ip_val)
+
+    unique_ips = list(dict.fromkeys(ip for ip in target_ips if is_valid_ip(ip)))[:50]
+    if not unique_ips:
+        raise HTTPException(status_code=400, detail="Tidak ada alamat IPv4/IPv6 valid yang diberikan untuk di-enrich.")
+
+    results = []
+    with get_db() as conn:
+        for ip in unique_ips:
+            res = enrich_ip(ip)
+            if res.get("status") not in ("invalid", "error"):
+                upsert_ip_cache(conn, res)
+            results.append(res)
+        if hasattr(conn, "commit"):
+            conn.commit()
+
+    sync_remote_cache(results)
+
+    return {
+        "status": "ok",
+        "count": len(results),
+        "enriched": results,
+    }
 
 
 def _scoped_groups(conn, tenant: str = "all", group_id: str | None = None):

@@ -3,7 +3,7 @@ import {esc, icon, severity, formatTime, emptyState, errorState, loadingRows, de
 import {queryFrom, scopeParams} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {createTriageSession} from '../../state/triage.js';
-import {intelSummary, renderQueue} from './model.js';
+import {intelSummary, intelBadge, renderQueue} from './model.js';
 
 const presets = [['','Semua jenis'],['403','403 Forbidden'],['404','404 Probes'],['repeating','Berulang'],['non_http','Non-HTTP'],['bot','Bot traffic'],['curl','Curl requests']];
 export function mount(ctx) {
@@ -12,7 +12,7 @@ export function mount(ctx) {
   root.classList.add('triage-page');
   const session = createTriageSession();
   let items = [], total = 0, pageRequest, detailRequest, generation = 0, currentAlert = null, lastSelected = null, searchTimer;
-  let activeTab = 'detail', activeId = route.params.get('alert'), showIntel = true, wrapLog = false, showAllLogs = false, expandedLogIds = new Set();
+  let activeTab = 'detail', activeId = route.params.get('alert'), showIntel = true, wrapLog = true, showAllLogs = false, expandedLogIds = new Set();
   root.innerHTML = `<div class="page-header"><div class="page-heading"><h1>Triage</h1><p class="page-description">Periksa bukti. Tentukan langkah berikutnya.</p></div><div class="page-actions"><a class="button primary" href="${withParams('/imports',new URLSearchParams({tenant:query.tenant}))}">${icon('upload')}Impor</a></div></div>
     <div class="tabs" aria-label="Antrean review">${[['unreviewed','Belum direview'],['all','Semua'],['reviewed','Direview']].map(([key,label])=>`<button class="tab" data-review="${key}" aria-pressed="${query.review_status===key}">${label}</button>`).join('')}</div>
     <div class="toolbar"><div class="search-field"><label class="sr-only" for="triage-search">Cari alert</label>${icon('search')}<input type="search" id="triage-search" name="q" value="${esc(query.q)}" placeholder="Cari IP, asset, rule…" autocomplete="off" spellcheck="false"></div><button class="button" data-action="filters">${icon('filter')}Filter${query.filter_preset||query.status!=='all'||query.group_id||query.time_preset||query.time_from?' aktif':''}</button><button class="button" data-action="toggle-all-queue-logs" id="btn-toggle-queue-logs" aria-pressed="false" title="Tampilkan atau sembunyikan full log semua alert">${icon('cases')}Semua log</button><label class="sr-only" for="triage-sort">Urutan alert</label><select class="sort-control" id="triage-sort" name="sort"><option value="timestamp:desc">Terbaru</option><option value="timestamp:asc">Kronologis</option><option value="severity:desc">Severity tertinggi</option><option value="hits:desc">Hits terbanyak</option></select><button class="button icon-button" data-action="more" aria-label="Opsi antrean" aria-controls="queue-options" aria-expanded="false">${icon('more')}</button></div>
@@ -88,13 +88,15 @@ ${rawLog}`;
     const visible=items.filter(a=>selection.has(a.id)).length;
     root.querySelectorAll('[data-select-page]').forEach(el=>{el.checked=!!items.length&&visible===items.length;el.indeterminate=visible>0&&visible<items.length;});
     const slot=root.querySelector('#selection-actions');
-    slot.innerHTML=ids.length?`<div class="selection-toolbar" aria-label="Tindakan pilihan"><strong>${ids.length.toLocaleString('id-ID')} alert dipilih</strong><button class="button primary" data-action="create-incident">${icon('plus')}Buat insiden</button><button class="button" data-action="add-selected-to-incident">${icon('cases')}Masukkan ke insiden</button><button class="button" data-action="copy-selected-logs">${icon('copy')}Salin log</button><button class="button" data-action="copy-selected-redacted">Tersamarkan</button><button class="button" data-action="batch-review">Tandai direview</button><button class="button" data-action="batch-unreview">Belum direview</button><button class="button" data-action="report-selected">Laporan</button><button class="button icon-button" data-action="clear-selection" aria-label="Batalkan pilihan">${icon('close')}</button>${ids.length>visible?`<span class="selection-note">${ids.length-visible} pilihan berada di luar halaman/filter ini. Tindakan memakai seluruh pilihan pada tenant ini.</span>`:''}</div>`:'';
+    slot.innerHTML=ids.length?`<div class="selection-toolbar" aria-label="Tindakan pilihan"><strong>${ids.length.toLocaleString('id-ID')} alert dipilih</strong><button class="button primary" data-action="create-incident">${icon('plus')}Buat insiden</button><button class="button" data-action="add-selected-to-incident">${icon('cases')}Masukkan ke insiden</button><button class="button" data-action="batch-enrich-intel">${icon('refresh')}Live Enrich IP</button><button class="button" data-action="copy-selected-logs">${icon('copy')}Salin log</button><button class="button" data-action="copy-selected-redacted">Tersamarkan</button><button class="button" data-action="batch-review">Tandai direview</button><button class="button" data-action="batch-unreview">Belum direview</button><button class="button" data-action="report-selected">Laporan</button><button class="button icon-button" data-action="clear-selection" aria-label="Batalkan pilihan">${icon('close')}</button>${ids.length>visible?`<span class="selection-note">${ids.length-visible} pilihan berada di luar halaman/filter ini. Tindakan memakai seluruh pilihan pada tenant ini.</span>`:''}</div>`:'';
   }
   function renderResults() {
     if (!items.length) results.innerHTML=emptyState('Tidak ada alert pada antrean ini',query.q||query.filter_preset||query.group_id||query.review_status!=='all'?'Coba reset filter atau lihat antrean Semua. Pilihan sebelumnya tetap tersimpan.':'Impor export Wazuh untuk memulai triage.',`<button class="button" data-action="reset">Reset filter</button><a class="button primary" href="${withParams('/imports',new URLSearchParams({tenant:query.tenant}))}">Impor alert</a>`);
     else results.innerHTML=renderQueue(items,{selectedIds:selection.ids(),activeId,query,showIntel,showAllLogs,expandedLogIds,wrapLog});
-    const pageSizeOptions = [25, 50, 100, 200, 500].map(n => `<option value="${n}" ${query.limit === n ? 'selected' : ''}>${n} per halaman</option>`).join('');
-    root.querySelector('#queue-pagination').innerHTML=`<div class="pagination-info" style="display:flex; align-items:center; gap:12px;"><span>${total?`${(query.offset+1).toLocaleString('id-ID')}–${Math.min(query.offset+items.length,total).toLocaleString('id-ID')}`:'0'} dari ${total.toLocaleString('id-ID')} alert</span><label class="page-size-label"><span class="sr-only">Jumlah per halaman</span><select class="select page-size-select" id="page-size-select" style="padding:2px 8px; min-height:30px; font-size:12px;">${pageSizeOptions}</select></label></div><div class="pagination-actions"><button class="button" data-page="previous" ${query.offset===0?'disabled':''}>Sebelumnya</button><button class="button" data-page="next" ${query.offset+items.length>=total?'disabled':''}>Berikutnya</button></div>`;
+    const standardSizes = [25, 50, 100, 200, 500, 1000];
+    const isCustom = !standardSizes.includes(query.limit);
+    const pageSizeOptions = standardSizes.map(n => `<option value="${n}" ${query.limit === n ? 'selected' : ''}>${n} per halaman</option>`).join('');
+    root.querySelector('#queue-pagination').innerHTML=`<div class="pagination-info" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;"><span>${total?`${(query.offset+1).toLocaleString('id-ID')}–${Math.min(query.offset+items.length,total).toLocaleString('id-ID')}`:'0'} dari ${total.toLocaleString('id-ID')} alert</span><label class="page-size-label" style="display:inline-flex; align-items:center; gap:6px;"><span class="sr-only">Jumlah per halaman</span><select class="select page-size-select" id="page-size-select" style="padding:2px 8px; min-height:30px; font-size:12px;">${pageSizeOptions}<option value="custom" ${isCustom ? 'selected' : ''}>${isCustom ? `Kustom (${query.limit})` : 'Kustom…'}</option></select></label><div id="custom-limit-wrap" style="display:${isCustom ? 'inline-flex' : 'none'}; gap:4px; align-items:center;"><input type="number" id="custom-limit-input" min="1" max="10000" value="${query.limit}" style="width:75px; min-height:28px; padding:2px 6px; font-size:12px;" class="input mono" placeholder="Jml"><button type="button" class="button" id="btn-apply-custom-limit" style="min-height:28px; padding:2px 8px; font-size:12px;">Terapkan</button></div></div><div class="pagination-actions"><button class="button" data-page="previous" ${query.offset===0?'disabled':''}>Sebelumnya</button><button class="button" data-page="next" ${query.offset+items.length>=total?'disabled':''}>Berikutnya</button></div>`;
     syncSelection();
   }
   async function load() {
@@ -127,7 +129,7 @@ ${rawLog}`;
     if(activeTab==='raw')return `<div class="split"><h3>Raw alert JSON</h3><button class="button" data-action="copy-raw">${icon('copy')}Salin raw</button></div><p class="warning-copy">Konten mentah dapat memuat informasi sensitif. Tinjau sebelum dibagikan.</p><pre class="raw-log">${esc(JSON.stringify(a.raw||{},null,2))}</pre>`;
     if(activeTab==='occurrences')return `<div class="split"><h3>Kejadian berulang</h3><span class="meta num">${Number(a.hit_count)||1} hits</span></div><dl class="detail-grid"><div class="key-value"><dt>Pertama</dt><dd>${esc(formatTime(a.first_seen||a.timestamp))}</dd></div><div class="key-value"><dt>Terakhir</dt><dd>${esc(formatTime(a.last_seen||a.timestamp))}</dd></div></dl><ol class="timeline">${(a.duplicate_instances?.length?a.duplicate_instances:[{timestamp:a.timestamp,id:a.alert_id}]).map(inst=>`<li><time>${esc(formatTime(inst.timestamp))}</time><span class="meta mono">${esc(inst.id||'—')}</span>${inst.full_log?`<details><summary>Log kejadian</summary><pre class="raw-log">${esc(inst.full_log)}</pre></details>`:''}</li>`).join('')}</ol>`;
     const log=a.full_log||a.raw?.full_log;
-    return `<dl class="detail-grid"><div class="key-value"><dt>Target asset</dt><dd>${esc(a.agent_name||'—')}</dd></div><div class="key-value"><dt>Tenant</dt><dd>${esc(a.tenant||'Default')}</dd></div><div class="key-value"><dt>Detection rule</dt><dd>${esc(a.rule_id||'—')} · Level ${Number(a.rule_level)||0}</dd></div><div class="key-value"><dt>Waktu</dt><dd>${esc(formatTime(a.timestamp))}</dd></div><div class="key-value wide"><dt>Source / intel</dt><dd class="mono">${esc(a.source_ip||'—')}</dd><dd class="meta">${esc(intelSummary(a))}</dd>${a.source_ip?`<dd><a class="button" href="http://localhost:3001/ip/${encodeURIComponent(a.source_ip)}" rel="noopener noreferrer" target="_blank">Buka IP Intel ${icon('external')}</a></dd>`:''}</div>${a.cve?`<div class="key-value"><dt>CVE</dt><dd>${esc(a.cve)}</dd></div>`:''}${a.mitre_ids?.length?`<div class="key-value wide"><dt>MITRE</dt><dd>${esc(a.mitre_ids.join(', '))}</dd></div>`:''}</dl>${log?`<section class="stack"><div class="split"><h3>Log utama</h3><button class="button" data-action="copy-redacted">Versi tersamarkan</button></div><pre class="raw-log">${esc(log)}</pre><p class="meta">Redaksi otomatis bukan jaminan aman untuk cloud. Tinjau hasil sebelum membagikan.</p></section>`:''}${a.previous_output?`<details><summary>Previous output</summary><pre class="raw-log">${esc(a.previous_output)}</pre></details>`:''}<section class="stack"><h3>Insiden terkait</h3>${a.groups?.length?a.groups.map(g=>`<div class="split"><a href="${withParams('/incidents/'+encodeURIComponent(g.id),new URLSearchParams({tenant:query.tenant}))}">${esc(g.title)}</a><button class="button icon-button" data-remove-group="${esc(g.id)}" aria-label="Keluarkan dari insiden ${esc(g.title)}">${icon('close')}</button></div>`).join(''):'<p class="meta">Belum terhubung ke insiden.</p>'}<div class="field"><label for="inspector-group">Tambahkan ke insiden</label><select id="inspector-group" name="group_id"><option value="">Memuat insiden…</option></select></div><button class="button" data-action="add-group">Tambahkan bukti</button></section><div class="inspector-actions"><button class="button primary" data-action="review-current">${a.is_reviewed?'Kembalikan ke belum direview':'Tandai direview'}</button><button class="button" data-action="create-current">Buat insiden</button></div>`;
+    return `<dl class="detail-grid"><div class="key-value"><dt>Target asset</dt><dd>${esc(a.agent_name||'—')}</dd></div><div class="key-value"><dt>Tenant</dt><dd>${esc(a.tenant||'Default')}</dd></div><div class="key-value"><dt>Detection rule</dt><dd>${esc(a.rule_id||'—')} · Level ${Number(a.rule_level)||0}</dd></div><div class="key-value"><dt>Waktu</dt><dd>${esc(formatTime(a.timestamp))}</dd></div><div class="key-value wide"><dt>Source / intel</dt><dd class="mono">${esc(a.source_ip||'—')}</dd><dd class="meta" style="margin-top:2px;">${intelBadge(a)}</dd>${a.source_ip?`<dd style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;"><button class="button" data-action="enrich-single-ip" data-ip="${esc(a.source_ip)}">${icon('refresh')}Live Enrich</button><a class="button" href="http://localhost:3001/ip/${encodeURIComponent(a.source_ip)}" rel="noopener noreferrer" target="_blank">Buka IP Intel ${icon('external')}</a></dd>`:''}</div>${a.cve?`<div class="key-value"><dt>CVE</dt><dd>${esc(a.cve)}</dd></div>`:''}${a.mitre_ids?.length?`<div class="key-value wide"><dt>MITRE</dt><dd>${esc(a.mitre_ids.join(', '))}</dd></div>`:''}</dl>${log?`<section class="stack"><div class="split"><h3>Log utama</h3><button class="button" data-action="copy-redacted">Versi tersamarkan</button></div><pre class="raw-log">${esc(log)}</pre><p class="meta">Redaksi otomatis bukan jaminan aman untuk cloud. Tinjau hasil sebelum membagikan.</p></section>`:''}${a.previous_output?`<details><summary>Previous output</summary><pre class="raw-log">${esc(a.previous_output)}</pre></details>`:''}<section class="stack"><h3>Insiden terkait</h3>${a.groups?.length?a.groups.map(g=>`<div class="split"><a href="${withParams('/incidents/'+encodeURIComponent(g.id),new URLSearchParams({tenant:query.tenant}))}">${esc(g.title)}</a><button class="button icon-button" data-remove-group="${esc(g.id)}" aria-label="Keluarkan dari insiden ${esc(g.title)}">${icon('close')}</button></div>`).join(''):'<p class="meta">Belum terhubung ke insiden.</p>'}<div class="field"><label for="inspector-group">Tambahkan ke insiden</label><select id="inspector-group" name="group_id"><option value="">Memuat insiden…</option></select></div><button class="button" data-action="add-group">Tambahkan bukti ke insiden</button></section><section class="stack"><h3>Review</h3><div class="split"><span class="meta">${a.is_reviewed?'Sudah ditinjau':'Belum ditinjau'}</span><button class="button" data-action="review-current">${a.is_reviewed?'Kembalikan ke antrean':'Tandai selesai ditinjau'}</button></div></section>`;
   }
   async function renderInspector() {
     const a=currentAlert;if(!a)return;
@@ -153,7 +155,37 @@ ${rawLog}`;
   }
   async function correlation(){
     const slot=root.querySelector('#correlation-slot');slot.innerHTML=`<div class="correlation-panel">${loadingRows(2)}</div>`;
-    try{const d=await json(apiURL('/api/suggestions',scopeParams(query)),{signal});slot.innerHTML=`<section class="correlation-panel stack"><div class="split"><h2>Korelasi lokal</h2><button class="button icon-button" data-action="close-correlation" aria-label="Tutup korelasi">${icon('close')}</button></div><p class="meta">${esc(d.warning||'Saran berdasarkan rule lokal, bukan keputusan investigasi.')}</p>${d.suggestions?.length?d.suggestions.map((g,i)=>`<div class="evidence-row"><strong>${esc(g.title||g.category||'Saran insiden')}</strong><p class="meta">${esc(g.analysis||g.reason||'Tinjau bukti sebelum membuat insiden.')}</p><button class="button" data-suggestion="${i}">Tinjau sebagai insiden</button></div>`).join(''):'<p>Tidak ada saran pada scope ini.</p>'}</section>`;slot._suggestions=d.suggestions||[];}
+    try{
+      const d=await json(apiURL('/api/suggestions',scopeParams(query)),{signal});
+      const cards=d.suggestions?.length?d.suggestions.map((g,i)=>{
+        const count=Number(g.alert_count||(g.alert_ids||[]).length||0);
+        const sevBadge=g.rule_level!==undefined?severity(g.rule_level):'';
+        const ips=Array.isArray(g.source_ips)&&g.source_ips.length?`<span class="meta">Source IP: <strong class="mono">${esc(g.source_ips.slice(0,3).join(', '))}${g.source_ips.length>3?` (+${g.source_ips.length-3})`:''}</strong></span>`:'';
+        const agent=g.agent_name?`<span class="meta">Host / Agent: <strong>${esc(g.agent_name)}</strong></span>`:'';
+        const ruleInfo=g.rule_id&&g.rule_id!=='-'?`<span class="meta">Rule: <strong>${esc(g.rule_id)}</strong></span>`:'';
+        const basis=g.basis||g.category?`<span class="correlation-basis-badge">${esc(g.basis||g.category)}</span>`:'';
+        return `<article class="correlation-card" data-suggestion-card="${i}">
+          <div class="correlation-head">
+            <div class="correlation-title-row">
+              ${sevBadge}
+              <strong class="correlation-title">${esc(g.title||g.category||'Saran insiden')}</strong>
+              <span class="meta num">${count} alert (${g.total_hits||count} hits)</span>
+            </div>
+            <button class="button primary" data-suggestion="${i}">Tinjau sebagai insiden (${count} bukti)</button>
+          </div>
+          <div class="correlation-meta meta">
+            ${basis}
+            ${agent}
+            ${ips}
+            ${ruleInfo}
+          </div>
+          <p class="correlation-reason">${esc(g.reason||g.analysis||'Tinjau bukti sebelum membuat insiden.')}</p>
+        </article>`;
+      }).join(''):'<p class="meta">Tidak ada saran korelasi pada scope ini.</p>';
+
+      slot.innerHTML=`<section class="correlation-panel stack"><div class="split"><h2>Korelasi lokal</h2><button class="button icon-button" data-action="close-correlation" aria-label="Tutup korelasi">${icon('close')}</button></div><p class="meta">${esc(d.warning||'Saran berdasarkan rule lokal, bukan keputusan investigasi.')}</p><div class="correlation-grid">${cards}</div></section>`;
+      slot._suggestions=d.suggestions||[];
+    }
     catch(e){if(e.name!=='AbortError')slot.innerHTML=errorState(e.message);}
   }
   on(root,'click',async e=>{
@@ -203,6 +235,29 @@ ${rawLog}`;
     if(action==='copy-queue-log'||action==='copy-queue-redacted'||action==='copy-queue-defanged'){const aid=Number(button.dataset.alertId);const item=items.find(a=>a.id===aid);let text=item?.full_log||item?.raw?.full_log||'';if(!text){notify('Log tidak tersedia.','error');return;}if(action==='copy-queue-redacted'){try{const d=await json('/api/sanitize-logs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text}),signal});await copyText(d.sanitized);notify('Versi tersamarkan disalin.','info');}catch{notify('Gagal menyalin versi tersamarkan.','error');}}else if(action==='copy-queue-defanged'){await copyText(defangText(text));notify('Versi defanged disalin (aman dibagikan).','info');}else{await copyText(text);notify('Log alert disalin.','info');}return;}
     if(action==='report-query'){report();return;}
     if(action==='report-selected'){report(selection.ids());return;}
+    if(action==='enrich-single-ip'){
+      const ip=button.dataset.ip;if(!ip)return;
+      button.disabled=true;button.textContent='Enriching…';
+      try{
+        const res=await json(apiURL('/api/intel/enrich',{tenant:query.tenant}),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ips:[ip]}),signal});
+        const item=res.enriched?.[0];
+        notify(`IP ${ip} di-enrich: Skor Abuse ${item?.abuse_score??0}% (${item?.isp||item?.status||'ok'}).`,'success');
+        await load();if(activeId)await openInspector(activeId,false);
+      }catch(err){if(err.name!=='AbortError')notify(err.message,'error');}
+      finally{if(button.isConnected){button.disabled=false;button.innerHTML=`${icon('refresh')}Live Enrich`;}}
+      return;
+    }
+    if(action==='batch-enrich-intel'){
+      const ids=selection.ids();if(!ids.length){notify('Pilih minimal satu alert terlebih dahulu.','error');return;}
+      button.disabled=true;button.textContent='Enriching…';
+      try{
+        const res=await json(apiURL('/api/intel/enrich',{tenant:query.tenant}),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alert_ids:ids}),signal});
+        notify(`${res.count||0} IP unik dari ${ids.length} alert berhasil di-enrich.`,'success');
+        await load();if(activeId)await openInspector(activeId,false);
+      }catch(err){if(err.name!=='AbortError')notify(err.message,'error');}
+      finally{if(button.isConnected){button.disabled=false;button.innerHTML=`${icon('refresh')}Live Enrich IP`;}}
+      return;
+    }
     if(action==='create-incident'||action==='create-current'){const ids=action==='create-current'?[currentAlert.id]:selection.ids();navigate(withParams('/incidents/new',new URLSearchParams({tenant:query.tenant,alert_ids:ids.join(',')})));return;}
     if(action==='batch-review'||action==='batch-unreview'||action==='review-current'){button.disabled=true;await batch(action==='review-current'?!currentAlert.is_reviewed:action==='batch-review',action==='review-current'?[currentAlert.id]:selection.ids());if(button.isConnected)button.disabled=false;return;}
     if(action==='add-group'){const id=root.querySelector('#inspector-group').value;if(!id){notify('Pilih insiden terlebih dahulu.','error');return;}button.disabled=true;try{await json(apiURL(`/api/groups/${encodeURIComponent(id)}/members`,{tenant:query.tenant}),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alert_pks:[currentAlert.id],tenant:query.tenant}),signal});await openInspector(currentAlert.id,false);notify('Bukti ditambahkan ke insiden.','success');}catch(err){if(err.name!=='AbortError')notify(err.message,'error');}finally{button.disabled=false;}return;}
@@ -218,9 +273,38 @@ ${rawLog}`;
     if(el.id==='triage-sort'){const [sort_by,sort]=el.value.split(':');updateQuery({sort_by,sort});}
     if(el.id==='show-intel'){showIntel=el.checked;renderResults();}
     if(el.id==='filter-time-preset'){const custom=root.querySelector('#filter-custom-time');if(custom)custom.style.display=el.value==='custom'?'grid':'none';}
-    if(el.id==='page-size-select'){updateQuery({limit:Number(el.value),offset:0});}
+    if(el.id==='page-size-select'){
+      if(el.value==='custom'){
+        const wrap=root.querySelector('#custom-limit-wrap');
+        if(wrap){
+          wrap.style.display='inline-flex';
+          const input=root.querySelector('#custom-limit-input');
+          input?.focus();
+          input?.select();
+        }
+      }else{
+        const wrap=root.querySelector('#custom-limit-wrap');
+        if(wrap)wrap.style.display='none';
+        updateQuery({limit:Number(el.value),offset:0});
+      }
+    }
   });
-  on(root,'click',e=>{if(e.target.matches('[data-select]'))e.target._shift=e.shiftKey;});
+  on(root,'click',e=>{
+    if(e.target.id==='btn-apply-custom-limit'||e.target.closest('#btn-apply-custom-limit')){
+      const input=root.querySelector('#custom-limit-input');
+      const val=Math.min(10000,Math.max(1,parseInt(input?.value,10)||50));
+      updateQuery({limit:val,offset:0});
+      return;
+    }
+    if(e.target.matches('[data-select]'))e.target._shift=e.shiftKey;
+  });
+  on(root,'keydown',e=>{
+    if(e.target.id==='custom-limit-input'&&e.key==='Enter'){
+      e.preventDefault();
+      const val=Math.min(10000,Math.max(1,parseInt(e.target.value,10)||50));
+      updateQuery({limit:val,offset:0});
+    }
+  });
   on(root.querySelector('#triage-search'),'input',e=>{clearTimeout(searchTimer);const q=e.target.value;searchTimer=setTimeout(()=>updateQuery({q},{replace:true}),350);});
   on(root.querySelector('#triage-filter-form'),'submit',e=>{
     e.preventDefault();const form=new FormData(e.target);const [sort_by,sort]=form.get('ordering').split(':');dialog.close();

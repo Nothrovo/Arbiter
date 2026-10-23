@@ -45,6 +45,7 @@ class ExportTests(unittest.TestCase):
         self.assertIn("SQL Injection attempt", tsv)
         self.assertIn("195.201.245.94", tsv)
         self.assertIn("Reviewed", tsv)
+        self.assertIn("GET /index.php?id=1 UNION SELECT 1,2", tsv)
         self.assertTrue(tsv.startswith("No\tHit Count"))
 
     def test_generate_markdown_report(self):
@@ -61,6 +62,9 @@ class ExportTests(unittest.TestCase):
         self.assertIn("195.201.245.94", html)
         self.assertIn("5x", html)
         self.assertIn("Tabel Kronologi Investigasi", html)
+        self.assertIn('border="1"', html)
+        self.assertIn('border: 1px solid #cbd5e0', html)
+        self.assertIn('Full Log:</strong> GET /index.php?id=1 UNION SELECT 1,2', html)
 
     def test_generate_docx_landscape_report(self):
         buf = generate_docx_landscape_report(self.sample_alerts, self.meta)

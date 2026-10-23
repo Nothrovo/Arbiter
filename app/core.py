@@ -110,18 +110,63 @@ def suggest_groups(alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
     out = []
     for category, keyfn in rules:
-        buckets: dict[Any, list[str]] = defaultdict(list)
+        buckets: dict[Any, list[dict[str, Any]]] = defaultdict(list)
         for alert in alerts:
             key = keyfn(alert)
             if key:
-                buckets[key].append(str(alert.get("id") or alert.get("alert_id")))
-        for key, ids in buckets.items():
-            unique = list(dict.fromkeys(ids))
-            if len(unique) > 1:
+                buckets[key].append(alert)
+        for key, alert_list in buckets.items():
+            ids = [str(a.get("id") or a.get("alert_id")) for a in alert_list]
+            unique_ids = list(dict.fromkeys(ids))
+            if len(unique_ids) > 1:
+                first_alert = alert_list[0]
+                rule_id = str(first_alert.get("rule_id") or "-")
+                rule_level = max([int(a.get("rule_level") or 0) for a in alert_list], default=0)
+                descriptions = [a.get("description") for a in alert_list if a.get("description")]
+                description = descriptions[0] if descriptions else "Wazuh Alert"
+                agents = list(dict.fromkeys(str(a.get("agent_name")) for a in alert_list if a.get("agent_name") and a.get("agent_name") != "-"))
+                source_ips = list(dict.fromkeys(str(a.get("source_ip")) for a in alert_list if a.get("source_ip") and a.get("source_ip") != "-"))
+                timestamps = [str(a.get("timestamp")) for a in alert_list if a.get("timestamp")]
+                time_start = min(timestamps) if timestamps else ""
+                time_end = max(timestamps) if timestamps else ""
+                total_hits = sum(int(a.get("hit_count") or 1) for a in alert_list)
+
+                if category == "Same source + rule":
+                    src_ip = key[0] if isinstance(key, tuple) else ""
+                    title = f"Source {src_ip} · Rule {rule_id} ({description})"
+                    basis = f"Korelasi IP Sumber: {src_ip} & Rule {rule_id}"
+                    reason = f"Terdeteksi {len(unique_ids)} alert ({total_hits} hits) dari IP sumber {src_ip} yang memicu Rule {rule_id} ({description}) dengan Level {rule_level}."
+                elif category == "Same agent + rule":
+                    agent_h = key[0] if isinstance(key, tuple) else ""
+                    title = f"Host {agent_h} · Rule {rule_id} ({description})"
+                    basis = f"Korelasi Host Target: {agent_h} & Rule {rule_id}"
+                    reason = f"Terdeteksi {len(unique_ids)} alert ({total_hits} hits) pada host target '{agent_h}' yang memicu Rule {rule_id} ({description}) dengan Level {rule_level}."
+                elif category == "Same CVE identifier":
+                    cve_val = key if isinstance(key, str) else str(key)
+                    title = f"CVE {cve_val} ({description})"
+                    basis = f"Korelasi CVE Bersama: {cve_val}"
+                    reason = f"Terdeteksi {len(unique_ids)} alert ({total_hits} hits) yang terkait dengan kerentanan CVE {cve_val}."
+                else:
+                    title = f"Signature Cluster · Rule {rule_id} ({description})"
+                    basis = f"Pola Log Signature Identik · Rule {rule_id}"
+                    reason = f"Terdeteksi {len(unique_ids)} alert berulang dengan pola log signature identik pada Rule {rule_id}."
+
                 out.append({
+                    "title": title,
                     "category": category,
+                    "basis": basis,
+                    "reason": reason,
+                    "rule_id": rule_id,
+                    "rule_level": rule_level,
+                    "description": description,
+                    "agent_name": agents[0] if agents else "",
+                    "source_ips": source_ips,
+                    "alert_count": len(unique_ids),
+                    "total_hits": total_hits,
+                    "time_start": time_start,
+                    "time_end": time_end,
                     "key": list(key) if isinstance(key, tuple) else key,
-                    "alert_ids": unique,
+                    "alert_ids": unique_ids,
                 })
     return out
 

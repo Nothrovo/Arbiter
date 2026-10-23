@@ -6,16 +6,16 @@
     "semantic_hash": "7429f9059f2c1af4b825547679a47608"
   },
   "app/config.py": {
-    "mtime": 1792655338.917194,
-    "seen": 1792655341.4644794,
-    "ast_hash": "4295fda89b9bf1b81c06312b82570b16",
+    "mtime": 1792738225.4351618,
+    "seen": 1792738353.0332248,
+    "ast_hash": "64cb4e30a33764dcaae4e66ee243be66",
     "semantic_hash": ""
   },
   "app/core.py": {
-    "mtime": 1792655338.917194,
-    "seen": 1792655341.4644852,
-    "ast_hash": "7208a3efa70bff9a9b8afd2f6f1059ee",
-    "semantic_hash": "7208a3efa70bff9a9b8afd2f6f1059ee"
+    "mtime": 1792728412.234246,
+    "seen": 1792728475.012602,
+    "ast_hash": "5c62031e83cd8f624188225601fc66fa",
+    "semantic_hash": ""
   },
   "app/database.py": {
     "mtime": 1792655338.9173434,
@@ -24,15 +24,15 @@
     "semantic_hash": ""
   },
   "app/exports.py": {
-    "mtime": 1792655338.9174902,
-    "seen": 1792655341.464496,
-    "ast_hash": "80433d388b4c8a563010cb1d286b1bcb",
-    "semantic_hash": "80433d388b4c8a563010cb1d286b1bcb"
+    "mtime": 1792726247.0402951,
+    "seen": 1792726706.5707242,
+    "ast_hash": "95839bb879878c0440fac51c31a0eb3c",
+    "semantic_hash": ""
   },
   "app/main.py": {
-    "mtime": 1792655338.9176934,
-    "seen": 1792655341.4645011,
-    "ast_hash": "093fa9032c6d9384b08b29467268eb48",
+    "mtime": 1792729809.4976356,
+    "seen": 1792729943.675116,
+    "ast_hash": "e1f090ca7a96f26bc9f415c3549aac0c",
     "semantic_hash": ""
   },
   "app/parser.py": {
@@ -78,10 +78,10 @@
     "semantic_hash": "5dde0c9bcde88bdc7375962290444621"
   },
   "tests/test_exports.py": {
-    "mtime": 1792655338.9431162,
-    "seen": 1792655341.46485,
-    "ast_hash": "9d62908f888b59e09f9d00e738b1dd4d",
-    "semantic_hash": "9d62908f888b59e09f9d00e738b1dd4d"
+    "mtime": 1792726261.9258974,
+    "seen": 1792726706.57103,
+    "ast_hash": "ce38c5fa3de079b11f9aabbfea1b701b",
+    "semantic_hash": ""
   },
   "tests/test_parser.py": {
     "mtime": 1792655338.9431162,
@@ -138,15 +138,15 @@
     "semantic_hash": ""
   },
   "app/index.html": {
-    "mtime": 1792655338.917617,
-    "seen": 1792655341.4649165,
-    "ast_hash": "0a63dde7443a9601a339140ef44f7363",
+    "mtime": 1792726153.673163,
+    "seen": 1792726706.5710588,
+    "ast_hash": "72ead07be013a944f47ad66ee879d580",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1792655338.9223626,
-    "seen": 1792655341.4649274,
-    "ast_hash": "a0a9942ebd611f599758961351282c48",
+    "mtime": 1792738251.1116776,
+    "seen": 1792738353.0338492,
+    "ast_hash": "06c808c0d88e4835ad54239b3da706a1",
     "semantic_hash": ""
   },
   "docs/ui-ux-redesign/AUDIT.md": {
@@ -264,15 +264,15 @@
     "semantic_hash": ""
   },
   "app/static/js/features/triage/model.js": {
-    "mtime": 1792655338.9212844,
-    "seen": 1792655341.464605,
-    "ast_hash": "154d141dc8018e71445590ac94246fb0",
+    "mtime": 1792737902.8238525,
+    "seen": 1792737937.1788614,
+    "ast_hash": "4b5a596271cd5e7116e2c9006335c952",
     "semantic_hash": ""
   },
   "app/static/js/features/triage/view.js": {
-    "mtime": 1792657732.4042404,
-    "seen": 1792657820.6971307,
-    "ast_hash": "cdaa28ae54f1bf375c03736969968404",
+    "mtime": 1792737914.4738896,
+    "seen": 1792737937.1788638,
+    "ast_hash": "0dd0b04a390de3797713934c1503539a",
     "semantic_hash": ""
   },
   "app/static/js/router.js": {
@@ -282,9 +282,9 @@
     "semantic_hash": ""
   },
   "app/static/js/state/scope.js": {
-    "mtime": 1792657501.7705603,
-    "seen": 1792657820.6971376,
-    "ast_hash": "4e15f01a7e5440162bed22ca9700d43e",
+    "mtime": 1792729830.6312904,
+    "seen": 1792729943.6752193,
+    "ast_hash": "a67c0533751b7e1252a76be120ffcdc1",
     "semantic_hash": ""
   },
   "app/static/js/state/selection.js": {
@@ -390,9 +390,9 @@
     "semantic_hash": ""
   },
   "tests/test_ui_api.py": {
-    "mtime": 1792655338.9431162,
-    "seen": 1792655341.4648666,
-    "ast_hash": "df97de145bf7ad8acc8b72d18e8da21a",
+    "mtime": 1792726541.7421887,
+    "seen": 1792726706.5710373,
+    "ast_hash": "8a71ac0d191ed11f3aab662548fa693e",
     "semantic_hash": ""
   },
   "docs/ui-ux-redesign/IMPLEMENTATION-CONTRACT.md": {
@@ -573,6 +573,24 @@
     "mtime": 1792655338.9166653,
     "seen": 1792655341.4648995,
     "ast_hash": "93e9e34e40493939ddea522f5940dfc8",
+    "semantic_hash": ""
+  },
+  "app/intel.py": {
+    "mtime": 1792738238.8449786,
+    "seen": 1792738353.033252,
+    "ast_hash": "828edff0b870ee1103b06c24434d9190",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md": {
+    "mtime": 1792726112.5472498,
+    "seen": 1792726706.5710654,
+    "ast_hash": "c88a3123d295072b542d5012e065a8e3",
+    "semantic_hash": ""
+  },
+  "app/static/img/favicon.svg": {
+    "mtime": 1792726143.941374,
+    "seen": 1792726706.5710828,
+    "ast_hash": "093cc8dfa61c05b10b618e40fd600207",
     "semantic_hash": ""
   }
 }

@@ -401,6 +401,21 @@ class UIAPIContractTests(unittest.TestCase):
         self.assertEqual(response_future.status_code, 200)
         self.assertEqual(len(response_future.json()["items"]), 0)
 
+    def test_intel_enrich_endpoint_private_ip(self):
+        response = self.client.post("/api/intel/enrich", json={"ips": ["10.0.0.1", "192.168.1.100"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["count"], 2)
+        for item in data["enriched"]:
+            self.assertEqual(item["status"], "private")
+            self.assertEqual(item["abuse_score"], 0)
+            self.assertEqual(item["country_code"], "LAN")
+
+    def test_intel_enrich_endpoint_rejects_empty_or_invalid(self):
+        response = self.client.post("/api/intel/enrich", json={"ips": ["invalid-ip", "not_an_ip"]})
+        self.assertEqual(response.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

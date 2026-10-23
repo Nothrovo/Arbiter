@@ -9,6 +9,7 @@ REMOTE_DATABASE_URL = os.getenv("REMOTE_DATABASE_URL", os.getenv("INTEL_DATABASE
 ACTIVE_DB_PROFILE = os.getenv("ACTIVE_DB_PROFILE", "local")
 PORT = int(os.getenv("PORT", "8000"))
 HOST = os.getenv("HOST", "0.0.0.0")
+ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
 
 # Security and Privacy
 ENABLE_LOCAL_AI = os.getenv("ENABLE_LOCAL_AI", "false").lower() in ("true", "1", "yes")

@@ -44,7 +44,7 @@ def generate_tsv_table(alerts: list[dict[str, Any]]) -> str:
     rows = [headers]
     for idx, a in enumerate(alerts, 1):
         full_log = a.get("full_log") or (a.get("raw") or {}).get("full_log") or ""
-        clean_log = str(full_log).replace("\t", " ").replace("\n", " ")[:180]
+        clean_log = str(full_log).replace("\t", " ").replace("\r\n", " ").replace("\n", " ").strip()
         reviewed = "Reviewed" if a.get("is_reviewed") else "Pending"
         rows.append([
             str(idx),
@@ -167,17 +167,17 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
 
     if alerts:
         html_parts.append("""
-        <table>
+        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e0; margin: 12px 0 20px; font-family: Arial, sans-serif; font-size: 9.5pt;">
             <thead>
-                <tr>
-                    <th style="width: 25px;">No</th>
-                    <th style="width: 45px;">Hits</th>
-                    <th style="width: 135px;">Timestamp</th>
-                    <th style="width: 120px;">Host / Agent</th>
-                    <th style="width: 110px;">Rule & Severity</th>
-                    <th>Ringkasan Event / Tindakan Penyerang</th>
-                    <th style="width: 170px;">Source IP & Intel</th>
-                    <th style="width: 120px;">CVE / MITRE</th>
+                <tr style="background-color: #edf2f7;">
+                    <th style="width: 25px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">No</th>
+                    <th style="width: 45px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Hits</th>
+                    <th style="width: 135px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Timestamp</th>
+                    <th style="width: 120px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Host / Agent</th>
+                    <th style="width: 110px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Rule &amp; Severity</th>
+                    <th style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Ringkasan Event / Full Log</th>
+                    <th style="width: 170px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Source IP &amp; Intel</th>
+                    <th style="width: 120px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">CVE / MITRE</th>
                 </tr>
             </thead>
             <tbody>
@@ -203,18 +203,24 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
                 cve_mitre.append(f"<strong>MITRE:</strong> {escape(', '.join(a['mitre_ids']))}")
 
             full_log = a.get("full_log") or (a.get("raw") or {}).get("full_log") or ""
-            log_snippet = f"<br><code style='font-size:8.5pt; color:#4a5568;'>Log: {escape(str(full_log)[:160])}...</code>" if full_log else ""
+            log_block = (
+                f"<div style='margin-top: 6px; padding: 6px 8px; background-color: #f8fafc; "
+                f"border: 1px solid #e2e8f0; border-radius: 4px; font-family: Consolas, \"Courier New\", monospace; "
+                f"font-size: 8pt; color: #2d3748; white-space: pre-wrap; word-break: break-all;'>"
+                f"<strong>Full Log:</strong> {escape(str(full_log))}</div>"
+            ) if full_log else ""
 
+            row_bg = "background-color: #f7fafc;" if idx % 2 == 0 else "background-color: #ffffff;"
             html_parts.append(f"""
-                <tr>
-                    <td>{idx}</td>
-                    <td><strong>{hits}x</strong></td>
-                    <td>{escape(str(a.get('timestamp') or '-'))}</td>
-                    <td><strong>{escape(str(a.get('agent_name') or '-'))}</strong><br><small>{escape(str(a.get('agent_ip') or '-'))}</small></td>
-                    <td><span class="{row_lvl}">Level {lvl}</span><br><small>Rule {escape(str(a.get('rule_id') or '-'))}</small></td>
-                    <td><strong>{escape(str(a.get('description') or '-'))}</strong>{log_snippet}</td>
-                    <td>{escape(str(a.get('source_ip') or '-'))}{intel_txt}</td>
-                    <td>{'<br>'.join(cve_mitre) or '-'}</td>
+                <tr style="{row_bg}">
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{idx}</td>
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><strong>{hits}x</strong></td>
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{escape(str(a.get('timestamp') or '-'))}</td>
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get('agent_name') or '-'))}</strong><br><small>{escape(str(a.get('agent_ip') or '-'))}</small></td>
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><span class="{row_lvl}">Level {lvl}</span><br><small>Rule {escape(str(a.get('rule_id') or '-'))}</small></td>
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get('description') or '-'))}</strong>{log_block}</td>
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{escape(str(a.get('source_ip') or '-'))}{intel_txt}</td>
+                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{'<br>'.join(cve_mitre) or '-'}</td>
                 </tr>
             """)
         html_parts.append("</tbody></table>")
