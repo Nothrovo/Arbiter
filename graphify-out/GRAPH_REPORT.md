@@ -6,12 +6,12 @@
 - Unclassified: 11 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
 
 ## Summary
-- 728 nodes · 1529 edges · 38 communities (28 shown, 10 thin omitted)
+- 727 nodes · 1529 edges · 37 communities (27 shown, 10 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 32 edges (avg confidence: 0.89)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f91a484a`
+- Built from commit: `de9ea5ef`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,7 +20,7 @@
 - main.py
 - test_ui_api.py
 - esc
-- ref_node_assert
+- state.js
 - sanitize_text
 - ApiIntegrationTests
 - init-db.sql
@@ -43,7 +43,7 @@
 - intel.py
 - IPIntel — CyberSOC & Threat Intelligence Web
 - _get_alerts_for_export
-- query.py
+- positive_ids
 - 6. SOC Log Reader — bagian demi bagian
 - MANUAL — Menjalankan IP Intel Web
 - Struktur Proyek `ipintel/`
@@ -56,46 +56,46 @@
 1. `esc()` - 38 edges
 2. `mount()` - 31 edges
 3. `json()` - 30 edges
-4. `UIAPIContractTests` - 27 edges
-5. `get_db()` - 27 edges
+4. `get_db()` - 27 edges
+5. `UIAPIContractTests` - 27 edges
 6. `mountWorkspace()` - 25 edges
 7. `5. Halaman web, bagian demi bagian` - 24 edges
 8. `mount()` - 22 edges
-9. `errorState()` - 22 edges
-10. `icon()` - 22 edges
+9. `icon()` - 22 edges
+10. `errorState()` - 22 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Key policies` --references--> `scopeParams()`  [INFERRED]
-  AGENTS.md → app/static/js/state/scope.js
 - `3. Peta route Flask (`app.py`)` --references--> `batch()`  [INFERRED]
   GUIDE_WIRA/STRUCTURE.md → app/static/js/features/triage/view.js
+- `Key policies` --references--> `scopeParams()`  [INFERRED]
+  AGENTS.md → app/static/js/state/scope.js
+- `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `suggest_groups()`  [INFERRED]
+  docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/core.py
 - `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `generate_tsv_table()`  [INFERRED]
   docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/exports.py
 - `Task 2: GDocs & TSV Export: Full Log & Clean Borders` --references--> `generate_tsv_table()`  [INFERRED]
   docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/exports.py
-- `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `suggest_groups()`  [INFERRED]
-  docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/core.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (38 total, 10 thin omitted)
+## Communities (37 total, 10 thin omitted)
 
 ### Community 0 - "parser.py"
 Cohesion: 0.08
 Nodes (22): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ollama_request(), suggest_groups(), suggestions_with_fallback(), as_dict(), build_log_signature() (+14 more)
 
 ### Community 1 - "main.py"
-Cohesion: 0.17
-Nodes (21): get_db(), add_group_members(), api_database_status(), create_group(), delete_group(), favicon(), get_alert_detail(), get_group_detail() (+13 more)
+Cohesion: 0.15
+Nodes (19): get_db(), init_database(), api_database_status(), delete_group(), favicon(), get_alert_detail(), get_group_detail(), get_suggestions() (+11 more)
 
 ### Community 3 - "esc"
 Cohesion: 0.09
 Nodes (66): apiURL(), json(), notify(), render(), summarizeTelemetryRange(), mount(), loadStatus(), render() (+58 more)
 
-### Community 4 - "ref_node_assert"
-Cohesion: 0.06
-Nodes (37): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), SEVERITIES (+29 more)
+### Community 4 - "state.js"
+Cohesion: 0.13
+Nodes (19): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), SEVERITIES (+11 more)
 
 ### Community 7 - "init-db.sql"
 Cohesion: 0.33
@@ -126,16 +126,16 @@ Cohesion: 0.22
 Nodes (3): click(), Control, fixture()
 
 ### Community 18 - "reports/view.js"
-Cohesion: 0.12
-Nodes (24): ApiError, copyHTML(), copyText(), download(), request(), caseReportRoute(), createReportSession(), exportURL() (+16 more)
+Cohesion: 0.06
+Nodes (39): ApiError, copyHTML(), copyText(), download(), request(), caseReportRoute(), createReportSession(), exportURL() (+31 more)
 
 ### Community 19 - "app.js"
-Cohesion: 0.11
-Nodes (16): closeNav(), health(), help, main, navigationMemory, pageTitles, router, scrim (+8 more)
+Cohesion: 0.08
+Nodes (19): closeNav(), health(), help, main, navigationMemory, pageTitles, router, scrim (+11 more)
 
 ### Community 22 - "database.py"
-Cohesion: 0.16
-Nodes (10): get_active_profile(), get_database_status(), get_db_connection(), ingest_alert_with_dedup(), mask_connection_url(), purge_alerts(), purge_incidents(), set_active_profile() (+2 more)
+Cohesion: 0.17
+Nodes (9): get_active_profile(), get_database_status(), get_db_connection(), mask_connection_url(), purge_alerts(), purge_incidents(), set_active_profile(), test_db_connection() (+1 more)
 
 ### Community 23 - "Arbiter"
 Cohesion: 0.33
@@ -150,7 +150,7 @@ Cohesion: 0.08
 Nodes (24): 5.10 MITRE ATT&CK — `GET /mitre`, 5.11 MISP Events — `GET /misp`, 5.12 Detail Event MISP — `GET /misp/event/<id>`, 5.13 Import MISP — `GET/POST /misp/import`, 5.14 Universal IoCs — `GET /iocs`, 5.15 Korelasi IOC — `GET /correlate?val=...`, 5.16 Threat Feeds — `GET /threat-feeds`, 5.17 Threat Actors / APT — `GET /actors` (+16 more)
 
 ### Community 26 - "intel.py"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (7): enrich_ip(), is_private_ip(), is_valid_ip(), query_abuseipdb(), sync_remote_cache(), upsert_ip_cache(), enrich_intel()
 
 ### Community 27 - "IPIntel — CyberSOC & Threat Intelligence Web"
@@ -160,10 +160,6 @@ Nodes (11): 10. Parser SOC dan aturan keamanan tampilan, 11. Konfigurasi dan kea
 ### Community 28 - "_get_alerts_for_export"
 Cohesion: 0.18
 Nodes (10): generate_gdocs_html_report(), export_gdocs_html(), export_preview(), _get_alerts_for_export(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders (+2 more)
-
-### Community 29 - "query.py"
-Cohesion: 0.20
-Nodes (4): init_database(), export_scope(), lifespan(), positive_ids()
 
 ### Community 30 - "6. SOC Log Reader — bagian demi bagian"
 Cohesion: 0.22
@@ -178,8 +174,8 @@ Cohesion: 0.29
 Nodes (6): 1. Tree + ukuran file, 2. Graph dependensi modul (siapa import siapa), 3. Peta route Flask (`app.py`), 4. Alur data enrichment (DB-first), 5. Tabel database, Struktur Proyek `ipintel/`
 
 ### Community 33 - "Any"
-Cohesion: 0.27
-Nodes (10): api_database_config(), api_database_purge_alerts(), api_database_purge_incidents(), api_database_switch(), api_database_test(), api_sanitize_logs(), batch_update_review(), import_file() (+2 more)
+Cohesion: 0.19
+Nodes (15): ingest_alert_with_dedup(), add_group_members(), api_database_config(), api_database_purge_alerts(), api_database_purge_incidents(), api_database_switch(), api_database_test(), api_sanitize_logs() (+7 more)
 
 ### Community 34 - "4. Menjalankan aplikasi"
 Cohesion: 0.50
@@ -200,16 +196,16 @@ Nodes (4): 9.1 Tabel inti, 9.2 Tabel CTI, 9.3 Tabel SOC, 9. Database
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Task 4: Two-Way IP Intel Live Enrichment` connect `_get_alerts_for_export` to `esc`?**
-  _High betweenness centrality (0.428) - this node is a cross-community bridge._
+  _High betweenness centrality (0.429) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `json()` (e.g. with `mount()` and `loadSelected()`) actually correct?**
   _`json()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Should `parser.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.07704918032786885 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0750925436277102 - nodes in this community are weakly interconnected._
 - **Why does `intelSummary()` connect `esc` to `_get_alerts_for_export`?**
-  _High betweenness centrality (0.428) - this node is a cross-community bridge._
+  _High betweenness centrality (0.429) - this node is a cross-community bridge._
+- **Should `main.py` be split into smaller, more focused modules?**
+  _Cohesion score 0.14838709677419354 - nodes in this community are weakly interconnected._
 - **Should `test_ui_api.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.13071895424836602 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.13725490196078433 - nodes in this community are weakly interconnected._
 - **Should `esc` be split into smaller, more focused modules?**
   _Cohesion score 0.0910960916838084 - nodes in this community are weakly interconnected._
-- **Should `ref_node_assert` be split into smaller, more focused modules?**
-  _Cohesion score 0.05711849957374254 - nodes in this community are weakly interconnected._
