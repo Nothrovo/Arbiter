@@ -6,14 +6,14 @@
     "semantic_hash": "7429f9059f2c1af4b825547679a47608"
   },
   "app/config.py": {
-    "mtime": 1792738225.4351618,
-    "seen": 1792738353.0332248,
+    "mtime": 1792738376.660704,
+    "seen": 1792738380.0712636,
     "ast_hash": "64cb4e30a33764dcaae4e66ee243be66",
     "semantic_hash": ""
   },
   "app/core.py": {
-    "mtime": 1792728412.234246,
-    "seen": 1792728475.012602,
+    "mtime": 1792738376.663234,
+    "seen": 1792738380.071272,
     "ast_hash": "5c62031e83cd8f624188225601fc66fa",
     "semantic_hash": ""
   },
@@ -24,14 +24,14 @@
     "semantic_hash": ""
   },
   "app/exports.py": {
-    "mtime": 1792726247.0402951,
-    "seen": 1792726706.5707242,
+    "mtime": 1792738376.663761,
+    "seen": 1792738380.0712903,
     "ast_hash": "95839bb879878c0440fac51c31a0eb3c",
     "semantic_hash": ""
   },
   "app/main.py": {
-    "mtime": 1792729809.4976356,
-    "seen": 1792729943.675116,
+    "mtime": 1792738376.6653965,
+    "seen": 1792738380.0713096,
     "ast_hash": "e1f090ca7a96f26bc9f415c3549aac0c",
     "semantic_hash": ""
   },
@@ -78,8 +78,8 @@
     "semantic_hash": "5dde0c9bcde88bdc7375962290444621"
   },
   "tests/test_exports.py": {
-    "mtime": 1792726261.9258974,
-    "seen": 1792726706.57103,
+    "mtime": 1792738376.6707075,
+    "seen": 1792738380.071827,
     "ast_hash": "ce38c5fa3de079b11f9aabbfea1b701b",
     "semantic_hash": ""
   },
@@ -138,14 +138,14 @@
     "semantic_hash": ""
   },
   "app/index.html": {
-    "mtime": 1792726153.673163,
-    "seen": 1792726706.5710588,
+    "mtime": 1792738376.6644223,
+    "seen": 1792738380.0719197,
     "ast_hash": "72ead07be013a944f47ad66ee879d580",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1792738251.1116776,
-    "seen": 1792738353.0338492,
+    "mtime": 1792738376.666697,
+    "seen": 1792738380.0719342,
     "ast_hash": "06c808c0d88e4835ad54239b3da706a1",
     "semantic_hash": ""
   },
@@ -264,14 +264,14 @@
     "semantic_hash": ""
   },
   "app/static/js/features/triage/model.js": {
-    "mtime": 1792737902.8238525,
-    "seen": 1792737937.1788614,
+    "mtime": 1792738376.666438,
+    "seen": 1792738380.0714703,
     "ast_hash": "4b5a596271cd5e7116e2c9006335c952",
     "semantic_hash": ""
   },
   "app/static/js/features/triage/view.js": {
-    "mtime": 1792737914.4738896,
-    "seen": 1792737937.1788638,
+    "mtime": 1792738376.666697,
+    "seen": 1792738380.0714767,
     "ast_hash": "0dd0b04a390de3797713934c1503539a",
     "semantic_hash": ""
   },
@@ -282,8 +282,8 @@
     "semantic_hash": ""
   },
   "app/static/js/state/scope.js": {
-    "mtime": 1792729830.6312904,
-    "seen": 1792729943.6752193,
+    "mtime": 1792738376.666697,
+    "seen": 1792738380.0714967,
     "ast_hash": "a67c0533751b7e1252a76be120ffcdc1",
     "semantic_hash": ""
   },
@@ -390,8 +390,8 @@
     "semantic_hash": ""
   },
   "tests/test_ui_api.py": {
-    "mtime": 1792726541.7421887,
-    "seen": 1792726706.5710373,
+    "mtime": 1792738376.6707075,
+    "seen": 1792738380.071849,
     "ast_hash": "8a71ac0d191ed11f3aab662548fa693e",
     "semantic_hash": ""
   },
@@ -576,20 +576,20 @@
     "semantic_hash": ""
   },
   "app/intel.py": {
-    "mtime": 1792738238.8449786,
-    "seen": 1792738353.033252,
+    "mtime": 1792738376.6651056,
+    "seen": 1792738380.0712998,
     "ast_hash": "828edff0b870ee1103b06c24434d9190",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md": {
-    "mtime": 1792726112.5472498,
-    "seen": 1792726706.5710654,
+    "mtime": 1792738376.6680536,
+    "seen": 1792738380.0719414,
     "ast_hash": "c88a3123d295072b542d5012e065a8e3",
     "semantic_hash": ""
   },
   "app/static/img/favicon.svg": {
-    "mtime": 1792726143.941374,
-    "seen": 1792726706.5710828,
+    "mtime": 1792738376.6653965,
+    "seen": 1792738380.0720017,
     "ast_hash": "093cc8dfa61c05b10b618e40fd600207",
     "semantic_hash": ""
   }
