@@ -40,12 +40,14 @@ def generate_tsv_table(alerts: list[dict[str, Any]]) -> str:
         "Country",
         "Full Log Snippet",
         "Status",
+        "Analisis",
     ]
     rows = [headers]
     for idx, a in enumerate(alerts, 1):
         full_log = a.get("full_log") or (a.get("raw") or {}).get("full_log") or ""
         clean_log = str(full_log).replace("\t", " ").replace("\r\n", " ").replace("\n", " ").strip()
         reviewed = "Reviewed" if a.get("is_reviewed") else "Pending"
+        analysis = str(a.get("reviewer_notes") or "").replace("\t", " ").replace("\r\n", " ").replace("\n", " ").strip()
         rows.append([
             str(idx),
             str(a.get("hit_count") or 1),
@@ -61,6 +63,7 @@ def generate_tsv_table(alerts: list[dict[str, Any]]) -> str:
             str(a.get("country_code") or "-"),
             clean_log,
             reviewed,
+            analysis,
         ])
     output = io.StringIO()
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
@@ -141,18 +144,18 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
     html_parts = [
         """<!DOCTYPE html><html><head><meta charset="utf-8">
         <style>
-        body { font-family: Arial, sans-serif; font-size: 11pt; color: #111; line-height: 1.45; }
-        h1 { color: #1a365d; border-bottom: 2px solid #2b6cb0; padding-bottom: 6px; font-size: 16pt; margin-top: 10px; }
-        h2 { color: #2c5282; font-size: 13pt; margin-top: 20px; border-bottom: 1px solid #cbd5e0; padding-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 9.5pt; }
-        th, td { border: 1px solid #cbd5e0; padding: 7px 10px; text-align: left; vertical-align: top; }
+        body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; line-height: 1.35; margin: 0; padding: 0; }
+        h1 { color: #1a365d; border-bottom: 2px solid #2b6cb0; padding-bottom: 4px; font-size: 15pt; margin: 8px 0 10px; }
+        h2 { color: #2c5282; font-size: 12pt; margin: 16px 0 8px; border-bottom: 1px solid #cbd5e0; padding-bottom: 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 9pt; line-height: 1.3; }
+        th, td { border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; }
         th { background-color: #edf2f7; color: #2d3748; font-weight: bold; }
         tr:nth-child(even) { background-color: #f7fafc; }
-        .badge-high { background-color: #fed7d7; color: #9b2c2c; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .badge-med { background-color: #feebc8; color: #7b341e; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .badge-low { background-color: #e2e8f0; color: #4a5568; padding: 2px 6px; border-radius: 4px; }
-        .meta-box { background: #f8fafc; border-left: 4px solid #3182ce; padding: 12px; margin: 12px 0; font-size: 10pt; }
-        .content-box { background: #ffffff; border: 1px solid #cbd5e0; padding: 12px; border-radius: 4px; margin-bottom: 16px; font-size: 10.5pt; }
+        .badge-high { background-color: #fed7d7; color: #9b2c2c; padding: 1px 5px; border-radius: 3px; font-weight: bold; font-size: 8pt; }
+        .badge-med { background-color: #feebc8; color: #7b341e; padding: 1px 5px; border-radius: 3px; font-weight: bold; font-size: 8pt; }
+        .badge-low { background-color: #e2e8f0; color: #4a5568; padding: 1px 5px; border-radius: 3px; font-size: 8pt; }
+        .meta-box { background: #f8fafc; border-left: 4px solid #3182ce; padding: 8px 12px; margin: 8px 0; font-size: 9.5pt; }
+        .content-box { background: #ffffff; border: 1px solid #cbd5e0; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 9.5pt; }
         </style></head><body>
         """,
         f"<h1>{escape(title)}</h1>",
@@ -166,22 +169,19 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
     ]
 
     if alerts:
-        html_parts.append("""
-        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e0; margin: 12px 0 20px; font-family: Arial, sans-serif; font-size: 9.5pt;">
-            <thead>
-                <tr style="background-color: #edf2f7;">
-                    <th style="width: 25px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">No</th>
-                    <th style="width: 45px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Hits</th>
-                    <th style="width: 135px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Timestamp</th>
-                    <th style="width: 120px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Host / Agent</th>
-                    <th style="width: 110px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Rule &amp; Severity</th>
-                    <th style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Ringkasan Event / Full Log</th>
-                    <th style="width: 170px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Source IP &amp; Intel</th>
-                    <th style="width: 120px; border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">CVE / MITRE</th>
-                </tr>
-            </thead>
-            <tbody>
-        """)
+        html_parts.append(
+            '<table border="1" cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e0; margin: 8px 0 14px; font-family: Arial, sans-serif; font-size: 9pt; line-height: 1.3;">'
+            '<thead><tr style="background-color: #edf2f7;">'
+            '<th style="width: 25px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">No</th>'
+            '<th style="width: 35px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Hits</th>'
+            '<th style="width: 125px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Timestamp</th>'
+            '<th style="width: 110px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Host / Agent</th>'
+            '<th style="width: 95px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Rule &amp; Severity</th>'
+            '<th style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Ringkasan Event / Full Log</th>'
+            '<th style="width: 130px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Source IP &amp; Intel</th>'
+            '<th style="width: 150px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Analisis</th>'
+            '</tr></thead><tbody>'
+        )
         for idx, a in enumerate(alerts, 1):
             lvl = int(a.get("rule_level") or 0)
             row_lvl = "badge-high" if lvl >= 10 else ("badge-med" if lvl >= 7 else "badge-low")
@@ -196,33 +196,29 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
                     intel_txt += f" ({escape(str(a['country_code']))})"
                 intel_txt += "</small>"
 
-            cve_mitre = []
-            if a.get("cve"):
-                cve_mitre.append(f"<strong>CVE:</strong> {escape(str(a['cve']))}")
-            if a.get("mitre_ids"):
-                cve_mitre.append(f"<strong>MITRE:</strong> {escape(', '.join(a['mitre_ids']))}")
-
-            full_log = a.get("full_log") or (a.get("raw") or {}).get("full_log") or ""
+            full_log = (a.get("full_log") or (a.get("raw") or {}).get("full_log") or "").strip()
             log_block = (
-                f"<div style='margin-top: 6px; padding: 6px 8px; background-color: #f8fafc; "
-                f"border: 1px solid #e2e8f0; border-radius: 4px; font-family: Consolas, \"Courier New\", monospace; "
-                f"font-size: 8pt; color: #2d3748; white-space: pre-wrap; word-break: break-all;'>"
-                f"<strong>Full Log:</strong> {escape(str(full_log))}</div>"
+                f"<div style='margin-top: 3px; padding: 3px 5px; background-color: #f8fafc; "
+                f"border: 1px solid #e2e8f0; border-radius: 3px; font-family: Consolas, \"Courier New\", monospace; "
+                f"font-size: 7.5pt; line-height: 1.25; color: #2d3748; white-space: pre-wrap; word-break: break-all;'>"
+                f"<strong>Full Log:</strong> {escape(full_log)}</div>"
             ) if full_log else ""
 
             row_bg = "background-color: #f7fafc;" if idx % 2 == 0 else "background-color: #ffffff;"
-            html_parts.append(f"""
-                <tr style="{row_bg}">
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{idx}</td>
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><strong>{hits}x</strong></td>
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{escape(str(a.get('timestamp') or '-'))}</td>
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get('agent_name') or '-'))}</strong><br><small>{escape(str(a.get('agent_ip') or '-'))}</small></td>
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><span class="{row_lvl}">Level {lvl}</span><br><small>Rule {escape(str(a.get('rule_id') or '-'))}</small></td>
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get('description') or '-'))}</strong>{log_block}</td>
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{escape(str(a.get('source_ip') or '-'))}{intel_txt}</td>
-                    <td style="border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; vertical-align: top;">{'<br>'.join(cve_mitre) or '-'}</td>
-                </tr>
-            """)
+            analysis_text = escape(str(a.get("reviewer_notes") or "")).replace("\n", "<br>")
+
+            html_parts.append(
+                f'<tr style="{row_bg}">'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;">{idx}</td>'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><strong>{hits}x</strong></td>'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 8.5pt;">{escape(str(a.get("timestamp") or "-"))}</td>'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get("agent_name") or "-"))}</strong><br><small>{escape(str(a.get("agent_ip") or "-"))}</small></td>'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><span class="{row_lvl}">Level {lvl}</span><br><small>Rule {escape(str(a.get("rule_id") or "-"))}</small></td>'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get("description") or "-"))}</strong>{log_block}</td>'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;">{escape(str(a.get("source_ip") or "-"))}{intel_txt}</td>'
+                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 8.5pt;">{analysis_text}</td>'
+                f'</tr>'
+            )
         html_parts.append("</tbody></table>")
     else:
         html_parts.append("<p><em>Tidak ada alert terkait dalam laporan ini.</em></p>")
@@ -357,6 +353,7 @@ def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
         "CVE",
         "MITRE ATT&CK",
         "Review Status",
+        "Analisis",
     ]
     ws.append(headers)
 
@@ -396,6 +393,7 @@ def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
             a.get("cve") or "",
             ", ".join(a.get("mitre_ids") or []),
             "Reviewed" if a.get("is_reviewed") else "Pending",
+            a.get("reviewer_notes") or "",
         ]
         ws.append(row_vals)
         for col_idx in range(1, len(row_vals) + 1):
