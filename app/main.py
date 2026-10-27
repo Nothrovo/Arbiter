@@ -29,7 +29,7 @@ from app.exports import (
 )
 from app.parser import parse_export
 from app.privacy import sanitize_text
-from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id
+from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS
 
 
 @asynccontextmanager
@@ -515,6 +515,314 @@ def remove_group_member(group_id: str, alert_pk: int, tenant: list[str] = Query(
             (group_id, alert_pk),
         )
     return {"status": "ok"}
+
+
+@app.get("/api/stats")
+def get_stats(
+    pivot_by: str = "rule_description",
+    metric: str = "alerts",
+    top_n: int = 8,
+    chart: str = "bar",
+    bucket: str = "auto",
+    pattern: str = "",
+    other_details: bool = False,
+    q: str = "",
+    tenant: list[str] = Query(default=["all"]),
+    status: str = "all",
+    group_id: str | None = None,
+    filter_preset: str = "",
+    review_status: str = "all",
+    time_from: str = "",
+    time_to: str = "",
+    facet: str = "",
+    facet_value: str = "",
+):
+    if pivot_by not in PIVOT_DEFINITIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid pivot_by '{pivot_by}'. Supported pivots: {', '.join(PIVOT_DEFINITIONS.keys())}",
+        )
+    if metric not in {"alerts", "events"}:
+        raise HTTPException(status_code=422, detail="metric must be 'alerts' or 'events'.")
+    if not (1 <= top_n <= 50):
+        raise HTTPException(status_code=422, detail="top_n must be between 1 and 50.")
+    if bucket not in {"auto", "minute", "hour", "day"}:
+        raise HTTPException(status_code=422, detail="bucket must be one of: auto, minute, hour, day.")
+    if pivot_by == "pattern":
+        pat = pattern.strip()
+        if not (1 <= len(pat) <= 120):
+            raise HTTPException(
+                status_code=422,
+                detail="pattern parameter (1-120 chars) is required when pivot_by is 'pattern'.",
+            )
+    if time_from and time_to and str(time_from).strip() > str(time_to).strip():
+        raise HTTPException(status_code=422, detail="time_from must be before or equal to time_to.")
+
+    where_sql, base_params = alert_where(
+        q=q,
+        tenant=tenant,
+        status=status,
+        group_id=group_id,
+        filter_preset=filter_preset,
+        review_status=review_status,
+        time_from=time_from,
+        time_to=time_to,
+        facet=facet,
+        facet_value=facet_value,
+    )
+
+    metric_expr = "COUNT(*)" if metric == "alerts" else "COALESCE(SUM(COALESCE(a.hit_count, 1)), 0)"
+
+    if pivot_by == "pattern":
+        dim_sql = (
+            "CASE WHEN ("
+            "a.description ILIKE %s OR a.raw::text ILIKE %s OR a.parsed_details::text ILIKE %s"
+            ") THEN 'Cocok pola' ELSE 'Tidak cocok pola' END"
+        )
+        dim_params = [f"%{pattern.strip()}%"] * 3
+    else:
+        dim_sql = PIVOT_DEFINITIONS[pivot_by]["sql"]
+        dim_params = []
+
+    with get_db() as conn:
+        total_row = conn.execute(
+            f"""SELECT COUNT(*) AS total_alerts,
+                       COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS total_events
+                FROM wazuh.alerts a {where_sql}""",
+            base_params,
+        ).fetchone()
+        total_alerts = int(total_row["total_alerts"] or 0)
+        total_events = int(total_row["total_events"] or 0)
+        total = total_alerts if metric == "alerts" else total_events
+
+        grouped_sql = f"""
+            SELECT {dim_sql} AS k, {metric_expr} AS n
+            FROM wazuh.alerts a {where_sql}
+            GROUP BY 1
+            ORDER BY 2 DESC, 1 ASC
+            LIMIT %s
+        """
+        top_rows = conn.execute(grouped_sql, dim_params + base_params + [top_n]).fetchall()
+
+        sum_top = sum(int(r["n"] or 0) for r in top_rows)
+        other_count = max(0, total - sum_top)
+        other_percentage = round((other_count / total * 100.0), 2) if total > 0 else 0.0
+
+        items = []
+        for r in top_rows:
+            cnt = int(r["n"] or 0)
+            pct = round((cnt / total * 100.0), 2) if total > 0 else 0.0
+            items.append({
+                "key": str(r["k"] if r["k"] is not None else "Tidak tersedia"),
+                "count": cnt,
+                "percentage": pct,
+            })
+
+        other_items = []
+        if other_details and other_count > 0:
+            more_sql = f"""
+                SELECT {dim_sql} AS k, {metric_expr} AS n
+                FROM wazuh.alerts a {where_sql}
+                GROUP BY 1
+                ORDER BY 2 DESC, 1 ASC
+                LIMIT 50 OFFSET %s
+            """
+            more_rows = conn.execute(more_sql, dim_params + base_params + [top_n]).fetchall()
+            for r in more_rows:
+                cnt = int(r["n"] or 0)
+                pct = round((cnt / total * 100.0), 2) if total > 0 else 0.0
+                other_items.append({
+                    "key": str(r["k"] if r["k"] is not None else "Tidak tersedia"),
+                    "count": cnt,
+                    "percentage": pct,
+                })
+
+        granularity = bucket
+        if granularity == "auto":
+            time_bounds = conn.execute(
+                f"""SELECT MIN(NULLIF(a.timestamp, '')) AS earliest,
+                           MAX(NULLIF(a.timestamp, '')) AS latest
+                    FROM wazuh.alerts a {where_sql}""",
+                base_params,
+            ).fetchone()
+            earliest = time_bounds["earliest"] if time_bounds else None
+            latest = time_bounds["latest"] if time_bounds else None
+            if earliest and latest and len(earliest) >= 10 and len(latest) >= 10:
+                if earliest[:10] == latest[:10]:
+                    granularity = "minute"
+                elif earliest[:7] == latest[:7]:
+                    granularity = "hour"
+                else:
+                    granularity = "day"
+            else:
+                granularity = "hour"
+
+        if granularity == "minute":
+            bucket_sql = "substr(a.timestamp, 1, 16) || ':00Z'"
+        elif granularity == "day":
+            bucket_sql = "substr(a.timestamp, 1, 10)"
+        else:
+            bucket_sql = "substr(a.timestamp, 1, 13) || ':00:00Z'"
+
+        ts_where = (where_sql + " AND " if where_sql else "WHERE ") + "(a.timestamp IS NOT NULL AND a.timestamp != '')"
+        ts_sql = f"""
+            SELECT {bucket_sql} AS b, {dim_sql} AS k, {metric_expr} AS n
+            FROM wazuh.alerts a {ts_where}
+            GROUP BY 1, 2
+            ORDER BY 1 ASC
+        """
+        ts_rows = conn.execute(ts_sql, dim_params + base_params).fetchall()
+
+        top_keys = [it["key"] for it in items]
+        buckets_dict: dict[str, dict[str, Any]] = {}
+        for r in ts_rows:
+            b_key = str(r["b"])
+            k_key = str(r["k"] if r["k"] is not None else "Tidak tersedia")
+            cnt = int(r["n"] or 0)
+            if b_key not in buckets_dict:
+                buckets_dict[b_key] = {
+                    "bucket": b_key,
+                    "total": 0,
+                    "series": {tk: 0 for tk in top_keys},
+                }
+                if other_count > 0:
+                    buckets_dict[b_key]["series"]["Lainnya"] = 0
+            buckets_dict[b_key]["total"] += cnt
+            if k_key in top_keys:
+                buckets_dict[b_key]["series"][k_key] += cnt
+            elif other_count > 0:
+                buckets_dict[b_key]["series"]["Lainnya"] += cnt
+
+        time_series = list(buckets_dict.values())
+
+    return {
+        "pivot_by": pivot_by,
+        "metric": metric,
+        "total": total,
+        "total_alerts": total_alerts,
+        "total_events": total_events,
+        "top_n": top_n,
+        "granularity": granularity,
+        "items": items,
+        "other_count": other_count,
+        "other_percentage": other_percentage,
+        "other_items": other_items,
+        "time_series": time_series,
+        "scope": {
+            "tenant": list(normalize_tenants(tenant)),
+            "q": q,
+            "status": status,
+            "group_id": group_id,
+            "filter_preset": filter_preset,
+            "review_status": review_status,
+            "time_from": time_from,
+            "time_to": time_to,
+            "facet": facet,
+            "facet_value": facet_value,
+        },
+    }
+
+
+@app.get("/api/triage/summary")
+def triage_summary(
+    q: str = "",
+    tenant: list[str] = Query(default=["all"]),
+    status: str = "all",
+    group_id: str | None = None,
+    filter_preset: str = "",
+    review_status: str = "all",
+    time_from: str = "",
+    time_to: str = "",
+    facet: str = "",
+    facet_value: str = "",
+):
+    where_sql, params = alert_where(
+        q=q,
+        tenant=tenant,
+        status=status,
+        group_id=group_id,
+        filter_preset=filter_preset,
+        review_status=review_status,
+        time_from=time_from,
+        time_to=time_to,
+        facet=facet,
+        facet_value=facet_value,
+    )
+
+    with get_db() as conn:
+        counts = conn.execute(
+            f"""SELECT COUNT(*) AS alerts,
+                       COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS events,
+                       COUNT(DISTINCT NULLIF(a.source_ip, '')) AS unique_source_ips,
+                       COUNT(DISTINCT NULLIF(a.agent_name, '')) AS unique_agents,
+                       MIN(NULLIF(a.timestamp, '')) AS earliest,
+                       MAX(NULLIF(a.timestamp, '')) AS latest
+                FROM wazuh.alerts a {where_sql}""",
+            params,
+        ).fetchone()
+
+        sev_rows = conn.execute(
+            f"""SELECT
+                    CASE
+                        WHEN a.rule_level >= 12 THEN 'critical'
+                        WHEN a.rule_level >= 10 THEN 'high'
+                        WHEN a.rule_level >= 7 THEN 'medium'
+                        ELSE 'low'
+                    END AS sev,
+                    COUNT(*) AS n
+                FROM wazuh.alerts a {where_sql}
+                GROUP BY 1""",
+            params,
+        ).fetchall()
+
+        sev_map = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        for r in sev_rows:
+            k = str(r["sev"]).lower()
+            if k in sev_map:
+                sev_map[k] = int(r["n"] or 0)
+
+        group_row = conn.execute(
+            f"""SELECT COUNT(DISTINCT m.group_id) AS n
+                FROM wazuh.alert_group_members m
+                JOIN wazuh.alerts a ON a.id = m.alert_pk
+                {where_sql}""",
+            params,
+        ).fetchone()
+        incident_cases = int(group_row["n"] or 0) if group_row else 0
+
+        top_rule_row = conn.execute(
+            f"""SELECT
+                    COALESCE(NULLIF(a.rule_id, ''), '-') AS rule_id,
+                    COALESCE(NULLIF(a.description, ''), 'Wazuh Alert') AS description,
+                    COUNT(*) AS n
+                FROM wazuh.alerts a {where_sql}
+                GROUP BY 1, 2
+                ORDER BY 3 DESC, 1 ASC
+                LIMIT 1""",
+            params,
+        ).fetchone()
+
+        top_rule = None
+        if top_rule_row and int(top_rule_row["n"] or 0) > 0:
+            top_rule = {
+                "rule_id": str(top_rule_row["rule_id"]),
+                "description": str(top_rule_row["description"]),
+                "count": int(top_rule_row["n"]),
+            }
+
+    return {
+        "alerts": int(counts["alerts"] or 0) if counts else 0,
+        "events": int(counts["events"] or 0) if counts else 0,
+        "unique_source_ips": int(counts["unique_source_ips"] or 0) if counts else 0,
+        "unique_agents": int(counts["unique_agents"] or 0) if counts else 0,
+        "severity": sev_map,
+        "incident_cases": incident_cases,
+        "time_range": {
+            "earliest": counts["earliest"] if counts else None,
+            "latest": counts["latest"] if counts else None,
+        },
+        "top_rule": top_rule,
+    }
 
 
 @app.get("/api/suggestions")

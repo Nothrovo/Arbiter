@@ -14,20 +14,62 @@ def validated_group_id(value: str | None) -> str | None:
     return value
 
 
-# These names are an API contract, not client-provided SQL. Task 2 reuses this
-# exact closed set for pivots and drill-down facets.
-FACET_COLUMNS = {
-    "rule_description": "a.description",
-    "rule_id": "a.rule_id",
-    "severity": "a.rule_level",
-    "source_ip": "a.source_ip",
-    "agent": "a.agent_name",
-    "referer": "a.parsed_details->>'referer'",
-    "http_status": "a.parsed_details->>'status'",
-    "url_path": "a.parsed_details->>'url_path'",
-    "user_agent": "a.parsed_details->>'user_agent'",
-    "tenant": "a.tenant",
+# These names are an API contract, not client-provided SQL.
+# PIVOT_DEFINITIONS is a closed, immutable whitelist of supported dimensions.
+PIVOT_DEFINITIONS: dict[str, dict[str, str]] = {
+    "rule_description": {
+        "label": "Deskripsi rule",
+        "sql": "COALESCE(NULLIF(a.description, ''), 'Wazuh Alert')",
+    },
+    "rule_id": {
+        "label": "Rule ID",
+        "sql": "COALESCE(NULLIF(a.rule_id, ''), '-')",
+    },
+    "severity": {
+        "label": "Severity",
+        "sql": (
+            "CASE "
+            "WHEN a.rule_level >= 12 THEN 'critical' "
+            "WHEN a.rule_level >= 10 THEN 'high' "
+            "WHEN a.rule_level >= 7 THEN 'medium' "
+            "ELSE 'low' END"
+        ),
+    },
+    "source_ip": {
+        "label": "Source IP",
+        "sql": "COALESCE(NULLIF(a.source_ip, ''), 'Tanpa IP')",
+    },
+    "agent": {
+        "label": "Host / Agent",
+        "sql": "COALESCE(NULLIF(a.agent_name, ''), 'Tidak diketahui')",
+    },
+    "referer": {
+        "label": "Referer",
+        "sql": "COALESCE(NULLIF(a.parsed_details->>'referer', ''), 'Tidak tersedia')",
+    },
+    "http_status": {
+        "label": "HTTP status",
+        "sql": "COALESCE(NULLIF(a.parsed_details->>'status', ''), NULLIF(a.parsed_details->>'http_status', ''), 'Tidak tersedia')",
+    },
+    "url_path": {
+        "label": "URL / Path",
+        "sql": "COALESCE(NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'url_path', ''), NULLIF(a.parsed_details->>'uri', ''), 'Tidak tersedia')",
+    },
+    "user_agent": {
+        "label": "User-Agent",
+        "sql": "COALESCE(NULLIF(a.parsed_details->>'ua', ''), NULLIF(a.parsed_details->>'user_agent', ''), 'Tidak tersedia')",
+    },
+    "pattern": {
+        "label": "Pola teks",
+        "sql": "",
+    },
+    "tenant": {
+        "label": "Tenant",
+        "sql": "COALESCE(NULLIF(a.tenant, ''), 'Default')",
+    },
 }
+
+FACET_COLUMNS = {k: v["sql"] for k, v in PIVOT_DEFINITIONS.items() if v["sql"]}
 
 
 def normalize_tenants(values: str | Sequence[str] | None) -> tuple[str, ...]:
@@ -122,6 +164,11 @@ def alert_where(
     if facet or facet_value:
         if facet not in FACET_COLUMNS or not str(facet_value).strip():
             raise HTTPException(status_code=422, detail="facet and facet_value must use a supported exact facet.")
-        clauses.append(f"{FACET_COLUMNS[facet]} = %s")
-        params.append(str(facet_value).strip())
+        val = str(facet_value).strip()
+        if facet == "severity" and val.isdigit():
+            clauses.append("a.rule_level = %s")
+            params.append(int(val))
+        else:
+            clauses.append(f"{FACET_COLUMNS[facet]} = %s")
+            params.append(val)
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params

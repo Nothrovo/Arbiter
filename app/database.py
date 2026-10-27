@@ -86,6 +86,13 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_timestamp ON wazuh.alerts(timestamp)
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant ON wazuh.alerts(tenant);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_sig ON wazuh.alerts(tenant, log_signature);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_reviewed ON wazuh.alerts(is_reviewed);
+-- Scoped stats and triage performance indices
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_timestamp ON wazuh.alerts(tenant, timestamp);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_rule_level ON wazuh.alerts(rule_level);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_agent_name ON wazuh.alerts(agent_name);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_status ON wazuh.alerts((parsed_details->>'status'));
+-- Note: highly-cardinal user_agent, url_path, referer, and arbitrary text pattern
+-- dimensions intentionally do not carry broad btree indexes to prevent bloat on high-volume ingest.
 """
 
 
