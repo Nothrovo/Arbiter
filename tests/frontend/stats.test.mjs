@@ -20,7 +20,7 @@ test('normalizeStatsQuery validates defaults, bounds, and preserves multi-tenant
   assert.equal(query.pivot_by, 'severity');
   assert.equal(query.metric, 'events');
   assert.equal(query.chart, 'donut');
-  assert.equal(query.top_n, 50); // clamped to 50 max
+  assert.equal(query.top_n, 100);
   assert.deepEqual(query.tenants, ['Alpha', 'Beta']);
   assert.equal(query.q, 'test');
 

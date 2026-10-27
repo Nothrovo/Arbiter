@@ -12,7 +12,6 @@ export function mount(ctx) {
 
   let activeRequest = null;
   let currentData = null;
-  let showOtherDetails = false;
   let drilldownAlerts = null;
   const selectedIds = new Set();
   const expandedLogIds = new Set();
@@ -60,7 +59,6 @@ export function mount(ctx) {
 
     try {
       const fetchParams = statsScopeParams(query);
-      if (showOtherDetails) fetchParams.set('other_details', 'true');
       const data = await json(apiURL('/api/stats', fetchParams), {signal: activeRequest.signal});
       if (signal?.aborted || !session.isCurrent(version)) return;
       currentData = data;
@@ -244,16 +242,6 @@ export function mount(ctx) {
       } catch {
         notify('Gagal menyalin ringkasan. Izin clipboard tidak diberikan.', 'error');
       }
-      return;
-    }
-    if (btn.dataset.action === 'toggle-other-details') {
-      showOtherDetails = !showOtherDetails;
-      await loadData();
-      return;
-    }
-    if (btn.dataset.action === 'close-other-details') {
-      showOtherDetails = false;
-      await loadData();
       return;
     }
     if (btn.dataset.action === 'retry') {

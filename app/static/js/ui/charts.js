@@ -49,9 +49,6 @@ export function renderBarChart({
 } = {}) {
   const metricLabel = metric === 'events' ? 'event' : 'alert';
   const allRows = [...items];
-  if (otherCount > 0) {
-    allRows.push({key: 'Lainnya', count: otherCount, displayPercentage: otherPercentage});
-  }
   if (!allRows.length || total <= 0) {
     return `<div class="chart-empty"><p class="muted">Tidak ada data untuk ditampilkan pada grafik ini.</p></div>`;
   }
@@ -139,9 +136,6 @@ export function renderBarChart({
 export function renderDonutChart({items = [], otherCount = 0, otherPercentage = 0, total = 0, metric = 'alerts'} = {}) {
   const metricLabel = metric === 'events' ? 'event' : 'alert';
   const allRows = [...items];
-  if (otherCount > 0) {
-    allRows.push({key: 'Lainnya', count: otherCount, displayPercentage: otherPercentage});
-  }
   if (!allRows.length || total <= 0) {
     return `<div class="chart-empty"><p class="muted">Tidak ada data untuk grafik donut.</p></div>`;
   }

@@ -9,7 +9,12 @@ export function statsPage(query) {
     ...PIVOT_OPTIONS.filter(([val]) => val !== 'pattern' && val !== query.pivot_by),
   ].map(([val, label]) => `<option value="${val}" ${query.secondary_pivot === val ? 'selected' : ''}>${esc(label)}</option>`).join('');
 
-  const topNOpts = [5, 8, 10, 15, 20, 50].map(n => `<option value="${n}" ${query.top_n === n ? 'selected' : ''}>Top ${n}</option>`).join('');
+  const topNOpts = [
+    [500, 'Semua kategori'],
+    [100, 'Maks 100 kategori'],
+    [50, 'Maks 50 kategori'],
+    [25, 'Maks 25 kategori'],
+  ].map(([n, l]) => `<option value="${n}" ${query.top_n === n ? 'selected' : ''}>${l}</option>`).join('');
   const timePresets = [
     ['', 'Semua waktu'],
     ['1h', '1 jam terakhir'],
@@ -142,24 +147,20 @@ export function statsPage(query) {
 export function statsResults(data, query, {drilldownAlerts = null, selectedIds = [], expandedLogIds = new Set(), showAllLogs = false} = {}) {
   const total = Number(data.total) || 0;
   const metricLabel = data.metric === 'events' ? 'event' : 'alert';
-  const otherCount = Number(data.other_count) || 0;
-  const otherPct = Number(data.other_percentage) || 0;
-  const items = distributionPercentages(data.items || [], otherCount, total);
+  const items = distributionPercentages(data.items || [], 0, total);
 
   let chartHtml = '';
   if (query.chart === 'bar') {
     const secLabel = data.secondary_pivot ? (PIVOT_OPTIONS.find(([k]) => k === data.secondary_pivot)?.[1] || data.secondary_pivot) : '';
     chartHtml = renderBarChart({
       items,
-      otherCount,
-      otherPercentage: otherPct,
       total,
       metric: data.metric,
       secondaryDistribution: data.secondary_distribution,
       secondaryLabel: secLabel,
     });
   } else if (query.chart === 'donut') {
-    chartHtml = renderDonutChart({items, otherCount, otherPercentage: otherPct, total, metric: data.metric});
+    chartHtml = renderDonutChart({items, total, metric: data.metric});
   } else if (query.chart === 'line') {
     chartHtml = renderLineChart({timeSeries: data.time_series || [], topKeys: items.map(it => it.key), metric: data.metric});
   }
@@ -190,42 +191,6 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
       </tr>
     `;
   }).join('');
-
-  const otherRow = otherCount > 0 ? `
-    <tr class="muted">
-      <td class="mono"><em>Lainnya (${otherCount.toLocaleString('id-ID')} ${metricLabel})</em></td>
-      <td class="numeric">${otherCount.toLocaleString('id-ID')}</td>
-      <td class="numeric">${otherPct}%</td>
-      <td class="actions-col" style="text-align:right;">
-        <button type="button" class="button text-button" data-action="toggle-other-details">Rincian</button>
-      </td>
-    </tr>
-  ` : '';
-
-  const otherDetailsSection = data.other_items?.length ? `
-    <div class="panel stack other-breakdown" style="margin-top:16px;">
-      <div class="section-heading">
-        <h3>Rincian Kategori "Lainnya" (${data.other_items.length} item berikutnya)</h3>
-        <button type="button" class="button icon-button" data-action="close-other-details" aria-label="Tutup rincian">${icon('close')}</button>
-      </div>
-      <div class="table-region">
-        <table class="data-table">
-          <thead>
-            <tr><th>Kategori</th><th class="numeric">Jumlah</th><th class="numeric">Persen</th></tr>
-          </thead>
-          <tbody>
-            ${data.other_items.map(it => `
-              <tr>
-                <td class="mono">${esc(it.key)}</td>
-                <td class="numeric">${it.count.toLocaleString('id-ID')}</td>
-                <td class="numeric">${it.percentage}%</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  ` : '';
 
   let drilldownSection = '';
   if (drilldownAlerts && drilldownAlerts.length) {
@@ -332,12 +297,12 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <dd>${total.toLocaleString('id-ID')}</dd>
       </div>
       <div>
-        <dt>Kategori teratas (Top-${data.top_n})</dt>
+        <dt>Total Kategori Unik</dt>
         <dd>${items.length} <span class="meta" style="font-size:14px;">kategori</span></dd>
       </div>
       <div>
-        <dt>Kategori lainnya</dt>
-        <dd>${otherCount.toLocaleString('id-ID')} <span class="meta" style="font-size:14px;">(${otherPct}%)</span></dd>
+        <dt>Kategori Terbanyak</dt>
+        <dd>${items[0] ? esc(items[0].key) : '—'} <span class="meta" style="font-size:14px;">(${items[0]?.count?.toLocaleString('id-ID') || 0} ${metricLabel})</span></dd>
       </div>
     </div>
 
@@ -364,11 +329,9 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
           </thead>
           <tbody>
             ${tableRows}
-            ${otherRow}
           </tbody>
         </table>
       </div>
-      ${otherDetailsSection}
     </section>
 
     ${drilldownSection}

@@ -556,8 +556,8 @@ def get_stats(
         )
     if metric not in {"alerts", "events"}:
         raise HTTPException(status_code=422, detail="metric must be 'alerts' or 'events'.")
-    if not (1 <= top_n <= 50):
-        raise HTTPException(status_code=422, detail="top_n must be between 1 and 50.")
+    if not (1 <= top_n <= 1000):
+        raise HTTPException(status_code=422, detail="top_n must be between 1 and 1000.")
     if bucket not in {"auto", "minute", "hour", "day"}:
         raise HTTPException(status_code=422, detail="bucket must be one of: auto, minute, hour, day.")
     if pivot_by == "pattern":
@@ -608,6 +608,7 @@ def get_stats(
         total_events = int(total_row["total_events"] or 0)
         total = total_alerts if metric == "alerts" else total_events
 
+        fetch_limit = min(max(top_n, 1), 1000)
         grouped_sql = f"""
             SELECT {dim_sql} AS k, {metric_expr} AS n
             FROM wazuh.alerts a {where_sql}
@@ -615,11 +616,7 @@ def get_stats(
             ORDER BY 2 DESC, 1 ASC
             LIMIT %s
         """
-        top_rows = conn.execute(grouped_sql, dim_params + base_params + [top_n]).fetchall()
-
-        sum_top = sum(int(r["n"] or 0) for r in top_rows)
-        other_count = max(0, total - sum_top)
-        other_percentage = round((other_count / total * 100.0), 2) if total > 0 else 0.0
+        top_rows = conn.execute(grouped_sql, dim_params + base_params + [fetch_limit]).fetchall()
 
         items = []
         for r in top_rows:
@@ -631,24 +628,9 @@ def get_stats(
                 "percentage": pct,
             })
 
+        other_count = 0
+        other_percentage = 0.0
         other_items = []
-        if other_details and other_count > 0:
-            more_sql = f"""
-                SELECT {dim_sql} AS k, {metric_expr} AS n
-                FROM wazuh.alerts a {where_sql}
-                GROUP BY 1
-                ORDER BY 2 DESC, 1 ASC
-                LIMIT 50 OFFSET %s
-            """
-            more_rows = conn.execute(more_sql, dim_params + base_params + [top_n]).fetchall()
-            for r in more_rows:
-                cnt = int(r["n"] or 0)
-                pct = round((cnt / total * 100.0), 2) if total > 0 else 0.0
-                other_items.append({
-                    "key": str(r["k"] if r["k"] is not None else "Tidak tersedia"),
-                    "count": cnt,
-                    "percentage": pct,
-                })
 
         secondary_distribution = None
         if secondary_pivot:
@@ -719,13 +701,9 @@ def get_stats(
                     "series": {tk: 0 for tk in top_keys},
                     "above_average": False,
                 }
-                if other_count > 0:
-                    buckets_dict[b_key]["series"]["Lainnya"] = 0
             buckets_dict[b_key]["total"] += cnt
             if k_key in top_keys:
                 buckets_dict[b_key]["series"][k_key] += cnt
-            elif other_count > 0:
-                buckets_dict[b_key]["series"]["Lainnya"] += cnt
 
         time_series = list(buckets_dict.values())
         if time_series:

@@ -71,7 +71,7 @@ class StatsEndpointContractTests(unittest.TestCase):
         self.assertIn("pivot_by", res.json()["detail"].lower())
 
     def test_stats_validates_top_n_bounds(self):
-        for bad_top in (0, -1, 51, 100):
+        for bad_top in (0, -1, 1001, 2000):
             res = self.client.get("/api/stats", params={"top_n": bad_top})
             self.assertEqual(res.status_code, 422, res.text)
 
@@ -113,14 +113,15 @@ class StatsEndpointContractTests(unittest.TestCase):
         self.assertEqual(sqli_item["count"], 15)  # 5 + 10
 
     def test_stats_pivot_distribution_and_other_bucket(self):
-        # With top_n=1, the top item is displayed and the rest goes to other_count
-        res = self.client.get("/api/stats", params={"tenant": "Alpha", "pivot_by": "source_ip", "top_n": 1})
+        # All distinct categories have their own individual item, other_count is strictly 0
+        res = self.client.get("/api/stats", params={"tenant": "Alpha", "pivot_by": "source_ip"})
         self.assertEqual(res.status_code, 200, res.text)
         data = res.json()
-        self.assertEqual(len(data["items"]), 1)
-        self.assertGreater(data["other_count"], 0)
-        self.assertEqual(data["items"][0]["count"] + data["other_count"], data["total"])
-        self.assertAlmostEqual(data["items"][0]["percentage"] + data["other_percentage"], 100.0, places=1)
+        self.assertEqual(data["other_count"], 0)
+        self.assertEqual(data["other_percentage"], 0.0)
+        self.assertEqual(len(data["other_items"]), 0)
+        self.assertEqual(sum(it["count"] for it in data["items"]), data["total"])
+        self.assertNotIn("Lainnya", [it["key"] for it in data["items"]])
 
     def test_stats_pivot_by_severity(self):
         res = self.client.get("/api/stats", params={"tenant": "Alpha", "pivot_by": "severity"})
