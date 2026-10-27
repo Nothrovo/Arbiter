@@ -32,3 +32,27 @@ test('charts helper renders accessible SVG bar, donut, and line charts with titl
   assert.match(lineSvg, /class="line-series"/);
   assert.match(lineSvg, /class="line-point"/);
 });
+
+test('charts helper renders stacked bar chart with secondary distribution and legend', async () => {
+  const {renderBarChart} = await import('../../app/static/js/ui/charts.js');
+  const items = [
+    {key: 'Rule 1001', count: 10, displayPercentage: 100.0},
+  ];
+  const secondaryDistribution = {
+    'Rule 1001': [
+      {key: '400', count: 7},
+      {key: '200', count: 3},
+    ],
+  };
+  const svg = renderBarChart({
+    items,
+    total: 10,
+    metric: 'alerts',
+    secondaryDistribution,
+    secondaryLabel: 'HTTP status',
+  });
+  assert.match(svg, /class="chart-secondary-legend"/);
+  assert.match(svg, /HTTP status/);
+  assert.match(svg, /400/);
+  assert.match(svg, /200/);
+});

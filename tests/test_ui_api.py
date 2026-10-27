@@ -52,6 +52,7 @@ class SyntheticDB:
         self.connection = sqlite3.connect(":memory:", check_same_thread=False)
         self.connection.execute("ATTACH DATABASE ':memory:' AS wazuh")
         self.connection.execute("ATTACH DATABASE ':memory:' AS public")
+        self.connection.create_function("split_part", 3, lambda s, d, n: (s or "").split(d)[n - 1] if s and len((s or "").split(d)) >= n else (s or ""))
         self.connection.executescript("""
         CREATE TABLE wazuh.alerts (
             id INTEGER PRIMARY KEY, alert_id TEXT, timestamp TEXT, tenant TEXT,

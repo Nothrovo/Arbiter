@@ -215,6 +215,43 @@ class StatsEndpointContractTests(unittest.TestCase):
         for bucket in data["time_series"]:
             self.assertIn("above_average", bucket)
 
+    def test_stats_time_preset_24h_filters_old_alerts(self):
+        # Alert with timestamp in the future/recent vs old
+        # Current synthetic alerts are 2026-01-01 (older than 24h from now)
+        # Testing with time_preset=24h should return 0 alerts because 2026-01-01 is past
+        res = self.client.get("/api/stats", params={
+            "tenant": "Alpha",
+            "time_preset": "24h",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()["total"], 0)
+
+    def test_stats_url_path_extracts_from_data_and_cleans_query(self):
+        # Alert where url is only in data JSON, not in parsed_details
+        self.db.add_alert(
+            99, "Alpha",
+            alert_id="syn-99", timestamp="2026-01-01T12:30:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            data='{"url":"/wp-login.php?action=lostpassword","id":"400"}',
+            parsed_details='{"log_type":"http"}',
+        )
+
+        res = self.client.get("/api/stats", params={
+            "tenant": "Alpha",
+            "pivot_by": "url_path",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        keys = {it["key"] for it in data["items"]}
+        self.assertIn("/wp-login.php", keys)
+        self.assertIn("/login.php", keys)
+        self.assertIn("/admin.php", keys)
+        self.assertIn("/index.html", keys)
+        # Ensure query strings are not attached as separate noisy keys
+        for key in keys:
+            self.assertNotIn("?", key)
+
 
 if __name__ == "__main__":
     unittest.main()

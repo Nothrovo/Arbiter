@@ -53,6 +53,29 @@ def normalize_alert(raw: dict[str, Any]) -> dict[str, Any]:
     if not source_ip and parsed.get("srcip"):
         source_ip = valid_ip(parsed["srcip"])
 
+    # Fallback to Wazuh data object for web/HTTP telemetry when raw log is terse
+    url_candidate = clean_val(data.get("url") or data.get("uri") or raw_dict.get("url"))
+    if url_candidate:
+        if not parsed.get("uri"):
+            parsed["uri"] = url_candidate
+        if not parsed.get("path") or parsed.get("path") in ("syslog", "text", "-"):
+            qidx = url_candidate.find("?")
+            fidx = url_candidate.find("#")
+            end_idx = min([i for i in (qidx, fidx) if i != -1], default=-1)
+            clean_p = url_candidate[:end_idx] if end_idx != -1 else url_candidate
+            if "://" in clean_p:
+                slash_idx = clean_p.find("/", clean_p.find("://") + 3)
+                clean_p = clean_p[slash_idx:] if slash_idx != -1 else "/"
+            parsed["path"] = clean_p or "/"
+    if not parsed.get("status") and (data.get("status") or data.get("id")):
+        status_val = clean_val(data.get("status") or data.get("id"))
+        if status_val.isdigit() and len(status_val) == 3:
+            parsed["status"] = status_val
+    if not parsed.get("ua") and (data.get("user_agent") or data.get("ua")):
+        parsed["ua"] = clean_val(data.get("user_agent") or data.get("ua"))
+    if not parsed.get("referer") and data.get("referer"):
+        parsed["referer"] = clean_val(data.get("referer"))
+
     alert_id = clean_val(raw_dict.get("id") or raw_dict.get("_id") or raw_dict.get("wazuh_id") or "")
     wazuh_id = clean_val(raw_dict.get("wazuh_id") or raw_dict.get("_id") or alert_id)
 

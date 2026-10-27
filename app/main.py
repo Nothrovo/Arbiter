@@ -156,6 +156,7 @@ def list_alerts(
     group_id: str | None = None,
     filter_preset: str = "",
     review_status: str = "all",
+    time_preset: str = "",
     time_from: str = "",
     time_to: str = "",
     sort: str = "desc",
@@ -170,7 +171,7 @@ def list_alerts(
     where_sql, params = alert_where(
         q=q, tenant=tenant, status=status, group_id=group_id,
         filter_preset=filter_preset, review_status=review_status,
-        time_from=time_from, time_to=time_to,
+        time_preset=time_preset, time_from=time_from, time_to=time_to,
     )
 
     # Sort order
@@ -534,6 +535,7 @@ def get_stats(
     group_id: str | None = None,
     filter_preset: str = "",
     review_status: str = "all",
+    time_preset: str = "",
     time_from: str = "",
     time_to: str = "",
     facet: str = "",
@@ -572,6 +574,7 @@ def get_stats(
         group_id=group_id,
         filter_preset=filter_preset,
         review_status=review_status,
+        time_preset=time_preset,
         time_from=time_from,
         time_to=time_to,
         facet=facet,
@@ -766,6 +769,7 @@ def triage_summary(
     group_id: str | None = None,
     filter_preset: str = "",
     review_status: str = "all",
+    time_preset: str = "",
     time_from: str = "",
     time_to: str = "",
     facet: str = "",
@@ -778,6 +782,7 @@ def triage_summary(
         group_id=group_id,
         filter_preset=filter_preset,
         review_status=review_status,
+        time_preset=time_preset,
         time_from=time_from,
         time_to=time_to,
         facet=facet,

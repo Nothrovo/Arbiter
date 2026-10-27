@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException
@@ -49,11 +50,26 @@ PIVOT_DEFINITIONS: dict[str, dict[str, str]] = {
     },
     "http_status": {
         "label": "HTTP status",
-        "sql": "COALESCE(NULLIF(a.parsed_details->>'status', ''), NULLIF(a.parsed_details->>'http_status', ''), 'Tidak tersedia')",
+        "sql": (
+            "COALESCE("
+            "NULLIF(a.data->>'status', ''), "
+            "NULLIF(a.data->>'id', ''), "
+            "NULLIF(a.parsed_details->>'status', ''), "
+            "NULLIF(a.parsed_details->>'http_status', ''), "
+            "'Tidak tersedia')"
+        ),
     },
     "url_path": {
         "label": "URL / Path",
-        "sql": "COALESCE(NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'url_path', ''), NULLIF(a.parsed_details->>'uri', ''), 'Tidak tersedia')",
+        "sql": (
+            "COALESCE("
+            "NULLIF(split_part(NULLIF(a.data->>'url', ''), '?', 1), ''), "
+            "NULLIF(split_part(NULLIF(a.data->>'uri', ''), '?', 1), ''), "
+            "NULLIF(split_part(NULLIF(a.parsed_details->>'path', ''), '?', 1), ''), "
+            "NULLIF(split_part(NULLIF(a.parsed_details->>'uri', ''), '?', 1), ''), "
+            "NULLIF(split_part(NULLIF(a.parsed_details->>'url_path', ''), '?', 1), ''), "
+            "'Tidak tersedia')"
+        ),
     },
     "user_agent": {
         "label": "User-Agent",
@@ -117,6 +133,7 @@ def alert_where(
     *, q: str = "", tenant: str | Sequence[str] | None = "all", status: str = "all",
     group_id: str | None = None, filter_preset: str = "",
     review_status: str = "all",
+    time_preset: str = "",
     time_from: str | None = None, time_to: str | None = None,
     facet: str = "", facet_value: str = "",
 ) -> tuple[str, list[Any]]:
@@ -155,6 +172,15 @@ def alert_where(
         params.append("%curl%")
     elif filter_preset == "non_http":
         clauses.append("a.parsed_details->>'log_type' != 'http'")
+    if time_preset and not (time_from and str(time_from).strip()):
+        deltas = {
+            "1h": timedelta(hours=1),
+            "24h": timedelta(hours=24),
+            "7d": timedelta(days=7),
+            "30d": timedelta(days=30),
+        }
+        if time_preset in deltas:
+            time_from = (datetime.now(timezone.utc) - deltas[time_preset]).strftime("%Y-%m-%dT%H:%M:%SZ")
     if time_from and str(time_from).strip():
         clauses.append("a.timestamp >= %s")
         params.append(str(time_from).strip())

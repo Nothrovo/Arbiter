@@ -1,5 +1,5 @@
 import {json, apiURL, copyText} from '../../api/client.js';
-import {emptyState, errorState, loadingRows} from '../../ui/primitives.js';
+import {emptyState, errorState, loadingRows, defangText} from '../../ui/primitives.js';
 import {withParams} from '../../router.js';
 import {createStatsSession} from '../../state/stats.js';
 import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary} from './model.js';
@@ -14,9 +14,14 @@ export function mount(ctx) {
   let currentData = null;
   let showOtherDetails = false;
   let drilldownAlerts = null;
+  const selectedIds = new Set();
+  const expandedLogIds = new Set();
+  let showAllLogs = false;
 
   root.innerHTML = statsPage(query);
   const resultsContainer = root.querySelector('#stats-results');
+  const batchDialog = root.querySelector('#stats-batch-incident-dialog');
+  const batchForm = root.querySelector('#stats-batch-incident-form');
 
   const on = (el, type, fn) => el?.addEventListener(type, fn, {signal});
 
@@ -27,6 +32,23 @@ export function mount(ctx) {
       else p.set(k, String(v));
     }
     navigate(withParams('/stats', p), {replace});
+  }
+
+  function renderView() {
+    if (!currentData || currentData.total === 0) {
+      resultsContainer.innerHTML = emptyState(
+        'Tidak ada data statistik pada scope ini',
+        'Coba ubah filter rentang waktu atau pilih acuan pivot lain.',
+        `<button class="button primary" type="button" data-action="reset-stats">Reset Filter</button>`
+      );
+      return;
+    }
+    resultsContainer.innerHTML = statsResults(currentData, query, {
+      drilldownAlerts,
+      selectedIds: [...selectedIds],
+      expandedLogIds,
+      showAllLogs,
+    });
   }
 
   async function loadData() {
@@ -43,21 +65,12 @@ export function mount(ctx) {
       if (signal?.aborted || !session.isCurrent(version)) return;
       currentData = data;
 
-      if (!data || data.total === 0) {
-        resultsContainer.innerHTML = emptyState(
-          'Tidak ada data statistik pada scope ini',
-          'Coba ubah filter rentang waktu atau pilih acuan pivot lain.',
-          `<button class="button primary" type="button" data-action="reset-stats">Reset Filter</button>`
-        );
-        return;
-      }
-
-      // If drilldown facet is active, fetch sample alerts for table
+      // If drilldown facet is active, fetch sample alerts for interactive evidence table
       if (query.facet && query.facet_value) {
         try {
           const sampleParams = statsScopeParams(query);
-          sampleParams.set('limit', '10');
-          sampleParams.set('summary', 'true');
+          sampleParams.set('limit', '50');
+          sampleParams.set('summary', 'false');
           const sampleData = await json(apiURL('/api/alerts', sampleParams), {signal: activeRequest.signal});
           drilldownAlerts = sampleData.items || [];
         } catch {
@@ -65,9 +78,11 @@ export function mount(ctx) {
         }
       } else {
         drilldownAlerts = null;
+        selectedIds.clear();
+        expandedLogIds.clear();
       }
 
-      resultsContainer.innerHTML = statsResults(data, query, drilldownAlerts);
+      renderView();
     } catch (err) {
       if (err.name !== 'AbortError' && !signal?.aborted && session.isCurrent(version)) {
         let msg = err.message || 'Gagal memuat data statistik.';
@@ -107,7 +122,14 @@ export function mount(ctx) {
     }
     if (e.target.id === 'stats-time') {
       const val = e.target.value;
+      const customWrap = root.querySelector('#stats-custom-time-wrap');
+      if (customWrap) customWrap.style.display = val === 'custom' ? 'grid' : 'none';
       updateRoute({time_preset: val, time_from: null, time_to: null});
+    }
+    if (e.target.id === 'stats-time-from' || e.target.id === 'stats-time-to') {
+      const tf = root.querySelector('#stats-time-from')?.value || '';
+      const tt = root.querySelector('#stats-time-to')?.value || '';
+      updateRoute({time_preset: 'custom', time_from: tf, time_to: tt});
     }
     if (e.target.id === 'stats-preset-select') {
       const preset = e.target.value;
@@ -118,6 +140,20 @@ export function mount(ctx) {
       } else if (preset === 'preset-http-status') {
         updateRoute({pivot_by: 'http_status', metric: 'events'});
       }
+    }
+    if (e.target.id === 'stats-select-all-drilldown') {
+      if (e.target.checked && drilldownAlerts) {
+        drilldownAlerts.forEach(a => selectedIds.add(a.id));
+      } else {
+        selectedIds.clear();
+      }
+      renderView();
+    }
+    if (e.target.matches('[data-select-drilldown]')) {
+      const aid = Number(e.target.dataset.selectDrilldown);
+      if (e.target.checked) selectedIds.add(aid);
+      else selectedIds.delete(aid);
+      renderView();
     }
   });
 
@@ -224,6 +260,188 @@ export function mount(ctx) {
       await loadData();
       return;
     }
+
+    // Interactive drill-down actions
+    if (btn.id === 'btn-toggle-all-stats-logs') {
+      showAllLogs = !showAllLogs;
+      renderView();
+      return;
+    }
+    if (btn.dataset.statsAction === 'toggle-log') {
+      const aid = Number(btn.dataset.alertId);
+      if (expandedLogIds.has(aid)) expandedLogIds.delete(aid);
+      else expandedLogIds.add(aid);
+      renderView();
+      return;
+    }
+    if (btn.dataset.statsAction === 'clear-selection') {
+      selectedIds.clear();
+      renderView();
+      return;
+    }
+    if (btn.dataset.statsAction === 'create-incident') {
+      const ids = [...selectedIds];
+      if (!ids.length) {
+        notify('Pilih minimal satu alert terlebih dahulu.', 'error');
+        return;
+      }
+      const p = new URLSearchParams({tenant: query.tenant, alert_ids: ids.join(',')});
+      navigate(withParams('/incidents/new', p));
+      return;
+    }
+    if (btn.dataset.statsAction === 'add-to-incident') {
+      const ids = [...selectedIds];
+      if (!ids.length) {
+        notify('Pilih minimal satu alert terlebih dahulu.', 'error');
+        return;
+      }
+      const countEl = root.querySelector('#stats-batch-incident-count');
+      const selectEl = root.querySelector('#stats-batch-incident-select');
+      if (countEl) countEl.textContent = String(ids.length);
+      batchDialog?.showModal();
+      try {
+        const groups = await json(apiURL('/api/groups', {tenant: query.tenant}), {signal});
+        if (selectEl) {
+          if (!groups.length) {
+            selectEl.innerHTML = '<option value="">Belum ada kasus insiden pada tenant ini</option>';
+          } else {
+            selectEl.innerHTML = '<option value="">Pilih insiden sasaran…</option>' +
+              groups.map(g => `<option value="${esc(g.id)}">${esc(g.title)} (${g.alert_count ?? 0} bukti)</option>`).join('');
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError' && selectEl) selectEl.innerHTML = '<option value="">Gagal memuat insiden</option>';
+      }
+      return;
+    }
+    if (btn.hasAttribute('data-close-stats-batch-incident')) {
+      batchDialog?.close();
+      return;
+    }
+    if (btn.dataset.statsAction === 'batch-review' || btn.dataset.statsAction === 'batch-unreview') {
+      const ids = [...selectedIds];
+      if (!ids.length) return;
+      const isRev = btn.dataset.statsAction === 'batch-review';
+      btn.disabled = true;
+      try {
+        await json(apiURL('/api/alerts/batch-review', {tenant: query.tenant}), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({alert_ids: ids, is_reviewed: isRev, tenant: query.tenant}),
+          signal,
+        });
+        notify(isRev ? `${ids.length} alert ditandai direview.` : `${ids.length} alert ditandai belum direview.`, 'success');
+        await loadData();
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+    if (btn.dataset.statsAction === 'copy-logs' || btn.dataset.statsAction === 'copy-redacted') {
+      const ids = [...selectedIds];
+      if (!ids.length) return;
+      const isRedacted = btn.dataset.statsAction === 'copy-redacted';
+      btn.disabled = true;
+      try {
+        const matchingAlerts = (drilldownAlerts || []).filter(a => selectedIds.has(a.id));
+        let fullText = matchingAlerts.map(a => {
+          const raw = a.full_log || a.raw?.full_log || (a.raw ? JSON.stringify(a.raw, null, 2) : 'Log tidak tersedia.');
+          return `Alert #${a.alert_id || a.id} (${a.description || 'Alert'})\n${raw}`;
+        }).join('\n\n---\n\n');
+        if (isRedacted) {
+          const res = await json('/api/sanitize-logs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text: fullText}),
+            signal,
+          });
+          fullText = res.sanitized;
+        }
+        await copyText(fullText);
+        notify(`${ids.length} log alert berhasil disalin.`, 'success');
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+    if (btn.dataset.statsAction === 'copy-single-log') {
+      const aid = Number(btn.dataset.alertId);
+      const item = (drilldownAlerts || []).find(a => a.id === aid);
+      const text = item?.full_log || item?.raw?.full_log || (item?.raw ? JSON.stringify(item.raw, null, 2) : '');
+      if (text) {
+        await copyText(text);
+        notify('Log alert disalin.', 'info');
+      }
+      return;
+    }
+    if (btn.dataset.statsAction === 'copy-single-redacted') {
+      const aid = Number(btn.dataset.alertId);
+      const item = (drilldownAlerts || []).find(a => a.id === aid);
+      let text = item?.full_log || item?.raw?.full_log || (item?.raw ? JSON.stringify(item.raw, null, 2) : '');
+      if (text) {
+        try {
+          const res = await json('/api/sanitize-logs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text}),
+            signal,
+          });
+          await copyText(res.sanitized);
+          notify('Versi tersamarkan disalin.', 'info');
+        } catch {
+          notify('Gagal menyamarkan log.', 'error');
+        }
+      }
+      return;
+    }
+    if (btn.dataset.statsAction === 'copy-single-defanged') {
+      const aid = Number(btn.dataset.alertId);
+      const item = (drilldownAlerts || []).find(a => a.id === aid);
+      const text = item?.full_log || item?.raw?.full_log || '';
+      if (text) {
+        await copyText(defangText(text));
+        notify('Versi defanged disalin.', 'info');
+      }
+      return;
+    }
+  });
+
+  on(batchForm, 'submit', async e => {
+    e.preventDefault();
+    const form = new FormData(batchForm);
+    const groupId = form.get('group_id');
+    const ids = [...selectedIds];
+    if (!groupId) {
+      notify('Pilih insiden terlebih dahulu.', 'error');
+      return;
+    }
+    if (!ids.length) {
+      batchDialog?.close();
+      notify('Tidak ada alert yang dipilih.', 'error');
+      return;
+    }
+    const submitBtn = batchForm.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await json(apiURL(`/api/groups/${encodeURIComponent(groupId)}/members`, {tenant: query.tenant}), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({alert_pks: ids, tenant: query.tenant}),
+        signal,
+      });
+      batchDialog?.close();
+      selectedIds.clear();
+      notify(`${ids.length} alert berhasil ditautkan ke kasus insiden.`, 'success');
+      await loadData();
+    } catch (err) {
+      if (err.name !== 'AbortError') notify(err.message, 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
   });
 
   on(root, 'keydown', e => {
@@ -239,6 +457,9 @@ export function mount(ctx) {
         updateRoute({facet: query.pivot_by, facet_value: key});
       }
     }
+    if (e.key === 'Escape' && batchDialog?.open) {
+      batchDialog.close();
+    }
   });
 
   loadData();
@@ -246,5 +467,6 @@ export function mount(ctx) {
   return () => {
     session.dispose();
     activeRequest?.abort();
+    batchDialog?.close();
   };
 }

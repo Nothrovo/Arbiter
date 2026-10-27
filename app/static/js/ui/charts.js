@@ -38,7 +38,15 @@ export function getColor(key, index = 0) {
   return PALETTE[index % PALETTE.length];
 }
 
-export function renderBarChart({items = [], otherCount = 0, otherPercentage = 0, total = 0, metric = 'alerts'} = {}) {
+export function renderBarChart({
+  items = [],
+  otherCount = 0,
+  otherPercentage = 0,
+  total = 0,
+  metric = 'alerts',
+  secondaryDistribution = null,
+  secondaryLabel = '',
+} = {}) {
   const metricLabel = metric === 'events' ? 'event' : 'alert';
   const allRows = [...items];
   if (otherCount > 0) {
@@ -48,30 +56,77 @@ export function renderBarChart({items = [], otherCount = 0, otherPercentage = 0,
     return `<div class="chart-empty"><p class="muted">Tidak ada data untuk ditampilkan pada grafik ini.</p></div>`;
   }
 
-  const rowHeight = 36;
+  const rowHeight = 38;
   const height = allRows.length * rowHeight + 30;
   const width = 640;
   const labelWidth = 180;
   const barMaxWidth = width - labelWidth - 110;
 
+  // Gather unique secondary keys for global legend
+  let secondaryLegend = '';
+  const allSecKeys = new Set();
+  if (secondaryDistribution) {
+    for (const subList of Object.values(secondaryDistribution)) {
+      for (const s of (subList || [])) {
+        if (s.key) allSecKeys.add(s.key);
+      }
+    }
+    const secList = [...allSecKeys].slice(0, 8);
+    if (secList.length > 0) {
+      secondaryLegend = `
+        <div class="chart-secondary-legend" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; font-size:12px;">
+          <span class="meta font-medium">Pecahan ${esc(secondaryLabel || 'Pivot Kedua')}:</span>
+          ${secList.map((k, idx) => `
+            <span style="display:inline-flex; align-items:center; gap:5px;">
+              <span style="width:10px; height:10px; border-radius:2px; background:${getColor(k, idx)};" aria-hidden="true"></span>
+              <span class="mono">${esc(k)}</span>
+            </span>
+          `).join('')}
+        </div>
+      `;
+    }
+  }
+
   const bars = allRows.map((r, i) => {
     const y = i * rowHeight + 15;
     const pct = Number(r.displayPercentage ?? ((r.count / total) * 100)) || 0;
     const barW = Math.max(2, Math.round((pct / 100) * barMaxWidth));
-    const color = getColor(r.key, i);
     const keyEsc = esc(r.key);
+
+    const subList = secondaryDistribution?.[r.key];
+    let rects = '';
+    if (subList && subList.length > 0) {
+      let curX = labelWidth;
+      const subTotal = subList.reduce((acc, s) => acc + (s.count || 0), 0) || r.count || 1;
+      rects = subList.map((sub, sIdx) => {
+        const segW = Math.max(1, Math.round((sub.count / subTotal) * barW));
+        const subColor = getColor(sub.key, sIdx);
+        const subPct = Math.round((sub.count / (r.count || 1)) * 100);
+        const rx = `
+          <rect x="${curX}" y="${y + 4}" width="${segW}" height="18" fill="${subColor}" opacity="0.9">
+            <title>${keyEsc} → ${esc(sub.key)}: ${sub.count} ${metricLabel} (${subPct}% dari kategori ini)</title>
+          </rect>
+        `;
+        curX += segW;
+        return rx;
+      }).join('');
+    } else {
+      const color = getColor(r.key, i);
+      rects = `<rect x="${labelWidth}" y="${y + 4}" width="${barW}" height="18" rx="2" fill="${color}" opacity="0.85" />`;
+    }
 
     return `
       <g class="chart-bar-row" data-chart-key="${keyEsc}" tabindex="0" role="button" aria-label="${keyEsc}: ${r.count} ${metricLabel} (${pct}%)">
         <title>${keyEsc}: ${r.count} ${metricLabel} (${pct}%)</title>
         <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" fill="var(--text)" font-size="12" font-family="var(--font)">${keyEsc.length > 22 ? esc(keyEsc.slice(0, 20) + '…') : keyEsc}</text>
-        <rect x="${labelWidth}" y="${y + 4}" width="${barW}" height="18" rx="2" fill="${color}" opacity="0.85" />
+        ${rects}
         <text x="${labelWidth + barW + 8}" y="${y + 17}" fill="var(--muted)" font-size="11" font-family="var(--mono)">${r.count} ${metricLabel} (${pct}%)</text>
       </g>
     `;
   }).join('');
 
   return `
+    ${secondaryLegend}
     <svg class="chart-svg bar-chart" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Grafik Balok Statistik (${total} ${metricLabel} total)">
       <title>Grafik Balok Distribusi Alert</title>
       <desc>Menampilkan distribusi per kategori dengan total ${total} ${metricLabel}.</desc>

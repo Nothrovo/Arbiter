@@ -1,4 +1,4 @@
-import {esc, icon} from '../../ui/primitives.js';
+import {esc, icon, severity} from '../../ui/primitives.js';
 import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats} from './model.js';
 import {renderBarChart, renderDonutChart, renderLineChart} from '../../ui/charts.js';
 
@@ -84,6 +84,17 @@ export function statsPage(query) {
         </div>
       </div>
 
+      <div id="stats-custom-time-wrap" style="display:${query.time_preset === 'custom' || (query.time_from && !query.time_preset) ? 'grid' : 'none'}; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+        <div class="field">
+          <label for="stats-time-from">Dari waktu</label>
+          <input class="input" type="datetime-local" id="stats-time-from" value="${esc(query.time_from)}">
+        </div>
+        <div class="field">
+          <label for="stats-time-to">Sampai waktu</label>
+          <input class="input" type="datetime-local" id="stats-time-to" value="${esc(query.time_to)}">
+        </div>
+      </div>
+
       <div id="stats-pattern-wrap" class="field" style="display:${query.pivot_by === 'pattern' ? 'block' : 'none'}; margin-top:8px;">
         <label for="stats-pattern-input">Kata kunci / pola teks (pencarian literal)</label>
         <div style="display:flex; gap:8px;">
@@ -105,10 +116,30 @@ export function statsPage(query) {
     <div id="stats-workspace" class="stack">
       <div id="stats-results"></div>
     </div>
+
+    <dialog class="app-dialog" id="stats-batch-incident-dialog" aria-labelledby="stats-batch-incident-title">
+      <div class="dialog-header">
+        <h2 id="stats-batch-incident-title">Masukkan Bukti ke Insiden</h2>
+        <button class="button icon-button" data-close-stats-batch-incident aria-label="Tutup dialog">${icon('close')}</button>
+      </div>
+      <form id="stats-batch-incident-form" class="stack">
+        <p class="muted"><span id="stats-batch-incident-count">0</span> alert terpilih dari hasil drill-down akan ditautkan ke kasus insiden di bawah ini.</p>
+        <div class="field">
+          <label for="stats-batch-incident-select">Pilih Insiden Sasaran</label>
+          <select class="select" id="stats-batch-incident-select" name="group_id" required>
+            <option value="">Memuat daftar insiden…</option>
+          </select>
+        </div>
+        <div class="dialog-actions" style="margin-top:20px; display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="button" data-close-stats-batch-incident>Batal</button>
+          <button class="button primary" type="submit">Tautkan ke Insiden</button>
+        </div>
+      </form>
+    </dialog>
   `;
 }
 
-export function statsResults(data, query, drilldownAlerts = null) {
+export function statsResults(data, query, {drilldownAlerts = null, selectedIds = [], expandedLogIds = new Set(), showAllLogs = false} = {}) {
   const total = Number(data.total) || 0;
   const metricLabel = data.metric === 'events' ? 'event' : 'alert';
   const otherCount = Number(data.other_count) || 0;
@@ -117,7 +148,16 @@ export function statsResults(data, query, drilldownAlerts = null) {
 
   let chartHtml = '';
   if (query.chart === 'bar') {
-    chartHtml = renderBarChart({items, otherCount, otherPercentage: otherPct, total, metric: data.metric});
+    const secLabel = data.secondary_pivot ? (PIVOT_OPTIONS.find(([k]) => k === data.secondary_pivot)?.[1] || data.secondary_pivot) : '';
+    chartHtml = renderBarChart({
+      items,
+      otherCount,
+      otherPercentage: otherPct,
+      total,
+      metric: data.metric,
+      secondaryDistribution: data.secondary_distribution,
+      secondaryLabel: secLabel,
+    });
   } else if (query.chart === 'donut') {
     chartHtml = renderDonutChart({items, otherCount, otherPercentage: otherPct, total, metric: data.metric});
   } else if (query.chart === 'line') {
@@ -144,7 +184,7 @@ export function statsResults(data, query, drilldownAlerts = null) {
         <td class="numeric">${item.count.toLocaleString('id-ID')}</td>
         <td class="numeric">${item.displayPercentage}%</td>
         <td class="actions-col" style="text-align:right;">
-          <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik hanya ke kategori ini">Drill-down</button>
+          <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik dan tampilkan bukti alert">Drill-down</button>
           <a class="button text-button" href="${triageUrl}" title="Lihat di antrean Triage">Triage</a>
         </td>
       </tr>
@@ -187,38 +227,103 @@ export function statsResults(data, query, drilldownAlerts = null) {
     </div>
   ` : '';
 
-  const drilldownSection = drilldownAlerts?.length ? `
-    <section class="panel stack drilldown-evidence-section" style="margin-top:20px;">
-      <div class="section-heading">
-        <h2>Sampel Bukti Alert Hasil Drill-down</h2>
-        <span class="meta">${drilldownAlerts.length} alert ditampilkan</span>
-      </div>
-      <div class="table-region">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width:110px;">Waktu</th>
-              <th style="width:90px;">Severity</th>
-              <th>Deskripsi / Rule</th>
-              <th style="width:140px;">Source IP</th>
-              <th style="width:100px; text-align:right;">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${drilldownAlerts.map(a => `
+  let drilldownSection = '';
+  if (drilldownAlerts && drilldownAlerts.length) {
+    const selectedSet = new Set(selectedIds);
+    const allSelected = selectedIds.length > 0 && selectedIds.length === drilldownAlerts.length;
+
+    const drilldownRows = drilldownAlerts.map(a => {
+      const isSel = selectedSet.has(a.id);
+      const isExp = showAllLogs || expandedLogIds.has(a.id);
+      const logText = a.full_log || a.raw?.full_log || (a.raw ? JSON.stringify(a.raw, null, 2) : 'Log tidak tersedia.');
+
+      const mainRow = `
+        <tr data-drilldown-row="${a.id}" class="${isSel ? 'is-selected' : ''}">
+          <td style="width:40px;">
+            <input type="checkbox" data-select-drilldown="${a.id}" ${isSel ? 'checked' : ''} aria-label="Pilih alert #${a.id}">
+          </td>
+          <td class="meta num">${esc(a.timestamp?.slice(0, 16).replace('T', ' ') || '—')}</td>
+          <td>${severity(a.rule_level)}</td>
+          <td>
+            <span class="font-medium">${esc(a.description || 'Alert')}</span>
+            <span class="meta mono">(${esc(a.rule_id || '—')})</span>
+            <button type="button" class="text-button meta" data-stats-action="toggle-log" data-alert-id="${a.id}" style="margin-left:6px; cursor:pointer;" title="Buka/tutup full log">
+              [${isExp ? 'Tutup Log' : 'Log'}]
+            </button>
+          </td>
+          <td class="mono">${esc(a.source_ip || '—')}</td>
+          <td style="text-align:right;">
+            <a class="button text-button" href="#/triage?alert=${a.id}" title="Buka detail lengkap di Triage">Triage</a>
+          </td>
+        </tr>
+      `;
+
+      const logRow = isExp ? `
+        <tr class="log-expansion-row" data-log-for="${a.id}">
+          <td colspan="6" class="log-expansion-cell">
+            <div class="queue-log-box stack">
+              <div class="split queue-log-head">
+                <span class="meta mono">Log Alert #${esc(a.alert_id || a.id)} · Host: ${esc(a.agent_name || '—')} · Rule ${esc(a.rule_id || '—')}</span>
+                <div style="display:flex; gap:6px;">
+                  <button class="button text-button meta" type="button" data-stats-action="copy-single-log" data-alert-id="${a.id}">${icon('copy')} Salin</button>
+                  <button class="button text-button meta" type="button" data-stats-action="copy-single-redacted" data-alert-id="${a.id}">Tersamarkan</button>
+                  <button class="button text-button meta" type="button" data-stats-action="copy-single-defanged" data-alert-id="${a.id}">Defang</button>
+                </div>
+              </div>
+              <pre class="raw-log">${esc(logText)}</pre>
+            </div>
+          </td>
+        </tr>
+      ` : '';
+
+      return mainRow + logRow;
+    }).join('');
+
+    drilldownSection = `
+      <section class="panel stack drilldown-evidence-section" style="margin-top:24px;">
+        <div class="section-heading" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2>Bukti Alert Hasil Drill-down</h2>
+            <span class="meta">${drilldownAlerts.length} alert ditampilkan (${esc(query.facet)} = ${esc(query.facet_value)})</span>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button type="button" class="button" id="btn-toggle-all-stats-logs" aria-pressed="${showAllLogs}">
+              ${icon('cases')} <span id="toggle-all-logs-label">${showAllLogs ? 'Tutup semua log' : 'Semua log'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="stats-selection-toolbar" class="selection-toolbar" style="display:${selectedIds.length ? 'flex' : 'none'};">
+          <strong>${selectedIds.length} alert dipilih</strong>
+          <button class="button primary" type="button" data-stats-action="create-incident">${icon('plus')} Buat insiden</button>
+          <button class="button" type="button" data-stats-action="add-to-incident">${icon('cases')} Masukkan ke insiden</button>
+          <button class="button" type="button" data-stats-action="batch-review">Tandai direview</button>
+          <button class="button" type="button" data-stats-action="batch-unreview">Belum direview</button>
+          <button class="button" type="button" data-stats-action="copy-logs">${icon('copy')} Salin log</button>
+          <button class="button" type="button" data-stats-action="copy-redacted">Tersamarkan</button>
+          <button class="button icon-button" type="button" data-stats-action="clear-selection" aria-label="Batalkan pilihan">${icon('close')}</button>
+        </div>
+
+        <div class="table-region">
+          <table class="data-table">
+            <thead>
               <tr>
-                <td class="meta num">${esc(a.timestamp?.slice(0, 16).replace('T', ' ') || '—')}</td>
-                <td><span class="badge ${Number(a.rule_level) >= 12 ? 'critical' : Number(a.rule_level) >= 10 ? 'high' : Number(a.rule_level) >= 7 ? 'medium' : 'low'}">Lvl ${a.rule_level ?? 0}</span></td>
-                <td><span class="font-medium">${esc(a.description || 'Alert')}</span> <span class="meta mono">(${esc(a.rule_id || '—')})</span></td>
-                <td class="mono">${esc(a.source_ip || '—')}</td>
-                <td style="text-align:right;"><a class="button text-button" href="#/triage?alert=${a.id}">Buka Alert</a></td>
+                <th style="width:40px;"><input type="checkbox" id="stats-select-all-drilldown" ${allSelected ? 'checked' : ''} aria-label="Pilih semua alert hasil drill-down"></th>
+                <th style="width:110px;">Waktu</th>
+                <th style="width:90px;">Severity</th>
+                <th>Deskripsi / Rule</th>
+                <th style="width:140px;">Source IP</th>
+                <th style="width:100px; text-align:right;">Aksi</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  ` : '';
+            </thead>
+            <tbody>
+              ${drilldownRows}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
 
   return `
     <div class="metric-strip" style="margin-bottom:16px;">

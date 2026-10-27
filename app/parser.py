@@ -30,6 +30,15 @@ HTTP_REQUEST_RE = re.compile(
     r'(?:\s+(?P<protocol>HTTP/[0-9.]+))?"'
 )
 
+# Generic HTTP request line (with or without quotes, and flexible prefix)
+HTTP_GENERIC_RE = re.compile(
+    r'(?:\"|\b)(?P<method>GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)\s+(?P<uri>[^\s\"]+)(?:\s+(?P<protocol>HTTP/[0-9.]+))?\"?(?:\s+(?P<status>\d{3}))?(?:\s+(?P<bytes>\S+))?',
+    re.I,
+)
+
+# Raw bad request / TLS handshake on plain HTTP port
+BAD_REQUEST_RE = re.compile(r'\"(?:-|\\x[0-9a-fA-F]{2}[^\"]*)\"\s+(?P<status>400)\b')
+
 SYSLOG_RE = re.compile(
     r'^(?P<timestamp>[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)'
     r'\s+(?P<hostname>\S+)\s+(?P<rest>.*)$',
@@ -355,29 +364,56 @@ def parse_log_line(line: Any, reference_ts: Any = None) -> dict[str, Any]:
         except Exception:
             pass
 
-    # 4. Embedded HTTP in general text
-    http_match = HTTP_REQUEST_RE.search(text)
+    # 4. Raw bad request / TLS handshake
+    if BAD_REQUEST_RE.search(text):
+        parsed.update({
+            "format": "bad_request",
+            "log_type": "http",
+            "srcip": first_ip_in(text),
+            "method": "-",
+            "uri": "-",
+            "path": "[Permintaan TLS / Invalid]",
+            "status": "400",
+            "message": text,
+            "details": text,
+        })
+        return parsed
+
+    # 5. Embedded HTTP in general text or virtual host prefix
+    http_match = HTTP_REQUEST_RE.search(text) or HTTP_GENERIC_RE.search(text)
     if http_match:
         uri = http_match.group("uri") or "/"
         qidx = uri.find("?")
-        status_match = re.search(r'"\s+(\d{3})\s+(\S+)', text[http_match.end():])
+        fidx = uri.find("#")
+        end_idx = min([i for i in (qidx, fidx) if i != -1], default=-1)
+        path_val = uri[:end_idx] if end_idx != -1 else uri
+        status_val = ""
+        bytes_val = ""
+        if "status" in http_match.groupdict() and http_match.group("status"):
+            status_val = http_match.group("status")
+            bytes_val = http_match.group("bytes") or ""
+        else:
+            status_match = re.search(r'"\s+(\d{3})\s+(\S+)', text[http_match.end():])
+            if status_match:
+                status_val = status_match.group(1)
+                bytes_val = status_match.group(2)
         parsed.update({
             "format": "http_embedded",
             "log_type": "http",
             "srcip": first_ip_in(text),
             "method": http_match.group("method") or "",
             "uri": uri,
-            "path": uri[:qidx] if qidx != -1 else uri,
+            "path": path_val or "/",
             "query": uri[qidx + 1:] if qidx != -1 else "",
-            "protocol": http_match.group("protocol") or "",
-            "status": status_match.group(1) if status_match else "",
-            "bytes": status_match.group(2) if status_match else "",
+            "protocol": (http_match.group("protocol") if "protocol" in http_match.groupdict() else "") or "",
+            "status": status_val,
+            "bytes": bytes_val,
             "message": text,
             "details": text,
         })
         return parsed
 
-    # 5. Generic log line
+    # 6. Generic log line
     parsed["srcip"] = first_ip_in(text)
     parsed["details"] = text
     return parsed
