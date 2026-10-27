@@ -159,6 +159,8 @@ def list_alerts(
     time_preset: str = "",
     time_from: str = "",
     time_to: str = "",
+    facet: str = "",
+    facet_value: str = "",
     sort: str = "desc",
     sort_by: str = "timestamp",
     limit: int = 500,
@@ -172,6 +174,7 @@ def list_alerts(
         q=q, tenant=tenant, status=status, group_id=group_id,
         filter_preset=filter_preset, review_status=review_status,
         time_preset=time_preset, time_from=time_from, time_to=time_to,
+        facet=facet, facet_value=facet_value,
     )
 
     # Sort order
@@ -896,11 +899,13 @@ MAX_EXPORT_ALERTS = 10_000
 def _get_alerts_for_export(
     group_id: str | None = None, alert_ids: str | None = None, tenant: str | list[str] | tuple[str, ...] | None = "all",
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
-    time_from: str = "", time_to: str = "",
+    time_preset: str = "", time_from: str = "", time_to: str = "",
+    facet: str = "", facet_value: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     where, params = alert_where(
         q=q, tenant=tenant, review_status=review_status, filter_preset=filter_preset,
-        status=status, group_id=group_id, time_from=time_from, time_to=time_to,
+        status=status, group_id=group_id, time_preset=time_preset, time_from=time_from, time_to=time_to,
+        facet=facet, facet_value=facet_value,
     )
     clean_pks: list[int] = []
     if alert_ids:
@@ -941,7 +946,8 @@ def _get_alerts_for_export(
 def export_scope(
     group_id: str | None = None, alert_ids: str | None = None, tenant: list[str] = Query(default=["all"]),
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
-    time_from: str = "", time_to: str = "",
+    time_preset: str = "", time_from: str = "", time_to: str = "",
+    facet: str = "", facet_value: str = "",
 ) -> dict[str, Any]:
     normalize_tenants(tenant)
     # Explicit selection replaces triage filters, never tenant context.
@@ -950,10 +956,11 @@ def export_scope(
             alert_ids = ",".join(str(pk) for pk in positive_ids(alert_ids.split(",")))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        group_id, q, review_status, filter_preset, status, time_from, time_to = None, "", "all", "", "all", "", ""
+        group_id, q, review_status, filter_preset, status, time_preset, time_from, time_to, facet, facet_value = None, "", "all", "", "all", "", "", "", "", ""
     return dict(group_id=group_id, alert_ids=alert_ids, tenant=_scope_tenant_value(tenant), q=q,
                 review_status=review_status, filter_preset=filter_preset, status=status,
-                time_from=time_from, time_to=time_to)
+                time_preset=time_preset, time_from=time_from, time_to=time_to,
+                facet=facet, facet_value=facet_value)
 
 
 @app.get("/api/export/preview")

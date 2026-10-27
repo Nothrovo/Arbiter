@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "app/main.py": {
-    "mtime": 1793083119.745516,
-    "seen": 1793084079.1266563,
-    "ast_hash": "c6f91f8ab7061a9bdc925f32294fa64b",
+    "mtime": 1793084834.7295706,
+    "seen": 1793084884.9925742,
+    "ast_hash": "8a304796dbeec9e9092841a8ebbb2185",
     "semantic_hash": ""
   },
   "app/parser.py": {
@@ -600,9 +600,9 @@
     "semantic_hash": ""
   },
   "tests/test_stats.py": {
-    "mtime": 1793083010.7725582,
-    "seen": 1793084079.1268303,
-    "ast_hash": "2def6b47440279f50f1f3b21f47a6dc3",
+    "mtime": 1793084851.5307531,
+    "seen": 1793084884.992918,
+    "ast_hash": "cc1c44c7cf5738a9d1dce7d702c0df82",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/model.js": {

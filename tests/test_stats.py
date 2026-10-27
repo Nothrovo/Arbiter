@@ -252,6 +252,19 @@ class StatsEndpointContractTests(unittest.TestCase):
         for key in keys:
             self.assertNotIn("?", key)
 
+    def test_alerts_endpoint_respects_facet_drilldown(self):
+        # syn-10 & syn-11 have description 'SQL injection probe'
+        res = self.client.get("/api/alerts", params={
+            "tenant": "Alpha",
+            "facet": "rule_description",
+            "facet_value": "SQL injection probe",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        items = res.json()["items"]
+        self.assertEqual(len(items), 2)
+        for it in items:
+            self.assertEqual(it["description"], "SQL injection probe")
+
 
 if __name__ == "__main__":
     unittest.main()
