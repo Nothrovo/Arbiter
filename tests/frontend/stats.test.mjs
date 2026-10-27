@@ -185,11 +185,22 @@ test('isMaliciousPath detects real-world exploit probe paths from telemetry (JBo
   assert.equal(isMaliciousPath('/include/function.js.php'), true);
   assert.equal(isMaliciousPath('/geoserver/web/'), true);
   assert.equal(isMaliciousPath('/?rest_route=/batch/v1'), true);
+  assert.equal(isMaliciousPath('/gqak68zqove6wh'), true);
+  assert.equal(isMaliciousPath('/article/view/2214/%22%22'), true);
+  assert.equal(isMaliciousPath('/index.php?lang=en'), true);
+  assert.equal(isMaliciousPath('/.composer'), true);
+  assert.equal(isMaliciousPath('/.gitlab/CI.template'), true);
+  assert.equal(isMaliciousPath('/custom_403.html'), true);
 
   // Benign legitimate OJS application paths MUST remain false:
   assert.equal(isMaliciousPath('/index.php/sebatik/article/view/123/456'), false);
   assert.equal(isMaliciousPath('/index.php/sebatik/issue/view/10'), false);
   assert.equal(isMaliciousPath('/plugins/generic/pdfJsViewer/pdf.js/web/locale/locale.properties'), false);
+  assert.equal(isMaliciousPath('/lib/pkp/xml/oai2.xsl'), false);
+  assert.equal(isMaliciousPath('/.well-known/traffic-advice'), false);
+  assert.equal(isMaliciousPath('/sitemap.xml'), false);
+  assert.equal(isMaliciousPath('/ads.txt'), false);
+  assert.equal(isMaliciousPath('/robots.txt'), false);
   assert.equal(isMaliciousPath('/index.html'), false);
   assert.equal(isMaliciousPath('/favicon.ico'), false);
 });

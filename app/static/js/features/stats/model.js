@@ -240,7 +240,7 @@ export const MALICIOUS_PATTERNS = [
   /\/ipfs\//i,
 
   // 9. Database administration tools & web shells
-  /(db|database)\/(websql|webdb|index\.php)/i,
+  /(db|database|websql|dbweb)(\/|$)/i,
   /phpmyadmin/i,
   /\bpma(\b|\/|$)/i,
   /adminer(\.php)?/i,
@@ -249,6 +249,27 @@ export const MALICIOUS_PATTERNS = [
   /eval-stdin/i,
   /cmd(\.exe)?/i,
   /\b1337\b/,
+
+  // 10. Dotfiles, root config files & random 404 fingerprinting probes
+  /\/(\.(?!well-known[/?#]|$)[a-zA-Z0-9_.-]+)/i,
+  /^\/[^/]+\.(json|ya?ml|cfg|properties|template|key|boto|htpasswd)(\?|$)/i,
+  /^\/[a-zA-Z0-9_-]{10,}(\?|$)/i,
+  /^\/index\.php\?(lang|id|file|page)=/i,
+  /\/custom_403\.html/i,
+];
+
+export const BENIGN_WHITELIST_PATTERNS = [
+  /^\/index\.php\/(sebatik|informatika|snsebatik2018|index)(\/|$)/i,
+  /^\/plugins\/generic\/pdfJsViewer\//i,
+  /^\/lib\/pkp\//i,
+  /^\/\.well-known\//i,
+  /^\/(sitemap\.xml|ads\.txt|robots\.txt|favicon\.ico)(\?|$)/i,
+];
+
+export const INJECTION_PATTERNS = [
+  /%22|%27|%3C|%3E|%7C|[\"'<>|]/,
+  /rest_route=/i,
+  /phpinfo=/i,
 ];
 
 export function isMaliciousPath(text = '') {
@@ -260,5 +281,17 @@ export function isMaliciousPath(text = '') {
   } catch {
     // Keep raw if URI malformed
   }
+
+  // 1. Parameter fuzzing & injection overrides whitelist
+  if (INJECTION_PATTERNS.some(rx => rx.test(str) || rx.test(decoded))) {
+    return true;
+  }
+
+  // 2. Legitimate OJS application paths whitelist guardrail
+  if (BENIGN_WHITELIST_PATTERNS.some(rx => rx.test(str) || rx.test(decoded))) {
+    return false;
+  }
+
+  // 3. Signature matching against malicious patterns
   return MALICIOUS_PATTERNS.some(rx => rx.test(str) || rx.test(decoded));
 }

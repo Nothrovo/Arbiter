@@ -1,17 +1,17 @@
 # Graph Report - Arbiter  (2026-10-27)
 
 ## Corpus Check
-- 99 files · ~81,986 words
+- 99 files · ~82,087 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
 
 ## Summary
-- 843 nodes · 1907 edges · 38 communities (29 shown, 9 thin omitted)
+- 845 nodes · 1909 edges · 38 communities (29 shown, 9 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 57 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ba810349`
+- Built from commit: `53d13232`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -19,9 +19,9 @@
 - parser.py
 - normalize_tenants
 - test_ui_api.py
-- Control
+- reports/view.js
 - main.py
-- Control
+- imports/view.js
 - ApiIntegrationTests
 - init-db.sql
 - start.sh
@@ -31,7 +31,7 @@
 - UIAPIContractTests
 - AGENTS.md — Arbiter Project Context for AI Agents
 - scope.js
-- incidents-view.test.mjs
+- incidents/render.js
 - app.js
 - SafetyTests
 - SyntheticDB
@@ -42,7 +42,7 @@
 - intel.py
 - IPIntel — CyberSOC & Threat Intelligence Web
 - 📋 Protokol Eksekusi Wajib
-- stats/model.js
+- File Map and Interfaces
 - 6. SOC Log Reader — bagian demi bagian
 - MANUAL — Menjalankan IP Intel Web
 - Any
@@ -90,17 +90,17 @@ Nodes (24): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ol
 Cohesion: 0.14
 Nodes (16): add_group_members(), create_group(), delete_group(), export_scope(), get_alert_detail(), remove_group_member(), _scope_tenant_value(), _scoped_groups() (+8 more)
 
-### Community 3 - "Control"
-Cohesion: 0.22
-Nodes (3): click(), Control, fixture()
+### Community 3 - "reports/view.js"
+Cohesion: 0.12
+Nodes (23): ApiError, copyHTML(), copyText(), download(), request(), caseReportRoute(), createReportSession(), exportURL() (+15 more)
 
 ### Community 4 - "main.py"
 Cohesion: 0.19
 Nodes (15): get_db(), init_database(), favicon(), get_facet_alert_ids(), get_group_detail(), get_stats(), get_suggestions(), get_tenants() (+7 more)
 
-### Community 5 - "Control"
-Cohesion: 0.22
-Nodes (3): click(), Control, fixture()
+### Community 5 - "imports/view.js"
+Cohesion: 0.15
+Nodes (7): createImportSession(), importResult(), mount(), update(), click(), Control, fixture()
 
 ### Community 7 - "init-db.sql"
 Cohesion: 0.25
@@ -123,16 +123,16 @@ Cohesion: 0.15
 Nodes (12): AGENTS.md — Arbiter Project Context for AI Agents, Architecture (frontend), Design direction: Quiet Evidence Desk, Four destinations (not a monolithic page), Graph, Key policies, Privacy — STRICT, Running production (+4 more)
 
 ### Community 16 - "scope.js"
-Cohesion: 0.07
-Nodes (34): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), SEVERITIES (+26 more)
+Cohesion: 0.06
+Nodes (20): choices(), integer(), queryFrom(), rawTenantValues(), url, moduleURL, modelURL, load() (+12 more)
 
-### Community 17 - "incidents-view.test.mjs"
-Cohesion: 0.25
-Nodes (3): context(), load(), SyntheticRoot
+### Community 17 - "incidents/render.js"
+Cohesion: 0.11
+Nodes (44): caseHref(), cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), filterIncidents(), incidentPayload(), incidentRoute() (+36 more)
 
 ### Community 19 - "app.js"
-Cohesion: 0.07
-Nodes (28): canLeave(), closeNav(), health(), help, main, navigationMemory, pageTitles, renderTenantOptions() (+20 more)
+Cohesion: 0.10
+Nodes (24): canLeave(), closeNav(), health(), help, main, navigationMemory, pageTitles, render() (+16 more)
 
 ### Community 22 - "database.py"
 Cohesion: 0.15
@@ -162,9 +162,9 @@ Nodes (11): 10. Parser SOC dan aturan keamanan tampilan, 11. Konfigurasi dan kea
 Cohesion: 0.22
 Nodes (8): 1. Inisialisasi Task Otomatis (`todo_list`), 2. Proaktif Menggunakan Skills & Subagents, 3. Pelacakan Jahitan Data Ujung-ke-Ujung (*Trace Every Seam*), 4. Pengujian Kasus Negatif (Bukan Cuma Kasus Ideal), 5. Verifikasi Lingkungan & Container, 🎯 Filosofi Inti: "No Stubs, Full Seam, Zero Hallucination", 📋 Protokol Eksekusi Wajib, Standar Operasional Prosedur (SOP) Autonomous Engineering & Rigor
 
-### Community 29 - "stats/model.js"
-Cohesion: 0.11
-Nodes (29): CHART_OPTIONS, distributionPercentages(), generateMarkdownSummary(), generateStatsCSV(), isMaliciousPath(), MALICIOUS_PATTERNS, METRIC_OPTIONS, normalizeStatsQuery() (+21 more)
+### Community 29 - "File Map and Interfaces"
+Cohesion: 0.22
+Nodes (8): Alert Statistics & Pivot Implementation Plan, File Map and Interfaces, Global Constraints, Review Focus, Self-Review, Task 4: Add the compact Triage filter-summary strip, Task 5: Add approved post-core statistics enhancements, Task 6: Document the completed navigation and verification contract
 
 ### Community 30 - "6. SOC Log Reader — bagian demi bagian"
 Cohesion: 0.22
@@ -191,8 +191,8 @@ Cohesion: 0.50
 Nodes (4): 9.1 Tabel inti, 9.2 Tabel CTI, 9.3 Tabel SOC, 9. Database
 
 ### Community 38 - "esc"
-Cohesion: 0.06
-Nodes (101): ApiError, apiURL(), copyHTML(), copyText(), download(), json(), request(), notify() (+93 more)
+Cohesion: 0.08
+Nodes (77): apiURL(), json(), notify(), summarizeTelemetryRange(), mount(), loadStatus(), render(), importPage() (+69 more)
 
 ### Community 40 - "Struktur Proyek `ipintel/`"
 Cohesion: 0.29
@@ -204,17 +204,17 @@ Nodes (6): 1. Tree + ukuran file, 2. Graph dependensi modul (siapa import siapa)
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Task 1: Establish precise shared multi-tenant scope and safe facet contract` connect `normalize_tenants` to `main.py`, `stats/model.js`, `esc`?**
-  _High betweenness centrality (0.235) - this node is a cross-community bridge._
+- **Why does `Task 1: Establish precise shared multi-tenant scope and safe facet contract` connect `normalize_tenants` to `scope.js`, `main.py`, `File Map and Interfaces`, `esc`?**
+  _High betweenness centrality (0.236) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `json()` (e.g. with `mount()` and `loadSelected()`) actually correct?**
   _`json()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Should `parser.py` be split into smaller, more focused modules?**
   _Cohesion score 0.06034801925212884 - nodes in this community are weakly interconnected._
-- **Why does `Task 2: Build SQL aggregation endpoints and schema support` connect `SyntheticDB` to `test_ui_api.py`, `main.py`, `esc`, `scope.js`, `stats/model.js`?**
-  _High betweenness centrality (0.173) - this node is a cross-community bridge._
+- **Why does `Task 2: Build SQL aggregation endpoints and schema support` connect `SyntheticDB` to `test_ui_api.py`, `main.py`, `esc`, `incidents/render.js`, `File Map and Interfaces`?**
+  _High betweenness centrality (0.172) - this node is a cross-community bridge._
 - **Should `normalize_tenants` be split into smaller, more focused modules?**
   _Cohesion score 0.14153846153846153 - nodes in this community are weakly interconnected._
-- **Why does `selectedIds()` connect `scope.js` to `Arbiter — audit UI/UX dan keputusan redesign`?**
-  _High betweenness centrality (0.146) - this node is a cross-community bridge._
+- **Why does `selectedIds()` connect `incidents/render.js` to `Arbiter — audit UI/UX dan keputusan redesign`?**
+  _High betweenness centrality (0.145) - this node is a cross-community bridge._
 - **Should `test_ui_api.py` be split into smaller, more focused modules?**
   _Cohesion score 0.12380952380952381 - nodes in this community are weakly interconnected._
