@@ -294,6 +294,31 @@ class StatsEndpointContractTests(unittest.TestCase):
         sb_keys = {it["key"] for it in sb}
         self.assertEqual(sb_keys, {"/login.php", "/admin.php"})
 
+    def test_facet_alert_ids_endpoint(self):
+        # Resolve IDs for single secondary category
+        res = self.client.post("/api/stats/facet-alert-ids", json={
+            "tenant": ["Alpha"],
+            "facet": "rule_description",
+            "facet_value": "SQL injection probe",
+            "secondary_facet": "url_path",
+            "secondary_facet_values": ["/login.php"],
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()["alert_pks"], [10])
+        self.assertEqual(res.json()["total"], 1)
+
+        # Resolve IDs for multiple secondary categories at once
+        res_multi = self.client.post("/api/stats/facet-alert-ids", json={
+            "tenant": ["Alpha"],
+            "facet": "rule_description",
+            "facet_value": "SQL injection probe",
+            "secondary_facet": "url_path",
+            "secondary_facet_values": ["/login.php", "/admin.php"],
+        })
+        self.assertEqual(res_multi.status_code, 200, res_multi.text)
+        self.assertEqual(res_multi.json()["alert_pks"], [10, 11])
+        self.assertEqual(res_multi.json()["total"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,7 +29,7 @@ from app.exports import (
 )
 from app.parser import parse_export
 from app.privacy import sanitize_text
-from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS
+from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS, FACET_COLUMNS
 
 
 @asynccontextmanager
@@ -771,6 +771,54 @@ def get_stats(
             "secondary_facet": secondary_facet,
             "secondary_facet_value": secondary_facet_value,
         },
+    }
+
+
+@app.post("/api/stats/facet-alert-ids")
+def get_facet_alert_ids(payload: dict[str, Any]):
+    tenant = payload.get("tenant", ["all"])
+    if isinstance(tenant, str):
+        tenant = [tenant]
+    q = payload.get("q", "")
+    status = payload.get("status", "all")
+    group_id = payload.get("group_id")
+    filter_preset = payload.get("filter_preset", "")
+    review_status = payload.get("review_status", "all")
+    time_preset = payload.get("time_preset", "")
+    time_from = payload.get("time_from", "")
+    time_to = payload.get("time_to", "")
+    facet = payload.get("facet", "")
+    facet_value = payload.get("facet_value", "")
+    secondary_facet = payload.get("secondary_facet", "")
+    secondary_facet_values = payload.get("secondary_facet_values", [])
+
+    if not isinstance(secondary_facet_values, list):
+        raise HTTPException(status_code=422, detail="secondary_facet_values must be a list.")
+
+    where_sql, params = alert_where(
+        q=q, tenant=tenant, status=status, group_id=group_id,
+        filter_preset=filter_preset, review_status=review_status,
+        time_preset=time_preset, time_from=time_from, time_to=time_to,
+        facet=facet, facet_value=facet_value,
+    )
+
+    if secondary_facet and secondary_facet_values:
+        if secondary_facet not in FACET_COLUMNS:
+            raise HTTPException(status_code=422, detail="Invalid secondary_facet.")
+        sec_col = FACET_COLUMNS[secondary_facet]
+        where_sql += (" AND " if where_sql else "WHERE ") + f"{sec_col} = ANY(%s)"
+        params.append(secondary_facet_values)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT a.id FROM wazuh.alerts a {where_sql} ORDER BY a.rule_id ASC NULLS LAST, a.timestamp ASC NULLS LAST, a.id ASC LIMIT 10000",
+            params,
+        ).fetchall()
+
+    alert_pks = [int(r["id"]) for r in rows]
+    return {
+        "alert_pks": alert_pks,
+        "total": len(alert_pks),
     }
 
 

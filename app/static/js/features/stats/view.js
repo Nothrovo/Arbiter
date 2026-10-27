@@ -15,6 +15,7 @@ export function mount(ctx) {
   let currentData = null;
   let drilldownAlerts = null;
   const selectedIds = new Set();
+  const selectedSecondaryKeys = new Set();
   const expandedLogIds = new Set();
   let showAllLogs = false;
 
@@ -48,6 +49,7 @@ export function mount(ctx) {
       selectedIds: [...selectedIds],
       expandedLogIds,
       showAllLogs,
+      selectedSecondaryKeys: [...selectedSecondaryKeys],
     });
   }
 
@@ -90,6 +92,35 @@ export function mount(ctx) {
         }
         resultsContainer.innerHTML = errorState(msg);
       }
+    }
+  }
+
+  async function resolveAlertIdsForSecondaryKeys(keys = []) {
+    if (!keys.length) return [];
+    try {
+      const res = await json('/api/stats/facet-alert-ids', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          tenant: tenantValues(query),
+          q: query.q,
+          status: query.status,
+          filter_preset: query.filter_preset,
+          review_status: query.review_status,
+          time_preset: query.time_preset,
+          time_from: query.time_from,
+          time_to: query.time_to,
+          facet: query.facet,
+          facet_value: query.facet_value,
+          secondary_facet: query.secondary_pivot,
+          secondary_facet_values: keys,
+        }),
+        signal,
+      });
+      return res.alert_pks || [];
+    } catch (err) {
+      if (err.name !== 'AbortError') notify(`Gagal mengambil alert: ${err.message}`, 'error');
+      return [];
     }
   }
 
@@ -183,6 +214,20 @@ export function mount(ctx) {
       const aid = Number(e.target.dataset.selectDrilldown);
       if (e.target.checked) selectedIds.add(aid);
       else selectedIds.delete(aid);
+      renderView();
+    }
+    if (e.target.id === 'stats-select-all-secondary') {
+      if (e.target.checked && currentData?.secondary_breakdown) {
+        currentData.secondary_breakdown.forEach(sb => selectedSecondaryKeys.add(sb.key));
+      } else {
+        selectedSecondaryKeys.clear();
+      }
+      renderView();
+    }
+    if (e.target.matches('[data-select-secondary-key]')) {
+      const sk = e.target.dataset.selectSecondaryKey;
+      if (e.target.checked) selectedSecondaryKeys.add(sk);
+      else selectedSecondaryKeys.delete(sk);
       renderView();
     }
   });
@@ -304,6 +349,101 @@ export function mount(ctx) {
     }
     if (btn.dataset.action === 'retry') {
       await loadData();
+      return;
+    }
+    if (btn.dataset.action === 'clear-secondary-selection') {
+      selectedSecondaryKeys.clear();
+      renderView();
+      return;
+    }
+    if (btn.dataset.action === 'add-secondary-to-incident') {
+      const key = btn.dataset.secondaryKey;
+      if (!key) return;
+      btn.disabled = true;
+      notify(`Mengambil alert untuk sub-kategori "${key}"…`, 'info');
+      try {
+        const pks = await resolveAlertIdsForSecondaryKeys([key]);
+        if (!pks.length) {
+          notify('Tidak ada alert yang ditemukan untuk kategori ini.', 'error');
+          return;
+        }
+        pks.forEach(pk => selectedIds.add(pk));
+        const countEl = root.querySelector('#stats-batch-incident-count');
+        if (countEl) countEl.textContent = String(selectedIds.size);
+        batchDialog?.showModal();
+        await loadBatchIncidentOptions();
+        renderView();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+    if (btn.dataset.action === 'batch-secondary-add-incident') {
+      const keys = [...selectedSecondaryKeys];
+      if (!keys.length) {
+        notify('Pilih minimal satu sub-kategori terlebih dahulu.', 'error');
+        return;
+      }
+      btn.disabled = true;
+      notify(`Mengambil alert untuk ${keys.length} sub-kategori terpilih…`, 'info');
+      try {
+        const pks = await resolveAlertIdsForSecondaryKeys(keys);
+        if (!pks.length) {
+          notify('Tidak ada alert yang ditemukan untuk kategori terpilih.', 'error');
+          return;
+        }
+        pks.forEach(pk => selectedIds.add(pk));
+        const countEl = root.querySelector('#stats-batch-incident-count');
+        if (countEl) countEl.textContent = String(selectedIds.size);
+        batchDialog?.showModal();
+        await loadBatchIncidentOptions();
+        renderView();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+    if (btn.dataset.action === 'batch-secondary-create-incident') {
+      const keys = [...selectedSecondaryKeys];
+      if (!keys.length) {
+        notify('Pilih minimal satu sub-kategori terlebih dahulu.', 'error');
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const pks = await resolveAlertIdsForSecondaryKeys(keys);
+        if (!pks.length) {
+          notify('Tidak ada alert yang ditemukan untuk kategori terpilih.', 'error');
+          return;
+        }
+        const p = new URLSearchParams({tenant: query.tenant, alert_ids: pks.join(',')});
+        navigate(withParams('/incidents/new', p));
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+    if (btn.dataset.action === 'batch-secondary-review') {
+      const keys = [...selectedSecondaryKeys];
+      if (!keys.length) return;
+      btn.disabled = true;
+      try {
+        const pks = await resolveAlertIdsForSecondaryKeys(keys);
+        if (pks.length) {
+          await json(apiURL('/api/alerts/batch-review', {tenant: query.tenant}), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({alert_ids: pks, is_reviewed: true, tenant: query.tenant}),
+            signal,
+          });
+          notify(`${pks.length} alert dari ${keys.length} sub-kategori ditandai direview.`, 'success');
+          await loadData();
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
       return;
     }
 

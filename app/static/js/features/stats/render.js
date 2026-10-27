@@ -156,7 +156,7 @@ export function statsPage(query) {
   `;
 }
 
-export function statsResults(data, query, {drilldownAlerts = null, selectedIds = [], expandedLogIds = new Set(), showAllLogs = false} = {}) {
+export function statsResults(data, query, {drilldownAlerts = null, selectedIds = [], expandedLogIds = new Set(), showAllLogs = false, selectedSecondaryKeys = []} = {}) {
   const total = Number(data.total) || 0;
   const metricLabel = data.metric === 'events' ? 'event' : 'alert';
   const items = distributionPercentages(data.items || [], 0, total);
@@ -207,18 +207,36 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
   let secondaryBreakdownSection = '';
   if (data.secondary_breakdown && data.secondary_breakdown.length) {
     const secLabel = data.secondary_pivot ? (PIVOT_OPTIONS.find(([k]) => k === data.secondary_pivot)?.[1] || data.secondary_pivot) : 'Pivot Kedua';
+    const selectedSecSet = new Set(selectedSecondaryKeys);
+    const allSecSelected = data.secondary_breakdown.length > 0 && selectedSecondaryKeys.length === data.secondary_breakdown.length;
+    const totalSelectedAlerts = data.secondary_breakdown
+      .filter(sb => selectedSecSet.has(sb.key))
+      .reduce((acc, sb) => acc + (sb.count || 0), 0);
+
     const secRows = data.secondary_breakdown.map(sb => {
       const isFiltered = query.secondary_facet_value === sb.key;
+      const isChecked = selectedSecSet.has(sb.key);
+      const keyEsc = esc(sb.key);
       return `
         <tr class="${isFiltered ? 'is-selected' : ''}">
-          <td class="mono font-medium">${esc(sb.key)}</td>
+          <td style="width:40px;">
+            <input type="checkbox" data-select-secondary-key="${keyEsc}" ${isChecked ? 'checked' : ''} aria-label="Pilih sub-kategori ${keyEsc}">
+          </td>
+          <td class="mono font-medium">${keyEsc}</td>
           <td class="numeric">${sb.count.toLocaleString('id-ID')}</td>
           <td class="numeric">${sb.percentage}%</td>
-          <td class="actions-col" style="text-align:right;">
+          <td class="actions-col" style="text-align:right; white-space:nowrap;">
             <button type="button" class="button text-button ${isFiltered ? 'primary' : ''}"
-                    data-secondary-drill-key="${esc(sb.key)}"
-                    title="Saring hanya kategori kedua: ${esc(sb.key)}">
+                    data-secondary-drill-key="${keyEsc}"
+                    title="Saring hanya kategori kedua: ${keyEsc}">
               ${isFiltered ? 'Terpilih (Saring)' : 'Drill-down'}
+            </button>
+            <button type="button" class="button text-button"
+                    data-action="add-secondary-to-incident"
+                    data-secondary-key="${keyEsc}"
+                    data-count="${sb.count}"
+                    title="Langsung masukkan semua ${sb.count} alert pada sub-kategori ini ke insiden">
+              ${icon('cases')} + Insiden
             </button>
           </td>
         </tr>
@@ -236,14 +254,26 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
             <button type="button" class="button text-button" id="btn-clear-secondary-drilldown">Tampilkan Semua Sub-kategori</button>
           ` : ''}
         </div>
+
+        <div id="secondary-selection-toolbar" class="selection-toolbar" style="display:${selectedSecondaryKeys.length ? 'flex' : 'none'}; margin-bottom:12px;">
+          <strong>${selectedSecondaryKeys.length} sub-kategori dipilih (${totalSelectedAlerts.toLocaleString('id-ID')} ${metricLabel})</strong>
+          <button class="button primary" type="button" data-action="batch-secondary-create-incident">${icon('plus')} Buat insiden</button>
+          <button class="button" type="button" data-action="batch-secondary-add-incident">${icon('cases')} Masukkan ke insiden</button>
+          <button class="button" type="button" data-action="batch-secondary-review">Tandai direview</button>
+          <button class="button icon-button" type="button" data-action="clear-secondary-selection" aria-label="Batalkan pilihan sub-kategori">${icon('close')}</button>
+        </div>
+
         <div class="table-region">
           <table class="data-table">
             <thead>
               <tr>
+                <th style="width:40px;">
+                  <input type="checkbox" id="stats-select-all-secondary" ${allSecSelected ? 'checked' : ''} aria-label="Pilih semua sub-kategori">
+                </th>
                 <th>${esc(secLabel)}</th>
                 <th class="numeric" style="width:120px;">${data.metric === 'events' ? 'Event' : 'Alert'}</th>
                 <th class="numeric" style="width:100px;">Proporsi</th>
-                <th style="width:140px; text-align:right;">Aksi</th>
+                <th style="width:180px; text-align:right;">Aksi</th>
               </tr>
             </thead>
             <tbody>
