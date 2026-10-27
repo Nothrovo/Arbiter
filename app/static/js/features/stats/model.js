@@ -150,27 +150,81 @@ export function generateMarkdownSummary(data) {
 }
 
 export const MALICIOUS_PATTERNS = [
+  // 1. Secrets, keys, environment & credentials
   /\.env(\b|\.|\/|$)/i,
   /\.git(\b|\/|$)/i,
+  /\.svn(\b|\/|$)/i,
   /\.ssh(\b|\/|$)/i,
   /id_rsa/i,
-  /xmlrpc(\.php)?/i,
-  /(wp-)?config(\.php)?(\.bak|\.old|\.save|\.swp|\.orig)?(\b|$)/i,
   /credentials?/i,
   /secret/i,
-  /admin(istrator)?(\b|\/|\.|$)/i,
-  /phpinfo/i,
-  /shell(\.php)?/i,
-  /backup(\b|\/|\.|$)/i,
-  /\.(bak|old|save|swp|sql|tar|gz|zip|rar)$/i,
   /\.(aws|firebase)(\b|\/|$)/i,
   /etc\/(passwd|shadow)/i,
-  /eval-stdin/i,
-  /cmd(\.exe)?/i,
-  /setup(\.php)?/i,
-  /install(\.php)?/i,
+  /proc\/self/i,
+  /(win|boot)\.ini/i,
+
+  // 2. Configuration files & backups
+  /(wp-)?config(\.php)?(\.bak|\.old|\.save|\.swp|\.orig)?(\b|$)/i,
   /web\.config/i,
   /\.htaccess/i,
+  /backup(\b|\/|\.|$)/i,
+  /\.(bak|old|save|swp|sql|tar|gz|zip|rar|7z)$/i,
+  /(router|modem|gateway).*config/i,
+  /(rom-0|config\.bin)/i,
+
+  // 3. JBoss, ColdFusion & Java App Server exploits
+  /(jmx|web)-console/i,
+  /jboss/i,
+  /invoker/i,
+  /coldfusion/i,
+  /cfide/i,
+  /uploadedfiles?/i,
+  /filemanager/i,
+  /\.(jsp|jspx|do|action)(\b|\?|$)/i,
+  /struts/i,
+  /solr/i,
+  /actuator(\b|\/|$)/i,
+
+  // 4. Router, IoT & Hardware gateway exploits
+  /gpon(form)?/i,
+  /diag_form/i,
+  /boaform/i,
+  /cobbler(_api)?/i,
+  /hnap/i,
+  /cgi-bin/i,
+  /setup\.cgi/i,
+
+  // 5. CMS, WordPress, API & Framework probe targets
+  /xmlrpc(\.php)?/i,
+  /wp-json(\/|$)/i,
+  /wp-(login|admin|content|includes)/i,
+  /wlwmanifest/i,
+  /admin(istrator)?(\b|\/|\.|$)/i,
+  /phpinfo/i,
+  /setup(\.php)?/i,
+  /install(\.php)?/i,
+  /telescope/i,
+  /graphql/i,
+  /(swagger|api-docs)/i,
+
+  // 6. Component, package & dependency disclosure
+  /bower\.json/i,
+  /package\.json/i,
+  /composer\.(json|lock)/i,
+  /jquery-file-upload/i,
+  /vendor\/.*(phpunit|autoload)/i,
+
+  // 7. Decentralized / Web3 abuse
+  /\/ipfs\//i,
+
+  // 8. Database administration tools & web shells
+  /phpmyadmin/i,
+  /\bpma(\b|\/|$)/i,
+  /adminer(\.php)?/i,
+  /shell(\.php)?/i,
+  /(wso|alfa|b374k|c99|r57)(\.php)?/i,
+  /eval-stdin/i,
+  /cmd(\.exe)?/i,
 ];
 
 export function isMaliciousPath(text = '') {

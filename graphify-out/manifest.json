@@ -228,8 +228,8 @@
     "semantic_hash": ""
   },
   "app/static/js/features/incidents/render.js": {
-    "mtime": 1793090900.0265176,
-    "seen": 1793090991.7087054,
+    "mtime": 1793091000.495485,
+    "seen": 1793091002.8458698,
     "ast_hash": "62ff8889e8f65d48d6722f0e2cfddfb4",
     "semantic_hash": ""
   },
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "app/static/js/features/incidents/view.js": {
-    "mtime": 1793090928.4752977,
-    "seen": 1793090991.708717,
+    "mtime": 1793091000.4957078,
+    "seen": 1793091002.8458817,
     "ast_hash": "5ba92c20990504e01568a481cf12d7c5",
     "semantic_hash": ""
   },
@@ -324,8 +324,8 @@
     "semantic_hash": ""
   },
   "tests/frontend/incidents-render.test.mjs": {
-    "mtime": 1793090953.4963706,
-    "seen": 1793090991.7089455,
+    "mtime": 1793091000.495977,
+    "seen": 1793091002.8461099,
     "ast_hash": "6d5c56f4e0ae8cf8313dec44a8b317ac",
     "semantic_hash": ""
   },
@@ -606,20 +606,20 @@
     "semantic_hash": ""
   },
   "app/static/js/features/stats/model.js": {
-    "mtime": 1793089870.87747,
-    "seen": 1793089873.4078152,
-    "ast_hash": "0fe36f2f1daae5dbb539a700eb02e13e",
+    "mtime": 1793091309.4237974,
+    "seen": 1793091370.2886133,
+    "ast_hash": "57516112de704c868a4bc4f05bf22c1a",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/render.js": {
-    "mtime": 1793090806.6731565,
-    "seen": 1793090991.7087538,
+    "mtime": 1793091000.4957078,
+    "seen": 1793091002.8459187,
     "ast_hash": "9a2c0da28dcb3960c5f21cbb39d3dbac",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/view.js": {
-    "mtime": 1793090819.5528882,
-    "seen": 1793090991.7087593,
+    "mtime": 1793091000.495977,
+    "seen": 1793091002.8459241,
     "ast_hash": "f35d737f1e8abde7dc0a1a5aaa7eb3ec",
     "semantic_hash": ""
   },
@@ -642,9 +642,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/stats.test.mjs": {
-    "mtime": 1793090563.1406543,
-    "seen": 1793090565.828686,
-    "ast_hash": "ce5d30d305078766cd6dd2f5d4590951",
+    "mtime": 1793091332.0373967,
+    "seen": 1793091370.2889469,
+    "ast_hash": "d488495578f825dd42195c1e7f7c520b",
     "semantic_hash": ""
   },
   "tests/frontend/triage-summary.test.mjs": {

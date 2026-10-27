@@ -120,3 +120,27 @@ test('Benign Spotter filters out malicious paths and selects only benign items',
   ]);
   assert.equal(benign.reduce((acc, it) => acc + it.count, 0), 75);
 });
+
+test('isMaliciousPath detects real-world exploit probe paths from telemetry (JBoss, GPON, ColdFusion, Cobbler, wp-json, Bower, IPFS)', async () => {
+  const {isMaliciousPath} = await import('../../app/static/js/features/stats/model.js');
+
+  // Real-world telemetry probes that must never leak into benign:
+  assert.equal(isMaliciousPath('/jmx-console/HtmlAdaptor'), true);
+  assert.equal(isMaliciousPath('/web-console/ServerInfo.jsp'), true);
+  assert.equal(isMaliciousPath('/jboss/status'), true);
+  assert.equal(isMaliciousPath('/cobbler_api'), true);
+  assert.equal(isMaliciousPath('/GponForm/diag_Form?images/'), true);
+  assert.equal(isMaliciousPath('/boaform/admin/formLogin'), true);
+  assert.equal(isMaliciousPath('/rom-0'), true);
+  assert.equal(isMaliciousPath('/router/config.bin'), true);
+  assert.equal(isMaliciousPath('/CFIDE/scripts/ajax/FCKeditor/editor/filemanager/connectors/cfm/upload.cfm'), true);
+  assert.equal(isMaliciousPath('/userfiles/uploadedFiles/payload.jsp'), true);
+  assert.equal(isMaliciousPath('/wp-json/batch/v1'), true);
+  assert.equal(isMaliciousPath('/wp-json/wp/v2/users'), true);
+  assert.equal(isMaliciousPath('/bower.json'), true);
+  assert.equal(isMaliciousPath('/vendor/jquery-file-upload/server/php/'), true);
+  assert.equal(isMaliciousPath('/ipfs/QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco'), true);
+  assert.equal(isMaliciousPath('/phpmyadmin/scripts/setup.php'), true);
+  assert.equal(isMaliciousPath('/actuator/env'), true);
+  assert.equal(isMaliciousPath('/solr/admin/info/system'), true);
+});
