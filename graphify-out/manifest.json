@@ -652,5 +652,11 @@
     "seen": 1793076384.9695325,
     "ast_hash": "88df59ab6d7800bc315aab536a8cdaf9",
     "semantic_hash": ""
+  },
+  "docs/AUTONOMOUS_ENGINEERING_SOP.md": {
+    "mtime": 1793085213.8954716,
+    "seen": 1793085223.5299358,
+    "ast_hash": "5f17f5e9897d0b41774dc4b246363436",
+    "semantic_hash": ""
   }
 }
