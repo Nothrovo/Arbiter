@@ -150,12 +150,16 @@ export function generateMarkdownSummary(data) {
 }
 
 export const MALICIOUS_PATTERNS = [
-  // 1. Secrets, keys, environment & credentials
-  /\.env(\b|\.|\/|$)/i,
+  // 1. Secrets, keys, cloud credentials & environment
+  /\.?_?env(\d*|ironment)?(\b|\.|\/|$)/i,
   /\.git(\b|\/|$)/i,
   /\.svn(\b|\/|$)/i,
   /\.ssh(\b|\/|$)/i,
   /id_rsa/i,
+  /\.(npmrc|netrc|boto|htpasswd)\b/i,
+  /client\.key/i,
+  /(service-account|gcp-key|gcp-sa|gcloud|aws|env|firebase(-adminsdk)?)\.json/i,
+  /auth\.json/i,
   /credentials?/i,
   /secret/i,
   /\.(aws|firebase)(\b|\/|$)/i,
@@ -163,16 +167,33 @@ export const MALICIOUS_PATTERNS = [
   /proc\/self/i,
   /(win|boot)\.ini/i,
 
-  // 2. Configuration files & backups
+  // 2. DevOps, CI/CD pipelines & container manifests
+  /docker-compose(\..*)?\.ya?ml/i,
+  /\.gitlab-ci(\..*)?\.ya?ml/i,
+  /\.github\/(workflows|actions)/i,
+  /bitbucket-pipelines\.ya?ml/i,
+
+  // 3. Framework configs, backups & diagnostic files
+  /appsettings(\..*)?\.json/i,
+  /application(-.*)?\.(ya?ml|properties)/i,
   /(wp-)?config(\.php)?(\.bak|\.old|\.save|\.swp|\.orig)?(\b|$)/i,
+  /configuration\.php/i,
   /web\.config/i,
   /\.htaccess/i,
   /backup(\b|\/|\.|$)/i,
   /\.(bak|old|save|swp|sql|tar|gz|zip|rar|7z)$/i,
   /(router|modem|gateway).*config/i,
   /(rom-0|config\.bin)/i,
+  /(info|debug|test)\.php(\b|\?|$)/i,
+  /phpinfo/i,
+  /\.(js|png|jpg|gif|css|txt)\.php(\b|\?|$)/i, // double-extension webshell probe
+  /\/icons\/.*(\.php|phpinfo|settings\.json)/i,
 
-  // 3. JBoss, ColdFusion & Java App Server exploits
+  // 4. JBoss, ColdFusion, PAN-OS, Aviatrix & Java/Server exploits
+  /cms_changeDeviceContext/i,
+  /\/avi\/avigui/i,
+  /cache_template/i,
+  /\.tpl\.php/i,
   /(jmx|web)-console/i,
   /jboss/i,
   /invoker/i,
@@ -184,8 +205,9 @@ export const MALICIOUS_PATTERNS = [
   /struts/i,
   /solr/i,
   /actuator(\b|\/|$)/i,
+  /\/geoserver/i,
 
-  // 4. Router, IoT & Hardware gateway exploits
+  // 5. Router, IoT & Hardware gateway exploits
   /gpon(form)?/i,
   /diag_form/i,
   /boaform/i,
@@ -194,30 +216,31 @@ export const MALICIOUS_PATTERNS = [
   /cgi-bin/i,
   /setup\.cgi/i,
 
-  // 5. CMS, WordPress, API & Framework probe targets
+  // 6. CMS, WordPress, REST API & Framework probe targets
   /xmlrpc(\.php)?/i,
   /wp-json(\/|$)/i,
+  /rest_route=/i,
   /wp-(login|admin|content|includes)/i,
   /wlwmanifest/i,
   /admin(istrator)?(\b|\/|\.|$)/i,
-  /phpinfo/i,
   /setup(\.php)?/i,
   /install(\.php)?/i,
   /telescope/i,
   /graphql/i,
   /(swagger|api-docs)/i,
 
-  // 6. Component, package & dependency disclosure
+  // 7. Component, package & dependency disclosure
   /bower\.json/i,
   /package\.json/i,
   /composer\.(json|lock)/i,
   /jquery-file-upload/i,
   /vendor\/.*(phpunit|autoload)/i,
 
-  // 7. Decentralized / Web3 abuse
+  // 8. Decentralized / Web3 abuse
   /\/ipfs\//i,
 
-  // 8. Database administration tools & web shells
+  // 9. Database administration tools & web shells
+  /(db|database)\/(websql|webdb|index\.php)/i,
   /phpmyadmin/i,
   /\bpma(\b|\/|$)/i,
   /adminer(\.php)?/i,
@@ -225,10 +248,17 @@ export const MALICIOUS_PATTERNS = [
   /(wso|alfa|b374k|c99|r57)(\.php)?/i,
   /eval-stdin/i,
   /cmd(\.exe)?/i,
+  /\b1337\b/,
 ];
 
 export function isMaliciousPath(text = '') {
   const str = String(text || '').trim();
   if (!str) return false;
-  return MALICIOUS_PATTERNS.some(rx => rx.test(str));
+  let decoded = str;
+  try {
+    decoded = decodeURIComponent(str);
+  } catch {
+    // Keep raw if URI malformed
+  }
+  return MALICIOUS_PATTERNS.some(rx => rx.test(str) || rx.test(decoded));
 }

@@ -143,4 +143,53 @@ test('isMaliciousPath detects real-world exploit probe paths from telemetry (JBo
   assert.equal(isMaliciousPath('/phpmyadmin/scripts/setup.php'), true);
   assert.equal(isMaliciousPath('/actuator/env'), true);
   assert.equal(isMaliciousPath('/solr/admin/info/system'), true);
+
+  // Argon telemetry report vectors (CVEs, Cloud/CI-CD harvesting, double-ext):
+  assert.equal(isMaliciousPath('/esp/cms_changeDeviceContext.esp?device=aaaaa:a%27";user|s."1337";'), true);
+  assert.equal(isMaliciousPath('/avi/avigui/avigwt'), true);
+  assert.equal(isMaliciousPath('/data/cache_template/rss.tpl.php'), true);
+  assert.equal(isMaliciousPath('/service-account.json'), true);
+  assert.equal(isMaliciousPath('/gcp-key.json'), true);
+  assert.equal(isMaliciousPath('/gcp-sa.json'), true);
+  assert.equal(isMaliciousPath('/aws.json'), true);
+  assert.equal(isMaliciousPath('/.npmrc'), true);
+  assert.equal(isMaliciousPath('/.boto'), true);
+  assert.equal(isMaliciousPath('/firebase-adminsdk.json'), true);
+  assert.equal(isMaliciousPath('/firebase.json'), true);
+  assert.equal(isMaliciousPath('/env.json'), true);
+  assert.equal(isMaliciousPath('/application.yml'), true);
+  assert.equal(isMaliciousPath('/.netrc'), true);
+  assert.equal(isMaliciousPath('/.composer/auth.json'), true);
+  assert.equal(isMaliciousPath('/docker-compose.yml'), true);
+  assert.equal(isMaliciousPath('/.gitlab-ci.yml'), true);
+  assert.equal(isMaliciousPath('/.github/workflows/deploy.yml'), true);
+  assert.equal(isMaliciousPath('/client.key'), true);
+  assert.equal(isMaliciousPath('/.htpasswd'), true);
+  assert.equal(isMaliciousPath('/.env1'), true);
+  assert.equal(isMaliciousPath('/.env2'), true);
+  assert.equal(isMaliciousPath('/_environment'), true);
+  assert.equal(isMaliciousPath('/info.php'), true);
+  assert.equal(isMaliciousPath('/debug.php'), true);
+  assert.equal(isMaliciousPath('/appsettings.json'), true);
+  assert.equal(isMaliciousPath('/configuration.php'), true);
+  assert.equal(isMaliciousPath('/application-dev.yml'), true);
+  assert.equal(isMaliciousPath('/application-prod.yml'), true);
+  assert.equal(isMaliciousPath('/application.properties'), true);
+  assert.equal(isMaliciousPath('/icons/test.php'), true);
+  assert.equal(isMaliciousPath('/icons/info.php'), true);
+  assert.equal(isMaliciousPath('/icons/?phpinfo=-1'), true);
+  assert.equal(isMaliciousPath('/icons/settings.json'), true);
+  assert.equal(isMaliciousPath('/db/websql/index.php'), true);
+  assert.equal(isMaliciousPath('/database/index.php'), true);
+  assert.equal(isMaliciousPath('/db/webdb/index.php'), true);
+  assert.equal(isMaliciousPath('/include/function.js.php'), true);
+  assert.equal(isMaliciousPath('/geoserver/web/'), true);
+  assert.equal(isMaliciousPath('/?rest_route=/batch/v1'), true);
+
+  // Benign legitimate OJS application paths MUST remain false:
+  assert.equal(isMaliciousPath('/index.php/sebatik/article/view/123/456'), false);
+  assert.equal(isMaliciousPath('/index.php/sebatik/issue/view/10'), false);
+  assert.equal(isMaliciousPath('/plugins/generic/pdfJsViewer/pdf.js/web/locale/locale.properties'), false);
+  assert.equal(isMaliciousPath('/index.html'), false);
+  assert.equal(isMaliciousPath('/favicon.ico'), false);
 });

@@ -606,9 +606,9 @@
     "semantic_hash": ""
   },
   "app/static/js/features/stats/model.js": {
-    "mtime": 1793091309.4237974,
-    "seen": 1793091370.2886133,
-    "ast_hash": "57516112de704c868a4bc4f05bf22c1a",
+    "mtime": 1793092056.668772,
+    "seen": 1793092113.145181,
+    "ast_hash": "83c6146eebe53cfd3f91a3a29ad992ab",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/render.js": {
@@ -642,9 +642,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/stats.test.mjs": {
-    "mtime": 1793091332.0373967,
-    "seen": 1793091370.2889469,
-    "ast_hash": "d488495578f825dd42195c1e7f7c520b",
+    "mtime": 1793091977.572114,
+    "seen": 1793092113.145494,
+    "ast_hash": "84f2ad7ffec19fa1626c80c43fd6dbe0",
     "semantic_hash": ""
   },
   "tests/frontend/triage-summary.test.mjs": {
