@@ -191,6 +191,30 @@ class StatsEndpointContractTests(unittest.TestCase):
         self.assertEqual(top_rule["rule_id"], "1001")
         self.assertEqual(top_rule["count"], 2)
 
+    def test_stats_secondary_pivot_stacked_data(self):
+        res = self.client.get("/api/stats", params={
+            "tenant": "Alpha",
+            "pivot_by": "rule_description",
+            "secondary_pivot": "source_ip",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertIn("secondary_pivot", data)
+        self.assertEqual(data["secondary_pivot"], "source_ip")
+        self.assertIn("secondary_distribution", data)
+
+    def test_stats_above_average_spike_marker(self):
+        res = self.client.get("/api/stats", params={
+            "tenant": "Alpha",
+            "bucket": "hour",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertIn("time_series", data)
+        # Check that time series elements have above_average boolean
+        for bucket in data["time_series"]:
+            self.assertIn("above_average", bucket)
+
 
 if __name__ == "__main__":
     unittest.main()

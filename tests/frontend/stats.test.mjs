@@ -41,3 +41,30 @@ test('normalizeStatsQuery validates defaults, bounds, and preserves multi-tenant
   assert.match(triageHref, /tenant=Beta/);
   assert.match(triageHref, /q=test/);
 });
+
+test('stats export formatters generate clean CSV and markdown analysis summary', async () => {
+  const {generateStatsCSV, generateMarkdownSummary} = await import('../../app/static/js/features/stats/model.js');
+  
+  const statsData = {
+    pivot_by: 'rule_description',
+    metric: 'alerts',
+    total: 100,
+    items: [
+      {key: 'SQL Injection', count: 60, displayPercentage: 60.0},
+      {key: 'Brute Force', count: 30, displayPercentage: 30.0},
+    ],
+    other_count: 10,
+    other_percentage: 10.0,
+    scope: {tenant: ['Alpha'], q: ''},
+  };
+
+  const csv = generateStatsCSV(statsData);
+  assert.match(csv, /Kategori,Jumlah,Persen/);
+  assert.match(csv, /"SQL Injection",60,60/);
+  assert.match(csv, /"Lainnya",10,10/);
+
+  const md = generateMarkdownSummary(statsData);
+  assert.match(md, /### Ringkasan Statistik Alert/);
+  assert.match(md, /SQL Injection: 60 \(60%\)/);
+  assert.match(md, /Total: 100 alert/);
+});

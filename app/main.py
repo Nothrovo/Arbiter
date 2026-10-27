@@ -520,6 +520,8 @@ def remove_group_member(group_id: str, alert_pk: int, tenant: list[str] = Query(
 @app.get("/api/stats")
 def get_stats(
     pivot_by: str = "rule_description",
+    secondary_pivot: str | None = None,
+    compare: str = "",
     metric: str = "alerts",
     top_n: int = 8,
     chart: str = "bar",
@@ -541,6 +543,11 @@ def get_stats(
         raise HTTPException(
             status_code=422,
             detail=f"Invalid pivot_by '{pivot_by}'. Supported pivots: {', '.join(PIVOT_DEFINITIONS.keys())}",
+        )
+    if secondary_pivot and (secondary_pivot not in PIVOT_DEFINITIONS or secondary_pivot == "pattern"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid secondary_pivot '{secondary_pivot}'. Must be a supported non-pattern dimension.",
         )
     if metric not in {"alerts", "events"}:
         raise HTTPException(status_code=422, detail="metric must be 'alerts' or 'events'.")
@@ -637,6 +644,26 @@ def get_stats(
                     "percentage": pct,
                 })
 
+        secondary_distribution = None
+        if secondary_pivot:
+            sec_dim_sql = PIVOT_DEFINITIONS[secondary_pivot]["sql"]
+            sec_sql = f"""
+                SELECT {dim_sql} AS k1, {sec_dim_sql} AS k2, {metric_expr} AS n
+                FROM wazuh.alerts a {where_sql}
+                GROUP BY 1, 2
+                ORDER BY 3 DESC
+                LIMIT 100
+            """
+            sec_rows = conn.execute(sec_sql, dim_params + base_params).fetchall()
+            sec_dist: dict[str, list[dict[str, Any]]] = {}
+            for r in sec_rows:
+                k1 = str(r["k1"] if r["k1"] is not None else "Tidak tersedia")
+                k2 = str(r["k2"] if r["k2"] is not None else "Tidak tersedia")
+                if k1 not in sec_dist:
+                    sec_dist[k1] = []
+                sec_dist[k1].append({"key": k2, "count": int(r["n"] or 0)})
+            secondary_distribution = sec_dist
+
         granularity = bucket
         if granularity == "auto":
             time_bounds = conn.execute(
@@ -684,6 +711,7 @@ def get_stats(
                     "bucket": b_key,
                     "total": 0,
                     "series": {tk: 0 for tk in top_keys},
+                    "above_average": False,
                 }
                 if other_count > 0:
                     buckets_dict[b_key]["series"]["Lainnya"] = 0
@@ -694,9 +722,16 @@ def get_stats(
                 buckets_dict[b_key]["series"]["Lainnya"] += cnt
 
         time_series = list(buckets_dict.values())
+        if time_series:
+            avg_val = sum(b["total"] for b in time_series) / len(time_series)
+            threshold = avg_val * 1.5
+            for b in time_series:
+                b["above_average"] = bool(b["total"] > threshold and b["total"] > 1)
 
     return {
         "pivot_by": pivot_by,
+        "secondary_pivot": secondary_pivot,
+        "secondary_distribution": secondary_distribution,
         "metric": metric,
         "total": total,
         "total_alerts": total_alerts,

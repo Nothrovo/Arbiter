@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "app/main.py": {
-    "mtime": 1793075798.962231,
-    "seen": 1793075836.6469147,
-    "ast_hash": "b9d8b7057592f9a1b3a9ee990f103809",
+    "mtime": 1793076468.3671687,
+    "seen": 1793076676.6414034,
+    "ast_hash": "8752f8dc89493ea896f7f3916b85fbc5",
     "semantic_hash": ""
   },
   "app/parser.py": {
@@ -600,27 +600,27 @@
     "semantic_hash": ""
   },
   "tests/test_stats.py": {
-    "mtime": 1793075594.5683312,
-    "seen": 1793075836.6473525,
-    "ast_hash": "25ddf575845ef99baa33967f50b37a0d",
+    "mtime": 1793076415.4299164,
+    "seen": 1793076676.6417801,
+    "ast_hash": "66b9f77b766810532c301e2a53619b68",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/model.js": {
-    "mtime": 1793075948.017012,
-    "seen": 1793076172.4143653,
-    "ast_hash": "fca7cbb06f003f461909dd15221311b5",
+    "mtime": 1793076556.6988323,
+    "seen": 1793076676.6415248,
+    "ast_hash": "5dc3e2dfcb15791f8c3839593af2ad9e",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/render.js": {
-    "mtime": 1793075994.3901155,
-    "seen": 1793076172.4143703,
-    "ast_hash": "34f1ccfe02e81f0c86ec6ba0b82f7db3",
+    "mtime": 1793076584.6703334,
+    "seen": 1793076676.64153,
+    "ast_hash": "5ab2ff6c0c6be502728d2f338880a033",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/view.js": {
-    "mtime": 1793076010.3260665,
-    "seen": 1793076172.4143758,
-    "ast_hash": "7399ffb3d67e78e72074d4066b6c8b36",
+    "mtime": 1793076604.1230237,
+    "seen": 1793076676.6415355,
+    "ast_hash": "f480f256c129d4bf2558c09d6a9ef8c5",
     "semantic_hash": ""
   },
   "app/static/js/state/stats.js": {
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "app/static/js/ui/charts.js": {
-    "mtime": 1793075934.2252295,
-    "seen": 1793076172.4144351,
-    "ast_hash": "13d8c5f031256c83424fbfff69ff8113",
+    "mtime": 1793076645.5025916,
+    "seen": 1793076676.6415966,
+    "ast_hash": "10736a693521c228bfa7660219877a41",
     "semantic_hash": ""
   },
   "tests/frontend/charts.test.mjs": {
@@ -642,9 +642,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/stats.test.mjs": {
-    "mtime": 1793075883.6076841,
-    "seen": 1793076172.4146855,
-    "ast_hash": "90883a7b2c10765d47d8013568b2008a",
+    "mtime": 1793076495.3739545,
+    "seen": 1793076676.6417525,
+    "ast_hash": "cbb423aa9991a9a0335e39c2f61a976f",
     "semantic_hash": ""
   },
   "tests/frontend/triage-summary.test.mjs": {

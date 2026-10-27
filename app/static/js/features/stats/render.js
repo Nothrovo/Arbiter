@@ -4,6 +4,11 @@ import {renderBarChart, renderDonutChart, renderLineChart} from '../../ui/charts
 
 export function statsPage(query) {
   const pivotOpts = PIVOT_OPTIONS.map(([val, label]) => `<option value="${val}" ${query.pivot_by === val ? 'selected' : ''}>${esc(label)}</option>`).join('');
+  const secPivotOpts = [
+    ['', 'Tidak ada (satu level)'],
+    ...PIVOT_OPTIONS.filter(([val]) => val !== 'pattern' && val !== query.pivot_by),
+  ].map(([val, label]) => `<option value="${val}" ${query.secondary_pivot === val ? 'selected' : ''}>${esc(label)}</option>`).join('');
+
   const topNOpts = [5, 8, 10, 15, 20, 50].map(n => `<option value="${n}" ${query.top_n === n ? 'selected' : ''}>Top ${n}</option>`).join('');
   const timePresets = [
     ['', 'Semua waktu'],
@@ -22,7 +27,10 @@ export function statsPage(query) {
         <h1 id="stats-title">Statistik &amp; Pivot</h1>
         <p class="page-description">Workbench investigasi analitis berbasis agregasi telemetri SQL murni.</p>
       </div>
-      <div class="page-actions">
+      <div class="page-actions" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="button" type="button" data-action="export-csv">${icon('report')} Unduh CSV</button>
+        <button class="button" type="button" data-action="export-svg">${icon('copy')} Unduh SVG</button>
+        <button class="button" type="button" data-action="copy-summary">${icon('copy')} Salin Ringkasan</button>
         <a class="button primary" id="btn-open-triage" href="${triageUrl}">${icon('inbox')} Buka di Triage</a>
         <button class="button" type="button" data-action="reset-stats">Reset</button>
       </div>
@@ -31,8 +39,12 @@ export function statsPage(query) {
     <section class="panel stats-controls stack" style="margin-bottom:16px;">
       <div class="stats-control-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; align-items:end;">
         <div class="field">
-          <label for="stats-pivot">Pivot berdasarkan</label>
+          <label for="stats-pivot">Pivot acuan utama</label>
           <select class="select" id="stats-pivot" name="pivot_by">${pivotOpts}</select>
+        </div>
+        <div class="field">
+          <label for="stats-secondary-pivot">Pivot kedua (stacked bar)</label>
+          <select class="select" id="stats-secondary-pivot" name="secondary_pivot">${secPivotOpts}</select>
         </div>
         <div class="field">
           <label for="stats-metric">Metrik hitungan</label>
@@ -53,6 +65,18 @@ export function statsPage(query) {
         <div class="field">
           <label for="stats-time">Rentang waktu</label>
           <select class="select" id="stats-time" name="time_preset">${timePresets}</select>
+        </div>
+        <div class="field">
+          <label for="stats-preset-select">Preset tersimpan</label>
+          <div style="display:flex; gap:6px;">
+            <select class="select" id="stats-preset-select" style="min-width:130px;">
+              <option value="">Pilih preset…</option>
+              <option value="preset-top-rules-24h">Top Rules 24 Jam</option>
+              <option value="preset-top-ips-7d">Top IP Sumber 7 Hari</option>
+              <option value="preset-http-status">Distribusi HTTP Status</option>
+            </select>
+            <button class="button icon-button" type="button" id="btn-save-preset" title="Simpan konfigurasi tampilan saat ini">${icon('plus')}</button>
+          </div>
         </div>
       </div>
 
@@ -80,7 +104,7 @@ export function statsPage(query) {
   `;
 }
 
-export function statsResults(data, query) {
+export function statsResults(data, query, drilldownAlerts = null) {
   const total = Number(data.total) || 0;
   const metricLabel = data.metric === 'events' ? 'event' : 'alert';
   const otherCount = Number(data.other_count) || 0;
@@ -99,9 +123,20 @@ export function statsResults(data, query) {
   const tableRows = items.map(item => {
     const keyEsc = esc(item.key);
     const triageUrl = triageRouteFromStats(query, {facet: data.pivot_by, facet_value: item.key});
+    const subDist = data.secondary_distribution?.[item.key] || [];
+    const subBreakdown = subDist.length ? `
+      <div class="meta" style="margin-top:4px; font-size:11px;">
+        ${subDist.slice(0, 3).map(s => `${esc(s.key)} (${s.count})`).join(' · ')}
+        ${subDist.length > 3 ? ` · +${subDist.length - 3} lainnya` : ''}
+      </div>
+    ` : '';
+
     return `
       <tr>
-        <td class="mono font-medium">${keyEsc}</td>
+        <td class="mono font-medium">
+          ${keyEsc}
+          ${subBreakdown}
+        </td>
         <td class="numeric">${item.count.toLocaleString('id-ID')}</td>
         <td class="numeric">${item.displayPercentage}%</td>
         <td class="actions-col" style="text-align:right;">
@@ -119,7 +154,7 @@ export function statsResults(data, query) {
       <td class="numeric">${otherPct}%</td>
       <td class="actions-col" style="text-align:right;">
         <button type="button" class="button text-button" data-action="toggle-other-details">Rincian</button>
-      </div>
+      </td>
     </tr>
   ` : '';
 
@@ -148,6 +183,39 @@ export function statsResults(data, query) {
     </div>
   ` : '';
 
+  const drilldownSection = drilldownAlerts?.length ? `
+    <section class="panel stack drilldown-evidence-section" style="margin-top:20px;">
+      <div class="section-heading">
+        <h2>Sampel Bukti Alert Hasil Drill-down</h2>
+        <span class="meta">${drilldownAlerts.length} alert ditampilkan</span>
+      </div>
+      <div class="table-region">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:110px;">Waktu</th>
+              <th style="width:90px;">Severity</th>
+              <th>Deskripsi / Rule</th>
+              <th style="width:140px;">Source IP</th>
+              <th style="width:100px; text-align:right;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${drilldownAlerts.map(a => `
+              <tr>
+                <td class="meta num">${esc(a.timestamp?.slice(0, 16).replace('T', ' ') || '—')}</td>
+                <td><span class="badge ${Number(a.rule_level) >= 12 ? 'critical' : Number(a.rule_level) >= 10 ? 'high' : Number(a.rule_level) >= 7 ? 'medium' : 'low'}">Lvl ${a.rule_level ?? 0}</span></td>
+                <td><span class="font-medium">${esc(a.description || 'Alert')}</span> <span class="meta mono">(${esc(a.rule_id || '—')})</span></td>
+                <td class="mono">${esc(a.source_ip || '—')}</td>
+                <td style="text-align:right;"><a class="button text-button" href="#/triage?alert=${a.id}">Buka Alert</a></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  ` : '';
+
   return `
     <div class="metric-strip" style="margin-bottom:16px;">
       <div>
@@ -165,7 +233,7 @@ export function statsResults(data, query) {
     </div>
 
     ${query.chart !== 'table' ? `
-      <section class="panel chart-container" style="margin-bottom:20px; overflow-x:auto;">
+      <section class="panel chart-container" id="stats-chart-wrapper" style="margin-bottom:20px; overflow-x:auto;">
         ${chartHtml}
       </section>
     ` : ''}
@@ -193,5 +261,7 @@ export function statsResults(data, query) {
       </div>
       ${otherDetailsSection}
     </section>
+
+    ${drilldownSection}
   `;
 }

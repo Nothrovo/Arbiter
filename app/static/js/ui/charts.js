@@ -198,11 +198,18 @@ export function renderLineChart({timeSeries = [], topKeys = [], metric = 'alerts
 
   const dots = points.map(p => {
     const bStr = esc(p.data.bucket || '');
+    const isSpike = Boolean(p.data.above_average);
+    const stroke = isSpike ? 'var(--warning)' : 'var(--text)';
+    const r = isSpike ? 5 : 3.5;
+    const spikeLabel = isSpike ? `<text x="${p.x.toFixed(1)}" y="${(p.y - 10).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--warning)" font-family="var(--mono)">▲ Di atas rata-rata</text>` : '';
     return `
-      <circle class="line-point" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--ground)" stroke="var(--text)" stroke-width="2"
-              tabindex="0" role="graphics-symbol" aria-label="${bStr}: ${p.data.total} ${metricLabel}">
-        <title>${bStr}: ${p.data.total} ${metricLabel}</title>
-      </circle>
+      <g>
+        <circle class="line-point${isSpike ? ' line-point-spike' : ''}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="var(--ground)" stroke="${stroke}" stroke-width="${isSpike ? 2.5 : 2}"
+                tabindex="0" role="graphics-symbol" aria-label="${bStr}: ${p.data.total} ${metricLabel}${isSpike ? ' (Di atas rata-rata)' : ''}">
+          <title>${bStr}: ${p.data.total} ${metricLabel}${isSpike ? ' (Di atas rata-rata)' : ''}</title>
+        </circle>
+        ${spikeLabel}
+      </g>
     `;
   }).join('');
 

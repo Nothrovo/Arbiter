@@ -1,8 +1,8 @@
-import {json, apiURL} from '../../api/client.js';
+import {json, apiURL, copyText} from '../../api/client.js';
 import {emptyState, errorState, loadingRows} from '../../ui/primitives.js';
 import {withParams} from '../../router.js';
 import {createStatsSession} from '../../state/stats.js';
-import {normalizeStatsQuery, statsScopeParams} from './model.js';
+import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary} from './model.js';
 import {statsPage, statsResults} from './render.js';
 
 export function mount(ctx) {
@@ -13,6 +13,7 @@ export function mount(ctx) {
   let activeRequest = null;
   let currentData = null;
   let showOtherDetails = false;
+  let drilldownAlerts = null;
 
   root.innerHTML = statsPage(query);
   const resultsContainer = root.querySelector('#stats-results');
@@ -51,12 +52,39 @@ export function mount(ctx) {
         return;
       }
 
-      resultsContainer.innerHTML = statsResults(data, query);
+      // If drilldown facet is active, fetch sample alerts for table
+      if (query.facet && query.facet_value) {
+        try {
+          const sampleParams = statsScopeParams(query);
+          sampleParams.set('limit', '10');
+          sampleParams.set('summary', 'true');
+          const sampleData = await json(apiURL('/api/alerts', sampleParams), {signal: activeRequest.signal});
+          drilldownAlerts = sampleData.items || [];
+        } catch {
+          drilldownAlerts = [];
+        }
+      } else {
+        drilldownAlerts = null;
+      }
+
+      resultsContainer.innerHTML = statsResults(data, query, drilldownAlerts);
     } catch (err) {
       if (err.name !== 'AbortError' && !signal?.aborted && session.isCurrent(version)) {
         resultsContainer.innerHTML = errorState(err.message || 'Gagal memuat data statistik.');
       }
     }
+  }
+
+  function downloadFile(content, filename, type) {
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   // Event handlers
@@ -67,12 +95,25 @@ export function mount(ctx) {
       if (wrap) wrap.style.display = val === 'pattern' ? 'block' : 'none';
       updateRoute({pivot_by: val, facet: null, facet_value: null});
     }
+    if (e.target.id === 'stats-secondary-pivot') {
+      updateRoute({secondary_pivot: e.target.value || null});
+    }
     if (e.target.id === 'stats-top-n') {
       updateRoute({top_n: Number(e.target.value)});
     }
     if (e.target.id === 'stats-time') {
       const val = e.target.value;
       updateRoute({time_preset: val, time_from: null, time_to: null});
+    }
+    if (e.target.id === 'stats-preset-select') {
+      const preset = e.target.value;
+      if (preset === 'preset-top-rules-24h') {
+        updateRoute({pivot_by: 'rule_description', time_preset: '24h', metric: 'alerts'});
+      } else if (preset === 'preset-top-ips-7d') {
+        updateRoute({pivot_by: 'source_ip', time_preset: '7d', metric: 'alerts'});
+      } else if (preset === 'preset-http-status') {
+        updateRoute({pivot_by: 'http_status', metric: 'events'});
+      }
     }
   });
 
@@ -98,6 +139,27 @@ export function mount(ctx) {
       updateRoute({pattern: val});
       return;
     }
+    if (btn.id === 'btn-save-preset') {
+      const name = prompt('Beri nama untuk preset statistik ini:');
+      if (name && name.trim()) {
+        try {
+          const key = `arbiter:stats-presets:${query.tenantScope.key}`;
+          const existing = JSON.parse(localStorage.getItem(key) || '{}');
+          existing[name.trim()] = {
+            pivot_by: query.pivot_by,
+            metric: query.metric,
+            chart: query.chart,
+            top_n: query.top_n,
+            time_preset: query.time_preset,
+          };
+          localStorage.setItem(key, JSON.stringify(existing));
+          notify(`Preset "${name.trim()}" berhasil disimpan.`, 'success');
+        } catch {
+          notify('Gagal menyimpan preset ke penyimpanan lokal browser.', 'error');
+        }
+      }
+      return;
+    }
     if (btn.id === 'btn-clear-drilldown') {
       updateRoute({facet: null, facet_value: null});
       return;
@@ -113,6 +175,35 @@ export function mount(ctx) {
       const p = new URLSearchParams();
       for (const t of query.tenants) p.append('tenant', t);
       navigate(withParams('/stats', p));
+      return;
+    }
+    if (btn.dataset.action === 'export-csv') {
+      if (!currentData) return;
+      const csv = generateStatsCSV(currentData);
+      downloadFile(csv, `arbiter-stats-${query.pivot_by}.csv`, 'text/csv;charset=utf-8');
+      notify('File CSV statistik berhasil diunduh.', 'success');
+      return;
+    }
+    if (btn.dataset.action === 'export-svg') {
+      const svg = root.querySelector('.chart-svg');
+      if (!svg) {
+        notify('Grafik tidak tersedia untuk diunduh.', 'error');
+        return;
+      }
+      const svgText = new XMLSerializer().serializeToString(svg);
+      downloadFile(svgText, `arbiter-chart-${query.pivot_by}.svg`, 'image/svg+xml');
+      notify('Grafik SVG berhasil diunduh.', 'success');
+      return;
+    }
+    if (btn.dataset.action === 'copy-summary') {
+      if (!currentData) return;
+      const md = generateMarkdownSummary(currentData);
+      try {
+        await copyText(md);
+        notify('Ringkasan statistik disalin ke clipboard.', 'success');
+      } catch {
+        notify('Gagal menyalin ringkasan. Izin clipboard tidak diberikan.', 'error');
+      }
       return;
     }
     if (btn.dataset.action === 'toggle-other-details') {

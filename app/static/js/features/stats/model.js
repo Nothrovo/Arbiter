@@ -37,12 +37,14 @@ export function normalizeStatsQuery(params = new URLSearchParams()) {
   const top_n = Math.min(50, Math.max(1, integer(get('top_n'), 8) || 8));
   const bucket = choices(get('bucket'), ['auto', 'minute', 'hour', 'day'], 'auto');
   const pattern = String(get('pattern') || '').trim();
+  const secondary_pivot = choices(get('secondary_pivot'), pKeys.filter(k => k !== 'pattern'), '');
   const facet = String(get('facet') || '').trim();
   const facet_value = String(get('facet_value') || '').trim();
 
   return {
     ...base,
     pivot_by,
+    secondary_pivot,
     metric,
     chart,
     top_n,
@@ -75,6 +77,7 @@ export function distributionPercentages(items = [], otherCount = 0, total = 0) {
 export function statsScopeParams(query) {
   const p = scopeParams(query);
   if (query.pivot_by && query.pivot_by !== 'rule_description') p.set('pivot_by', query.pivot_by);
+  if (query.secondary_pivot) p.set('secondary_pivot', query.secondary_pivot);
   if (query.metric && query.metric !== 'alerts') p.set('metric', query.metric);
   if (query.chart && query.chart !== 'bar') p.set('chart', query.chart);
   if (query.top_n && query.top_n !== 8) p.set('top_n', String(query.top_n));
@@ -103,4 +106,33 @@ export function triageRouteFromStats(query, {facet, facet_value} = {}) {
     p.set('facet_value', fv);
   }
   return withParams('/triage', p);
+}
+
+export function generateStatsCSV(data) {
+  const lines = ['Kategori,Jumlah,Persen'];
+  for (const it of (data.items || [])) {
+    const key = String(it.key).replace(/"/g, '""');
+    lines.push(`"${key}",${it.count},${it.displayPercentage ?? it.percentage}`);
+  }
+  if (data.other_count > 0) {
+    lines.push(`"Lainnya",${data.other_count},${data.other_percentage}`);
+  }
+  return lines.join('\n');
+}
+
+export function generateMarkdownSummary(data) {
+  const metricLabel = data.metric === 'events' ? 'event' : 'alert';
+  const lines = [
+    '### Ringkasan Statistik Alert',
+    `- Acuan Pivot: ${data.pivot_by}`,
+    `- Total: ${data.total} ${metricLabel}`,
+    '- Top Kategori:',
+  ];
+  for (const it of (data.items || [])) {
+    lines.push(`  - ${it.key}: ${it.count} (${it.displayPercentage ?? it.percentage}%)`);
+  }
+  if (data.other_count > 0) {
+    lines.push(`  - Lainnya: ${data.other_count} (${data.other_percentage}%)`);
+  }
+  return lines.join('\n');
 }
