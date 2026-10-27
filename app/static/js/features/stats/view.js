@@ -369,6 +369,24 @@ export function mount(ctx) {
       renderView();
       return;
     }
+    if (btn.id === 'btn-benign-spotter') {
+      const breakdown = currentData?.secondary_breakdown || [];
+      if (!breakdown.length) {
+        notify('Belum ada rincian sub-kategori untuk diperiksa.', 'info');
+        return;
+      }
+      const matched = breakdown.filter(sb => !isMaliciousPath(sb.key));
+      if (!matched.length) {
+        notify('Tidak ditemukan sub-kategori non-mencurigakan.', 'info');
+        return;
+      }
+      selectedSecondaryKeys.clear();
+      matched.forEach(sb => selectedSecondaryKeys.add(sb.key));
+      const totalAlerts = matched.reduce((acc, sb) => acc + (sb.count || 0), 0);
+      notify(`Benign Spotter: ${matched.length} sub-kategori non-mencurigakan terpilih (${totalAlerts.toLocaleString('id-ID')} alert).`, 'success');
+      renderView();
+      return;
+    }
     if (btn.dataset.action === 'clear-secondary-selection') {
       selectedSecondaryKeys.clear();
       renderView();

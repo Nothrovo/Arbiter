@@ -98,3 +98,25 @@ test('isMaliciousPath identifies high-signal sensitive and probe paths', async (
   assert.equal(isMaliciousPath('/assets/logo.png'), false);
   assert.equal(isMaliciousPath(''), false);
 });
+
+test('Benign Spotter filters out malicious paths and selects only benign items', async () => {
+  const {isMaliciousPath} = await import('../../app/static/js/features/stats/model.js');
+  
+  const sampleBreakdown = [
+    {key: '/.env', count: 12},
+    {key: '/.git/config', count: 10},
+    {key: '/plugins/generic/pdfJsViewer/locale/locale.properties', count: 55},
+    {key: '/index.html', count: 20},
+    {key: '/xmlrpc.php', count: 8},
+  ];
+
+  const malicious = sampleBreakdown.filter(it => isMaliciousPath(it.key));
+  assert.deepEqual(malicious.map(it => it.key), ['/.env', '/.git/config', '/xmlrpc.php']);
+
+  const benign = sampleBreakdown.filter(it => !isMaliciousPath(it.key));
+  assert.deepEqual(benign.map(it => it.key), [
+    '/plugins/generic/pdfJsViewer/locale/locale.properties',
+    '/index.html',
+  ]);
+  assert.equal(benign.reduce((acc, it) => acc + it.count, 0), 75);
+});

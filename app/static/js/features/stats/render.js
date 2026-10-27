@@ -254,9 +254,12 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
             <h3>Rincian ${esc(secLabel)} (dalam "${esc(query.facet_value)}")</h3>
             <span class="meta">${data.secondary_breakdown.length} sub-kategori ditemukan</span>
           </div>
-          <div style="display:flex; gap:8px; align-items:center;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button type="button" class="button" id="btn-malicious-spotter" title="Pilih otomatis semua sub-kategori yang mengandung pola mencurigakan (.env, credential, xmlrpc, config, git, admin, dll)">
               ${icon('alert')} Malicious Spotter
+            </button>
+            <button type="button" class="button" id="btn-benign-spotter" title="Pilih otomatis semua sub-kategori yang tidak mengandung pola berbahaya (kebalikan dari Malicious Spotter)">
+              ${icon('check')} Benign Spotter
             </button>
             ${query.secondary_facet_value ? `
               <button type="button" class="button text-button" id="btn-clear-secondary-drilldown">Tampilkan Semua Sub-kategori</button>
