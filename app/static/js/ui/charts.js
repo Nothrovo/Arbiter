@@ -74,10 +74,10 @@ export function renderBarChart({
         <div class="chart-secondary-legend" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; font-size:12px;">
           <span class="meta font-medium">Pecahan ${esc(secondaryLabel || 'Pivot Kedua')}:</span>
           ${secList.map((k, idx) => `
-            <span style="display:inline-flex; align-items:center; gap:5px;">
+            <button type="button" class="button text-button" data-secondary-legend-key="${esc(k)}" style="display:inline-flex; align-items:center; gap:5px; padding:2px 6px; font-size:11px;" title="Saring hanya kategori kedua: ${esc(k)}">
               <span style="width:10px; height:10px; border-radius:2px; background:${getColor(k, idx)};" aria-hidden="true"></span>
               <span class="mono">${esc(k)}</span>
-            </span>
+            </button>
           `).join('')}
         </div>
       `;
@@ -100,8 +100,9 @@ export function renderBarChart({
         const subColor = getColor(sub.key, sIdx);
         const subPct = Math.round((sub.count / (r.count || 1)) * 100);
         const rx = `
-          <rect x="${curX}" y="${y + 4}" width="${segW}" height="18" fill="${subColor}" opacity="0.9">
-            <title>${keyEsc} → ${esc(sub.key)}: ${sub.count} ${metricLabel} (${subPct}% dari kategori ini)</title>
+          <rect x="${curX}" y="${y + 4}" width="${segW}" height="18" fill="${subColor}" opacity="0.9"
+                data-primary-key="${keyEsc}" data-secondary-key="${esc(sub.key)}" class="stacked-bar-seg" style="cursor:pointer;">
+            <title>${keyEsc} → ${esc(sub.key)}: ${sub.count} ${metricLabel} (${subPct}% dari kategori ini) — Klik untuk saring</title>
           </rect>
         `;
         curX += segW;

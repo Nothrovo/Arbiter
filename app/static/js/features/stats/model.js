@@ -40,6 +40,8 @@ export function normalizeStatsQuery(params = new URLSearchParams()) {
   const secondary_pivot = choices(get('secondary_pivot'), pKeys.filter(k => k !== 'pattern'), '');
   const facet = String(get('facet') || '').trim();
   const facet_value = String(get('facet_value') || '').trim();
+  const secondary_facet = String(get('secondary_facet') || '').trim();
+  const secondary_facet_value = String(get('secondary_facet_value') || '').trim();
 
   return {
     ...base,
@@ -52,6 +54,8 @@ export function normalizeStatsQuery(params = new URLSearchParams()) {
     pattern,
     facet,
     facet_value,
+    secondary_facet,
+    secondary_facet_value,
   };
 }
 
@@ -85,10 +89,12 @@ export function statsScopeParams(query) {
   if (query.pattern) p.set('pattern', query.pattern);
   if (query.facet) p.set('facet', query.facet);
   if (query.facet_value) p.set('facet_value', query.facet_value);
+  if (query.secondary_facet) p.set('secondary_facet', query.secondary_facet);
+  if (query.secondary_facet_value) p.set('secondary_facet_value', query.secondary_facet_value);
   return p;
 }
 
-export function triageRouteFromStats(query, {facet, facet_value} = {}) {
+export function triageRouteFromStats(query, {facet, facet_value, secondary_facet, secondary_facet_value} = {}) {
   const p = new URLSearchParams();
   for (const t of tenantValues(query)) p.append('tenant', t);
   if (query.q) p.set('q', query.q);
@@ -104,6 +110,12 @@ export function triageRouteFromStats(query, {facet, facet_value} = {}) {
   if (f && fv) {
     p.set('facet', f);
     p.set('facet_value', fv);
+  }
+  const sf = secondary_facet || query.secondary_facet;
+  const sfv = secondary_facet_value || query.secondary_facet_value;
+  if (sf && sfv) {
+    p.set('secondary_facet', sf);
+    p.set('secondary_facet_value', sfv);
   }
   return withParams('/triage', p);
 }

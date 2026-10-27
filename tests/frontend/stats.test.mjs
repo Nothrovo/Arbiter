@@ -15,9 +15,14 @@ test('stats session manages monotonic versions and ignores stale responses', asy
 test('normalizeStatsQuery validates defaults, bounds, and preserves multi-tenant scope', async () => {
   const {normalizeStatsQuery, distributionPercentages, triageRouteFromStats} = await import('../../app/static/js/features/stats/model.js');
   
-  const params = new URLSearchParams('tenant=Alpha&tenant=Beta&pivot_by=severity&metric=events&chart=donut&top_n=100&q=test');
+  const params = new URLSearchParams('tenant=Alpha&tenant=Beta&pivot_by=severity&secondary_pivot=url_path&facet=rule_description&facet_value=Web+400&secondary_facet=url_path&secondary_facet_value=%2F.env&metric=events&chart=donut&top_n=100&q=test');
   const query = normalizeStatsQuery(params);
   assert.equal(query.pivot_by, 'severity');
+  assert.equal(query.secondary_pivot, 'url_path');
+  assert.equal(query.facet, 'rule_description');
+  assert.equal(query.facet_value, 'Web 400');
+  assert.equal(query.secondary_facet, 'url_path');
+  assert.equal(query.secondary_facet_value, '/.env');
   assert.equal(query.metric, 'events');
   assert.equal(query.chart, 'donut');
   assert.equal(query.top_n, 100);

@@ -108,12 +108,20 @@ export function statsPage(query) {
         </div>
       </div>
 
-      ${query.facet && query.facet_value ? `
-        <div class="applied-filters" style="margin-top:12px;">
-          <span class="badge neutral" style="display:inline-flex; align-items:center; gap:6px;">
-            Drill-down: <strong>${esc(query.facet)} = ${esc(query.facet_value)}</strong>
-            <button type="button" class="text-button" id="btn-clear-drilldown" title="Hapus filter drill-down" style="cursor:pointer;">${icon('close')}</button>
-          </span>
+      ${(query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value) ? `
+        <div class="applied-filters" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          ${query.facet && query.facet_value ? `
+            <span class="badge neutral" style="display:inline-flex; align-items:center; gap:6px;">
+              Pivot Utama: <strong>${esc(query.facet)} = ${esc(query.facet_value)}</strong>
+              <button type="button" class="text-button" id="btn-clear-drilldown" title="Hapus filter drill-down utama" style="cursor:pointer;">${icon('close')}</button>
+            </span>
+          ` : ''}
+          ${query.secondary_facet && query.secondary_facet_value ? `
+            <span class="badge primary" style="display:inline-flex; align-items:center; gap:6px;">
+              Pivot Kedua: <strong>${esc(query.secondary_facet)} = ${esc(query.secondary_facet_value)}</strong>
+              <button type="button" class="text-button" id="btn-clear-secondary-drilldown" title="Hapus filter drill-down kedua" style="cursor:pointer;">${icon('close')}</button>
+            </span>
+          ` : ''}
         </div>
       ` : ''}
     </section>
@@ -196,6 +204,57 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
     `;
   }).join('');
 
+  let secondaryBreakdownSection = '';
+  if (data.secondary_breakdown && data.secondary_breakdown.length) {
+    const secLabel = data.secondary_pivot ? (PIVOT_OPTIONS.find(([k]) => k === data.secondary_pivot)?.[1] || data.secondary_pivot) : 'Pivot Kedua';
+    const secRows = data.secondary_breakdown.map(sb => {
+      const isFiltered = query.secondary_facet_value === sb.key;
+      return `
+        <tr class="${isFiltered ? 'is-selected' : ''}">
+          <td class="mono font-medium">${esc(sb.key)}</td>
+          <td class="numeric">${sb.count.toLocaleString('id-ID')}</td>
+          <td class="numeric">${sb.percentage}%</td>
+          <td class="actions-col" style="text-align:right;">
+            <button type="button" class="button text-button ${isFiltered ? 'primary' : ''}"
+                    data-secondary-drill-key="${esc(sb.key)}"
+                    title="Saring hanya kategori kedua: ${esc(sb.key)}">
+              ${isFiltered ? 'Terpilih (Saring)' : 'Drill-down'}
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    secondaryBreakdownSection = `
+      <section class="panel table-container" style="margin-top:16px;">
+        <div class="section-heading" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <h3>Rincian ${esc(secLabel)} (dalam "${esc(query.facet_value)}")</h3>
+            <span class="meta">${data.secondary_breakdown.length} sub-kategori ditemukan</span>
+          </div>
+          ${query.secondary_facet_value ? `
+            <button type="button" class="button text-button" id="btn-clear-secondary-drilldown">Tampilkan Semua Sub-kategori</button>
+          ` : ''}
+        </div>
+        <div class="table-region">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>${esc(secLabel)}</th>
+                <th class="numeric" style="width:120px;">${data.metric === 'events' ? 'Event' : 'Alert'}</th>
+                <th class="numeric" style="width:100px;">Proporsi</th>
+                <th style="width:140px; text-align:right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${secRows}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
+
   let drilldownSection = '';
   if (drilldownAlerts && drilldownAlerts.length) {
     const selectedSet = new Set(selectedIds);
@@ -253,7 +312,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <div class="section-heading" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
           <div>
             <h2>Bukti Alert Hasil Drill-down</h2>
-            <span class="meta">${drilldownAlerts.length} alert ditampilkan (${esc(query.facet)} = ${esc(query.facet_value)})</span>
+            <span class="meta">${drilldownAlerts.length} alert ditampilkan (${esc(query.facet)} = "${esc(query.facet_value)}"${query.secondary_facet_value ? ` · ${esc(query.secondary_facet)} = "${esc(query.secondary_facet_value)}"` : ''})</span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
             <button type="button" class="button" id="btn-toggle-all-stats-logs" aria-pressed="${showAllLogs}">
@@ -337,6 +396,8 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         </table>
       </div>
     </section>
+
+    ${secondaryBreakdownSection}
 
     ${drilldownSection}
   `;

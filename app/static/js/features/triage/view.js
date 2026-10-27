@@ -47,15 +47,25 @@ export function mount(ctx) {
     if (!ids.length) return;
     notify(`Mengambil full log untuk ${ids.length} alert…`, 'info');
     try {
-      const logs = await Promise.all(ids.map(async id => {
+      const itemsList = await Promise.all(ids.map(async id => {
         let item = items.find(a => a.id === id);
         if (!item || !item.full_log) {
           try {
             item = await json(apiURL(`/api/alerts/${id}`, {tenant}), {signal});
           } catch {
-            return `[Alert #${id}] Gagal memuat log.`;
+            return {id, rule_id: '99999', is_error: true};
           }
         }
+        return item;
+      }));
+      itemsList.sort((a, b) => {
+        const rA = String(a.rule_id || '');
+        const rB = String(b.rule_id || '');
+        if (rA !== rB) return rA.localeCompare(rB);
+        return String(a.timestamp || '').localeCompare(String(b.timestamp || ''));
+      });
+      const logs = itemsList.map(item => {
+        if (item.is_error) return `[Alert #${item.id}] Gagal memuat log.`;
         const time = item.timestamp ? formatTime(item.timestamp) : '—';
         const rawLog = item.full_log || item.raw?.full_log || (item.raw ? JSON.stringify(item.raw, null, 2) : 'Tidak ada log.');
         return `================================================================================
@@ -64,7 +74,7 @@ Waktu: ${time} | Rule: ${item.rule_id || '—'} (Level ${item.rule_level ?? 0})
 Target Asset: ${item.agent_name || '—'} (${item.agent_ip || '—'}) | Source IP: ${item.source_ip || '—'}
 --------------------------------------------------------------------------------
 ${rawLog}`;
-      }));
+      });
       let fullText = logs.join('\n\n');
       if (redacted) {
         const d = await json('/api/sanitize-logs', {

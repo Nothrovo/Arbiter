@@ -136,6 +136,7 @@ def alert_where(
     time_preset: str = "",
     time_from: str | None = None, time_to: str | None = None,
     facet: str = "", facet_value: str = "",
+    secondary_facet: str = "", secondary_facet_value: str = "",
 ) -> tuple[str, list[Any]]:
     group_id = validated_group_id(group_id)
     clauses: list[str] = []
@@ -197,4 +198,14 @@ def alert_where(
         else:
             clauses.append(f"{FACET_COLUMNS[facet]} = %s")
             params.append(val)
+    if secondary_facet or secondary_facet_value:
+        if secondary_facet not in FACET_COLUMNS or not str(secondary_facet_value).strip():
+            raise HTTPException(status_code=422, detail="secondary_facet and secondary_facet_value must use a supported exact facet.")
+        sec_val = str(secondary_facet_value).strip()
+        if secondary_facet == "severity" and sec_val.isdigit():
+            clauses.append("a.rule_level = %s")
+            params.append(int(sec_val))
+        else:
+            clauses.append(f"{FACET_COLUMNS[secondary_facet]} = %s")
+            params.append(sec_val)
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params

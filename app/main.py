@@ -161,6 +161,8 @@ def list_alerts(
     time_to: str = "",
     facet: str = "",
     facet_value: str = "",
+    secondary_facet: str = "",
+    secondary_facet_value: str = "",
     sort: str = "desc",
     sort_by: str = "timestamp",
     limit: int = 500,
@@ -175,6 +177,7 @@ def list_alerts(
         filter_preset=filter_preset, review_status=review_status,
         time_preset=time_preset, time_from=time_from, time_to=time_to,
         facet=facet, facet_value=facet_value,
+        secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
     )
 
     # Sort order
@@ -543,6 +546,8 @@ def get_stats(
     time_to: str = "",
     facet: str = "",
     facet_value: str = "",
+    secondary_facet: str = "",
+    secondary_facet_value: str = "",
 ):
     if pivot_by not in PIVOT_DEFINITIONS:
         raise HTTPException(
@@ -582,6 +587,8 @@ def get_stats(
         time_to=time_to,
         facet=facet,
         facet_value=facet_value,
+        secondary_facet=secondary_facet,
+        secondary_facet_value=secondary_facet_value,
     )
 
     metric_expr = "COUNT(*)" if metric == "alerts" else "COALESCE(SUM(COALESCE(a.hit_count, 1)), 0)"
@@ -633,6 +640,7 @@ def get_stats(
         other_items = []
 
         secondary_distribution = None
+        secondary_breakdown = None
         if secondary_pivot:
             sec_dim_sql = PIVOT_DEFINITIONS[secondary_pivot]["sql"]
             sec_sql = f"""
@@ -640,7 +648,7 @@ def get_stats(
                 FROM wazuh.alerts a {where_sql}
                 GROUP BY 1, 2
                 ORDER BY 3 DESC
-                LIMIT 100
+                LIMIT 500
             """
             sec_rows = conn.execute(sec_sql, dim_params + base_params).fetchall()
             sec_dist: dict[str, list[dict[str, Any]]] = {}
@@ -651,6 +659,27 @@ def get_stats(
                     sec_dist[k1] = []
                 sec_dist[k1].append({"key": k2, "count": int(r["n"] or 0)})
             secondary_distribution = sec_dist
+
+            # When primary facet is active, secondary_breakdown provides the complete breakdown of secondary dimension
+            if facet and facet_value:
+                sec_break_sql = f"""
+                    SELECT {sec_dim_sql} AS k, {metric_expr} AS n
+                    FROM wazuh.alerts a {where_sql}
+                    GROUP BY 1
+                    ORDER BY 2 DESC, 1 ASC
+                    LIMIT 500
+                """
+                sec_break_rows = conn.execute(sec_break_sql, dim_params + base_params).fetchall()
+                break_items = []
+                for r in sec_break_rows:
+                    cnt = int(r["n"] or 0)
+                    pct = round((cnt / total * 100.0), 2) if total > 0 else 0.0
+                    break_items.append({
+                        "key": str(r["k"] if r["k"] is not None else "Tidak tersedia"),
+                        "count": cnt,
+                        "percentage": pct,
+                    })
+                secondary_breakdown = break_items
 
         granularity = bucket
         if granularity == "auto":
@@ -716,6 +745,7 @@ def get_stats(
         "pivot_by": pivot_by,
         "secondary_pivot": secondary_pivot,
         "secondary_distribution": secondary_distribution,
+        "secondary_breakdown": secondary_breakdown,
         "metric": metric,
         "total": total,
         "total_alerts": total_alerts,
@@ -738,6 +768,8 @@ def get_stats(
             "time_to": time_to,
             "facet": facet,
             "facet_value": facet_value,
+            "secondary_facet": secondary_facet,
+            "secondary_facet_value": secondary_facet_value,
         },
     }
 
@@ -879,11 +911,13 @@ def _get_alerts_for_export(
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
     time_preset: str = "", time_from: str = "", time_to: str = "",
     facet: str = "", facet_value: str = "",
+    secondary_facet: str = "", secondary_facet_value: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     where, params = alert_where(
         q=q, tenant=tenant, review_status=review_status, filter_preset=filter_preset,
         status=status, group_id=group_id, time_preset=time_preset, time_from=time_from, time_to=time_to,
         facet=facet, facet_value=facet_value,
+        secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
     )
     clean_pks: list[int] = []
     if alert_ids:
@@ -905,7 +939,7 @@ def _get_alerts_for_export(
                 FROM wazuh.alerts a
                 LEFT JOIN public.ip_intel_cache ipc ON a.source_ip = ipc.ip
                 {where}
-                ORDER BY a.timestamp ASC NULLS LAST, a.id ASC
+                ORDER BY a.rule_id ASC NULLS LAST, a.timestamp ASC NULLS LAST, a.id ASC
                 LIMIT %s""",
             params + [MAX_EXPORT_ALERTS + 1],
         ).fetchall()
@@ -926,6 +960,7 @@ def export_scope(
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
     time_preset: str = "", time_from: str = "", time_to: str = "",
     facet: str = "", facet_value: str = "",
+    secondary_facet: str = "", secondary_facet_value: str = "",
 ) -> dict[str, Any]:
     normalize_tenants(tenant)
     # Explicit selection replaces triage filters, never tenant context.
@@ -934,11 +969,12 @@ def export_scope(
             alert_ids = ",".join(str(pk) for pk in positive_ids(alert_ids.split(",")))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        group_id, q, review_status, filter_preset, status, time_preset, time_from, time_to, facet, facet_value = None, "", "all", "", "all", "", "", "", "", ""
+        group_id, q, review_status, filter_preset, status, time_preset, time_from, time_to, facet, facet_value, secondary_facet, secondary_facet_value = None, "", "all", "", "all", "", "", "", "", "", "", ""
     return dict(group_id=group_id, alert_ids=alert_ids, tenant=_scope_tenant_value(tenant), q=q,
                 review_status=review_status, filter_preset=filter_preset, status=status,
                 time_preset=time_preset, time_from=time_from, time_to=time_to,
-                facet=facet, facet_value=facet_value)
+                facet=facet, facet_value=facet_value,
+                secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value)
 
 
 @app.get("/api/export/preview")

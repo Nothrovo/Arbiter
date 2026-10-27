@@ -25,6 +25,7 @@ from openpyxl.utils import get_column_letter
 
 def generate_tsv_table(alerts: list[dict[str, Any]]) -> str:
     """Generates a clean Tab-Separated Values table for instant pasting into Excel or Word."""
+    alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
     headers = [
         "No",
         "Hit Count",
@@ -73,6 +74,7 @@ def generate_tsv_table(alerts: list[dict[str, Any]]) -> str:
 
 def generate_markdown_report(alerts: list[dict[str, Any]], meta: dict[str, Any]) -> str:
     """Generates an executive SOC investigation summary in Markdown format."""
+    alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
     total_hits = sum(int(a.get("hit_count") or 1) for a in alerts)
     repeated = len([a for a in alerts if int(a.get("hit_count") or 1) > 1])
     highest_lvl = max([int(a.get("rule_level") or 0) for a in alerts], default=0)
@@ -125,6 +127,7 @@ def generate_markdown_report(alerts: list[dict[str, Any]], meta: dict[str, Any])
 
 def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any]) -> str:
     """Generates styled semantic HTML with clean table borders and colors for Google Docs pasting."""
+    alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
     title = meta.get("title") or "Laporan Hasil Investigasi Insiden Keamanan (SOC Incident Report)"
     category = meta.get("category") or "Security Incident"
     severity = meta.get("severity") or "Medium"
@@ -245,6 +248,7 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
 
 def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str, Any]) -> io.BytesIO:
     """Generates an official Word document (.docx) in landscape orientation."""
+    alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
     doc = Document()
     section = doc.sections[0]
     section.orientation = WD_ORIENT.LANDSCAPE
@@ -330,6 +334,7 @@ def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str,
 
 def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
     """Generates a styled Excel workbook (.xlsx) with threat intelligence metrics."""
+    alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
     wb = Workbook()
     ws = wb.worksheets[0]
     ws.title = "Wazuh Alerts Triage"

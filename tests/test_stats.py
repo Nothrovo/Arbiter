@@ -266,6 +266,34 @@ class StatsEndpointContractTests(unittest.TestCase):
         for it in items:
             self.assertEqual(it["description"], "SQL injection probe")
 
+    def test_alerts_and_stats_endpoint_respects_dual_facet_drilldown(self):
+        # With both primary facet and secondary facet, only syn-10 matches /login.php
+        res = self.client.get("/api/alerts", params={
+            "tenant": "Alpha",
+            "facet": "rule_description",
+            "facet_value": "SQL injection probe",
+            "secondary_facet": "url_path",
+            "secondary_facet_value": "/login.php",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        items = res.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["alert_id"], "syn-10")
+
+        # Stats returns secondary_breakdown when primary facet is active
+        res_stats = self.client.get("/api/stats", params={
+            "tenant": "Alpha",
+            "pivot_by": "rule_description",
+            "secondary_pivot": "url_path",
+            "facet": "rule_description",
+            "facet_value": "SQL injection probe",
+        })
+        self.assertEqual(res_stats.status_code, 200, res_stats.text)
+        sb = res_stats.json().get("secondary_breakdown")
+        self.assertIsNotNone(sb)
+        sb_keys = {it["key"] for it in sb}
+        self.assertEqual(sb_keys, {"/login.php", "/admin.php"})
+
 
 if __name__ == "__main__":
     unittest.main()

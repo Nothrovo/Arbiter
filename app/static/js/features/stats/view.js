@@ -188,6 +188,21 @@ export function mount(ctx) {
   });
 
   on(root, 'click', async e => {
+    const seg = e.target.closest('[data-secondary-key]');
+    if (seg) {
+      const priKey = seg.dataset.primaryKey;
+      const secKey = seg.dataset.secondaryKey;
+      if (priKey && secKey && query.secondary_pivot) {
+        updateRoute({
+          facet: query.pivot_by,
+          facet_value: priKey,
+          secondary_facet: query.secondary_pivot,
+          secondary_facet_value: secKey,
+        });
+        return;
+      }
+    }
+
     const btn = e.target.closest('button, [role="button"]');
     if (!btn) return;
 
@@ -231,13 +246,24 @@ export function mount(ctx) {
       return;
     }
     if (btn.id === 'btn-clear-drilldown') {
-      updateRoute({facet: null, facet_value: null});
+      updateRoute({facet: null, facet_value: null, secondary_facet: null, secondary_facet_value: null});
+      return;
+    }
+    if (btn.id === 'btn-clear-secondary-drilldown') {
+      updateRoute({secondary_facet: null, secondary_facet_value: null});
+      return;
+    }
+    if (btn.dataset.secondaryDrillKey || btn.dataset.secondaryLegendKey) {
+      const secKey = btn.dataset.secondaryDrillKey || btn.dataset.secondaryLegendKey;
+      if (secKey && query.secondary_pivot) {
+        updateRoute({secondary_facet: query.secondary_pivot, secondary_facet_value: secKey});
+      }
       return;
     }
     if (btn.dataset.drillKey || btn.dataset.chartKey) {
       const key = btn.dataset.drillKey || btn.dataset.chartKey;
       if (key && key !== 'Lainnya') {
-        updateRoute({facet: query.pivot_by, facet_value: key});
+        updateRoute({facet: query.pivot_by, facet_value: key, secondary_facet: null, secondary_facet_value: null});
       }
       return;
     }
@@ -357,6 +383,12 @@ export function mount(ctx) {
       btn.disabled = true;
       try {
         const matchingAlerts = (drilldownAlerts || []).filter(a => selectedIds.has(a.id));
+        matchingAlerts.sort((a, b) => {
+          const rA = String(a.rule_id || '');
+          const rB = String(b.rule_id || '');
+          if (rA !== rB) return rA.localeCompare(rB);
+          return String(a.timestamp || '').localeCompare(String(b.timestamp || ''));
+        });
         let fullText = matchingAlerts.map(a => {
           const raw = a.full_log || a.raw?.full_log || (a.raw ? JSON.stringify(a.raw, null, 2) : 'Log tidak tersedia.');
           return `Alert #${a.alert_id || a.id} (${a.description || 'Alert'})\n${raw}`;

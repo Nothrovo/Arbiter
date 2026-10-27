@@ -81,6 +81,18 @@ class ExportTests(unittest.TestCase):
         self.assertGreater(len(content), 1000)
         self.assertTrue(content.startswith(b"PK"))  # Valid xlsx zip magic
 
+    def test_exports_sort_alerts_by_rule_id(self):
+        mixed_alerts = [
+            {"id": 1, "rule_id": "5710", "timestamp": "2026-10-27T10:00:00Z", "description": "sshd failure"},
+            {"id": 2, "rule_id": "31101", "timestamp": "2026-10-27T09:00:00Z", "description": "web 400"},
+            {"id": 3, "rule_id": "1002", "timestamp": "2026-10-27T11:00:00Z", "description": "unknown rule"},
+            {"id": 4, "rule_id": "31101", "timestamp": "2026-10-27T08:00:00Z", "description": "earlier web 400"},
+        ]
+        tsv = generate_tsv_table(mixed_alerts)
+        lines = [line.split("\t") for line in tsv.strip().split("\n")][1:]
+        rule_ids = [line[5] for line in lines]
+        self.assertEqual(rule_ids, ["1002", "31101", "31101", "5710"])
+
 
 if __name__ == "__main__":
     unittest.main()
