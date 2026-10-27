@@ -27,49 +27,53 @@ export function statsPage(query) {
         <h1 id="stats-title">Statistik &amp; Pivot</h1>
         <p class="page-description">Workbench investigasi analitis berbasis agregasi telemetri SQL murni.</p>
       </div>
-      <div class="page-actions" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <button class="button" type="button" data-action="export-csv">${icon('report')} Unduh CSV</button>
-        <button class="button" type="button" data-action="export-svg">${icon('copy')} Unduh SVG</button>
+      <div class="page-actions stats-page-actions">
+        <button class="button" type="button" data-action="export-csv">${icon('report')} CSV</button>
+        <button class="button" type="button" data-action="export-svg">${icon('copy')} SVG</button>
         <button class="button" type="button" data-action="copy-summary">${icon('copy')} Salin Ringkasan</button>
+        <span class="stats-action-divider" aria-hidden="true"></span>
         <a class="button primary" id="btn-open-triage" href="${triageUrl}">${icon('inbox')} Buka di Triage</a>
-        <button class="button" type="button" data-action="reset-stats">Reset</button>
+        <button class="button" type="button" data-action="reset-stats">${icon('refresh')} Reset</button>
       </div>
     </header>
 
     <section class="panel stats-controls stack" style="margin-bottom:16px;">
-      <div class="stats-control-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; align-items:end;">
-        <div class="field">
+      <div class="stats-control-row">
+        <div class="field stats-field-grow">
           <label for="stats-pivot">Pivot acuan utama</label>
           <select class="select" id="stats-pivot" name="pivot_by">${pivotOpts}</select>
         </div>
-        <div class="field">
+        <div class="field stats-field-grow">
           <label for="stats-secondary-pivot">Pivot kedua (stacked bar)</label>
           <select class="select" id="stats-secondary-pivot" name="secondary_pivot">${secPivotOpts}</select>
         </div>
-        <div class="field">
-          <label for="stats-metric">Metrik hitungan</label>
-          <div class="segmented" id="stats-metric-segmented">
+        <div class="field stats-field-auto">
+          <label for="stats-metric-segmented">Metrik hitungan</label>
+          <div class="segmented stats-segmented" id="stats-metric-segmented">
             ${METRIC_OPTIONS.map(([val, lbl]) => `<button type="button" class="btn-seg ${query.metric === val ? 'active' : ''}" data-metric="${val}" aria-pressed="${query.metric === val}">${esc(lbl)}</button>`).join('')}
           </div>
         </div>
-        <div class="field">
-          <label for="stats-chart">Tipe visualisasi</label>
-          <div class="segmented" id="stats-chart-segmented">
+        <div class="field stats-field-auto">
+          <label for="stats-chart-segmented">Tipe visualisasi</label>
+          <div class="segmented stats-segmented" id="stats-chart-segmented">
             ${CHART_OPTIONS.map(([val, lbl]) => `<button type="button" class="btn-seg ${query.chart === val ? 'active' : ''}" data-chart="${val}" aria-pressed="${query.chart === val}">${esc(lbl)}</button>`).join('')}
           </div>
         </div>
-        <div class="field">
-          <label for="stats-top-n">Batas kategori</label>
+      </div>
+
+      <div class="stats-control-row" style="margin-top:10px;">
+        <div class="field stats-field-grow">
+          <label for="stats-top-n">Batas kategori teratas</label>
           <select class="select" id="stats-top-n" name="top_n">${topNOpts}</select>
         </div>
-        <div class="field">
+        <div class="field stats-field-grow">
           <label for="stats-time">Rentang waktu</label>
           <select class="select" id="stats-time" name="time_preset">${timePresets}</select>
         </div>
-        <div class="field">
+        <div class="field stats-field-grow">
           <label for="stats-preset-select">Preset tersimpan</label>
-          <div style="display:flex; gap:6px;">
-            <select class="select" id="stats-preset-select" style="min-width:130px;">
+          <div class="stats-preset-control">
+            <select class="select" id="stats-preset-select" style="flex:1;">
               <option value="">Pilih preset…</option>
               <option value="preset-top-rules-24h">Top Rules 24 Jam</option>
               <option value="preset-top-ips-7d">Top IP Sumber 7 Hari</option>

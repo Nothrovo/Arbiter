@@ -70,7 +70,11 @@ export function mount(ctx) {
       resultsContainer.innerHTML = statsResults(data, query, drilldownAlerts);
     } catch (err) {
       if (err.name !== 'AbortError' && !signal?.aborted && session.isCurrent(version)) {
-        resultsContainer.innerHTML = errorState(err.message || 'Gagal memuat data statistik.');
+        let msg = err.message || 'Gagal memuat data statistik.';
+        if (msg === 'Not Found' || err.status === 404) {
+          msg = 'Endpoint statistik tidak ditemukan di server backend (404 Not Found). Jika menjalankan via Docker, pastikan container sudah dimuat ulang (docker compose restart arbiter).';
+        }
+        resultsContainer.innerHTML = errorState(msg);
       }
     }
   }
