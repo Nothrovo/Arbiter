@@ -260,5 +260,22 @@
 .queue-log-head { align-items:center; }
 .queue-log-box .raw-log { max-height:none; margin:0; background:var(--ground); white-space:pre-wrap; word-break:break-all; overflow-wrap:anywhere; overflow-x:hidden; }
 
+/* Stats Workbench & Chart styles */
+.stats-controls { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-panel); padding:16px; }
+.stats-control-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; align-items:end; }
+.chart-container { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-panel); padding:20px; min-width:0; }
+.chart-svg { display:block; max-width:100%; height:auto; overflow:visible; }
+.chart-bar-row { cursor:pointer; outline:none; }
+.chart-bar-row:hover rect, .chart-bar-row:focus-visible rect { opacity:1; filter:brightness(1.15); }
+.donut-slice { cursor:pointer; outline:none; transition:opacity 120ms var(--ease-out); }
+.donut-slice:hover, .donut-slice:focus-visible { opacity:1; filter:brightness(1.2); }
+.line-point { cursor:pointer; outline:none; transition:r 120ms var(--ease-out); }
+.line-point:hover, .line-point:focus-visible { r:5px; stroke:var(--critical); }
+.chart-legend-item { cursor:pointer; border-radius:var(--radius-control); padding:4px 6px; }
+.chart-legend-item:hover { background:var(--raised); }
+.chart-empty { padding:36px 16px; text-align:center; }
+.other-breakdown { border-top:1px solid var(--border); padding-top:16px; }
+
+
 
 

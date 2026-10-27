@@ -1,5 +1,5 @@
-const choices = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
-const integer = (value, fallback) => Number.isFinite(Number(value)) ? Math.floor(Number(value)) : fallback;
+export const choices = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
+export const integer = (value, fallback) => Number.isFinite(Number(value)) ? Math.floor(Number(value)) : fallback;
 
 function rawTenantValues(params) {
   if (typeof params === 'string') return [params];

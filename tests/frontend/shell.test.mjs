@@ -9,5 +9,5 @@ test('application loads local modular shell with four real destinations and no C
   assert.doesNotMatch(html, /fonts.googleapis|onclick=/);
   assert.match(html, /id="main-content"/);
   assert.match(html, /aria-live="polite"/);
-  for (const file of ['app.js','features/triage/view.js']) assert.ok(existsSync(new URL(`app/static/js/${file}`, root)), file);
+  for (const file of ['app.js','features/triage/view.js', 'features/stats/view.js']) assert.ok(existsSync(new URL(`app/static/js/${file}`, root)), file);
 });

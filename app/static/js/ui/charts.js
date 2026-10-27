@@ -1,0 +1,228 @@
+import {esc} from './primitives.js';
+
+const SIGNAL_COLORS = {
+  critical: 'var(--critical)',
+  high: 'var(--critical)',
+  medium: 'var(--warning)',
+  low: 'var(--info)',
+  default: 'var(--control)',
+  accent1: '#7aa2f7',
+  accent2: '#bb9af7',
+  accent3: '#7dcfff',
+  accent4: '#e0af68',
+  accent5: '#9ece6a',
+  accent6: '#f7768e',
+  accent7: '#2ac3de',
+  accent8: '#b4f9f8',
+  other: 'var(--muted)',
+};
+
+const PALETTE = [
+  SIGNAL_COLORS.accent1,
+  SIGNAL_COLORS.accent2,
+  SIGNAL_COLORS.accent3,
+  SIGNAL_COLORS.accent4,
+  SIGNAL_COLORS.accent5,
+  SIGNAL_COLORS.accent6,
+  SIGNAL_COLORS.accent7,
+  SIGNAL_COLORS.accent8,
+];
+
+export function getColor(key, index = 0) {
+  const lk = String(key || '').toLowerCase();
+  if (lk === 'critical') return SIGNAL_COLORS.critical;
+  if (lk === 'high') return SIGNAL_COLORS.high;
+  if (lk === 'medium') return SIGNAL_COLORS.medium;
+  if (lk === 'low') return SIGNAL_COLORS.low;
+  if (lk === 'lainnya') return SIGNAL_COLORS.other;
+  return PALETTE[index % PALETTE.length];
+}
+
+export function renderBarChart({items = [], otherCount = 0, otherPercentage = 0, total = 0, metric = 'alerts'} = {}) {
+  const metricLabel = metric === 'events' ? 'event' : 'alert';
+  const allRows = [...items];
+  if (otherCount > 0) {
+    allRows.push({key: 'Lainnya', count: otherCount, displayPercentage: otherPercentage});
+  }
+  if (!allRows.length || total <= 0) {
+    return `<div class="chart-empty"><p class="muted">Tidak ada data untuk ditampilkan pada grafik ini.</p></div>`;
+  }
+
+  const rowHeight = 36;
+  const height = allRows.length * rowHeight + 30;
+  const width = 640;
+  const labelWidth = 180;
+  const barMaxWidth = width - labelWidth - 110;
+
+  const bars = allRows.map((r, i) => {
+    const y = i * rowHeight + 15;
+    const pct = Number(r.displayPercentage ?? ((r.count / total) * 100)) || 0;
+    const barW = Math.max(2, Math.round((pct / 100) * barMaxWidth));
+    const color = getColor(r.key, i);
+    const keyEsc = esc(r.key);
+
+    return `
+      <g class="chart-bar-row" data-chart-key="${keyEsc}" tabindex="0" role="button" aria-label="${keyEsc}: ${r.count} ${metricLabel} (${pct}%)">
+        <title>${keyEsc}: ${r.count} ${metricLabel} (${pct}%)</title>
+        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" fill="var(--text)" font-size="12" font-family="var(--font)">${keyEsc.length > 22 ? esc(keyEsc.slice(0, 20) + '…') : keyEsc}</text>
+        <rect x="${labelWidth}" y="${y + 4}" width="${barW}" height="18" rx="2" fill="${color}" opacity="0.85" />
+        <text x="${labelWidth + barW + 8}" y="${y + 17}" fill="var(--muted)" font-size="11" font-family="var(--mono)">${r.count} ${metricLabel} (${pct}%)</text>
+      </g>
+    `;
+  }).join('');
+
+  return `
+    <svg class="chart-svg bar-chart" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Grafik Balok Statistik (${total} ${metricLabel} total)">
+      <title>Grafik Balok Distribusi Alert</title>
+      <desc>Menampilkan distribusi per kategori dengan total ${total} ${metricLabel}.</desc>
+      <line x1="${labelWidth}" y1="8" x2="${labelWidth}" y2="${height - 10}" stroke="var(--border)" stroke-width="1" />
+      ${bars}
+    </svg>
+  `;
+}
+
+export function renderDonutChart({items = [], otherCount = 0, otherPercentage = 0, total = 0, metric = 'alerts'} = {}) {
+  const metricLabel = metric === 'events' ? 'event' : 'alert';
+  const allRows = [...items];
+  if (otherCount > 0) {
+    allRows.push({key: 'Lainnya', count: otherCount, displayPercentage: otherPercentage});
+  }
+  if (!allRows.length || total <= 0) {
+    return `<div class="chart-empty"><p class="muted">Tidak ada data untuk grafik donut.</p></div>`;
+  }
+
+  const size = 300;
+  const cx = size / 2;
+  const cy = size / 2;
+  const rOuter = 110;
+  const rInner = 68;
+
+  let currentAngle = -Math.PI / 2;
+  const paths = allRows.map((row, i) => {
+    const pct = Number(row.displayPercentage ?? ((row.count / total) * 100)) || 0;
+    const sliceAngle = (pct / 100) * (2 * Math.PI);
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + sliceAngle;
+    currentAngle = endAngle;
+
+    const x1 = cx + rOuter * Math.cos(startAngle);
+    const y1 = cy + rOuter * Math.sin(startAngle);
+    const x2 = cx + rOuter * Math.cos(endAngle);
+    const y2 = cy + rOuter * Math.sin(endAngle);
+
+    const x3 = cx + rInner * Math.cos(endAngle);
+    const y3 = cy + rInner * Math.sin(endAngle);
+    const x4 = cx + rInner * Math.cos(startAngle);
+    const y4 = cy + rInner * Math.sin(startAngle);
+
+    const largeArc = sliceAngle > Math.PI ? 1 : 0;
+    const d = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+    const color = getColor(row.key, i);
+    const keyEsc = esc(row.key);
+
+    return `
+      <path class="donut-slice" d="${d}" fill="${color}" opacity="0.9" stroke="var(--surface)" stroke-width="2"
+            tabindex="0" role="button" data-chart-key="${keyEsc}" aria-label="${keyEsc}: ${row.count} (${pct}%)">
+        <title>${keyEsc}: ${row.count} ${metricLabel} (${pct}%)</title>
+      </path>
+    `;
+  }).join('');
+
+  const legend = allRows.map((row, i) => {
+    const pct = Number(row.displayPercentage ?? ((row.count / total) * 100)) || 0;
+    const color = getColor(row.key, i);
+    const keyEsc = esc(row.key);
+    return `
+      <button type="button" class="chart-legend-item text-button" data-chart-key="${keyEsc}" style="display:flex; align-items:center; gap:8px; font-size:12px; margin:4px 0;">
+        <span class="legend-swatch" style="width:10px; height:10px; border-radius:2px; background:${color}; flex:none;" aria-hidden="true"></span>
+        <span class="legend-label" style="color:var(--text);">${keyEsc}</span>
+        <span class="legend-val mono" style="color:var(--muted); margin-left:auto;">${row.count} (${pct}%)</span>
+      </button>
+    `;
+  }).join('');
+
+  return `
+    <div class="donut-layout" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:24px;">
+      <svg class="chart-svg donut-chart" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="Grafik Donut Distribusi (${total} ${metricLabel} total)">
+        <title>Grafik Donut Distribusi Alert</title>
+        <desc>Distribusi proporsional kategori alert.</desc>
+        ${paths}
+        <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="20" font-weight="600" fill="var(--text)" font-family="var(--mono)">${total.toLocaleString('id-ID')}</text>
+        <text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font)">${metricLabel}</text>
+      </svg>
+      <div class="donut-legend stack" style="max-width:320px; flex:1; min-width:200px;">
+        ${legend}
+      </div>
+    </div>
+  `;
+}
+
+export function renderLineChart({timeSeries = [], topKeys = [], metric = 'alerts'} = {}) {
+  const metricLabel = metric === 'events' ? 'event' : 'alert';
+  if (!timeSeries.length) {
+    return `<div class="chart-empty"><p class="muted">Tidak ada data rentang waktu untuk grafik tren.</p></div>`;
+  }
+
+  const width = 640;
+  const height = 260;
+  const padLeft = 45;
+  const padRight = 20;
+  const padTop = 20;
+  const padBottom = 40;
+
+  const chartW = width - padLeft - padRight;
+  const chartH = height - padTop - padBottom;
+
+  const maxVal = Math.max(1, ...timeSeries.map(b => b.total || 0));
+  const nPoints = timeSeries.length;
+  const stepX = nPoints > 1 ? chartW / (nPoints - 1) : chartW / 2;
+
+  // Grid lines
+  const gridLines = [0, 0.25, 0.5, 0.75, 1.0].map(frac => {
+    const y = padTop + chartH - frac * chartH;
+    const val = Math.round(frac * maxVal);
+    return `
+      <line x1="${padLeft}" y1="${y}" x2="${width - padRight}" y2="${y}" stroke="var(--border)" stroke-dasharray="3 3" />
+      <text x="${padLeft - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--mono)">${val}</text>
+    `;
+  }).join('');
+
+  // Total trend line
+  const points = timeSeries.map((d, i) => {
+    const x = padLeft + (nPoints > 1 ? i * stepX : chartW / 2);
+    const y = padTop + chartH - ((d.total || 0) / maxVal) * chartH;
+    return {x, y, data: d};
+  });
+
+  const polyPoints = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  const dots = points.map(p => {
+    const bStr = esc(p.data.bucket || '');
+    return `
+      <circle class="line-point" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--ground)" stroke="var(--text)" stroke-width="2"
+              tabindex="0" role="graphics-symbol" aria-label="${bStr}: ${p.data.total} ${metricLabel}">
+        <title>${bStr}: ${p.data.total} ${metricLabel}</title>
+      </circle>
+    `;
+  }).join('');
+
+  // X axis labels (sparse)
+  const xLabels = points.filter((_, i) => i === 0 || i === nPoints - 1 || (nPoints > 4 && i === Math.floor(nPoints / 2))).map(p => {
+    let lbl = p.data.bucket || '';
+    if (lbl.length >= 16) lbl = lbl.slice(11, 16);
+    else if (lbl.length >= 10) lbl = lbl.slice(5, 10);
+    return `<text x="${p.x}" y="${height - 12}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="var(--mono)">${esc(lbl)}</text>`;
+  }).join('');
+
+  return `
+    <svg class="chart-svg line-chart" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Grafik Garis Tren Waktu">
+      <title>Grafik Tren Waktu</title>
+      <desc>Menampilkan fluktuasi total alert per interval waktu.</desc>
+      ${gridLines}
+      <polyline class="line-series" fill="none" stroke="var(--text)" stroke-width="2.5" stroke-linejoin="round" points="${polyPoints}" />
+      ${dots}
+      <line x1="${padLeft}" y1="${padTop + chartH}" x2="${width - padRight}" y2="${padTop + chartH}" stroke="var(--border)" stroke-width="1" />
+      ${xLabels}
+    </svg>
+  `;
+}
