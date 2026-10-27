@@ -48,6 +48,8 @@ test('incident list renders escaped linked cases with filter controls and explic
   assert.match(html, /name="case_status"/);
   assert.match(html, /name="severity"/);
   assert.match(html, /<td[^>]*>0<\/td>/);
+  assert.match(html, /data-action="delete-incident"/);
+  assert.match(html, /data-incident-id="synthetic-case"/);
   assert.match(renderList({tenant: 'all', groups: [], filters: {q: 'missing'}}), /Tidak ada insiden yang cocok/);
   assert.match(renderList({tenant: 'all', groups: [], filters: {}, error: 'Synthetic offline'}), /Synthetic offline/);
 });

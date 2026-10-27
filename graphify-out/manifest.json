@@ -228,9 +228,9 @@
     "semantic_hash": ""
   },
   "app/static/js/features/incidents/render.js": {
-    "mtime": 1793089383.4216783,
-    "seen": 1793089386.2846327,
-    "ast_hash": "2d2abd57fc7425d5eeaf99a5557574f2",
+    "mtime": 1793090900.0265176,
+    "seen": 1793090991.7087054,
+    "ast_hash": "62ff8889e8f65d48d6722f0e2cfddfb4",
     "semantic_hash": ""
   },
   "app/static/js/features/incidents/state.js": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "app/static/js/features/incidents/view.js": {
-    "mtime": 1793089383.4219234,
-    "seen": 1793089386.2846434,
-    "ast_hash": "c2c2abe7cdfaef3fb080087d9f1f7b64",
+    "mtime": 1793090928.4752977,
+    "seen": 1793090991.708717,
+    "ast_hash": "5ba92c20990504e01568a481cf12d7c5",
     "semantic_hash": ""
   },
   "app/static/js/features/reports/model.js": {
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/incidents-render.test.mjs": {
-    "mtime": 1792655338.9431162,
-    "seen": 1792655341.4647465,
-    "ast_hash": "44783f1e0e5c563340e4cd16217f3dde",
+    "mtime": 1793090953.4963706,
+    "seen": 1793090991.7089455,
+    "ast_hash": "6d5c56f4e0ae8cf8313dec44a8b317ac",
     "semantic_hash": ""
   },
   "tests/frontend/incidents-state.test.mjs": {
@@ -612,15 +612,15 @@
     "semantic_hash": ""
   },
   "app/static/js/features/stats/render.js": {
-    "mtime": 1793090464.1910515,
-    "seen": 1793090553.3480217,
-    "ast_hash": "8942897bf7d12b1fe7d8b5f10233552b",
+    "mtime": 1793090806.6731565,
+    "seen": 1793090991.7087538,
+    "ast_hash": "9a2c0da28dcb3960c5f21cbb39d3dbac",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/view.js": {
-    "mtime": 1793090493.990286,
-    "seen": 1793090553.3480265,
-    "ast_hash": "e5a81b13d123e626fe44115687fbaf75",
+    "mtime": 1793090819.5528882,
+    "seen": 1793090991.7087593,
+    "ast_hash": "f35d737f1e8abde7dc0a1a5aaa7eb3ec",
     "semantic_hash": ""
   },
   "app/static/js/state/stats.js": {
@@ -642,8 +642,8 @@
     "semantic_hash": ""
   },
   "tests/frontend/stats.test.mjs": {
-    "mtime": 1793090519.8965685,
-    "seen": 1793090553.348238,
+    "mtime": 1793090563.1406543,
+    "seen": 1793090565.828686,
     "ast_hash": "ce5d30d305078766cd6dd2f5d4590951",
     "semantic_hash": ""
   },

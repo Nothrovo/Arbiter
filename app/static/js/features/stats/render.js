@@ -209,9 +209,11 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
     const secLabel = data.secondary_pivot ? (PIVOT_OPTIONS.find(([k]) => k === data.secondary_pivot)?.[1] || data.secondary_pivot) : 'Pivot Kedua';
     const selectedSecSet = new Set(selectedSecondaryKeys);
     const allSecSelected = data.secondary_breakdown.length > 0 && selectedSecondaryKeys.length === data.secondary_breakdown.length;
+    const primaryCategoryTotal = data.secondary_breakdown.reduce((acc, sb) => acc + (sb.count || 0), 0) || total || 1;
     const totalSelectedAlerts = data.secondary_breakdown
       .filter(sb => selectedSecSet.has(sb.key))
       .reduce((acc, sb) => acc + (sb.count || 0), 0);
+    const selectedPercentage = Math.round((totalSelectedAlerts / primaryCategoryTotal) * 1000) / 10;
 
     const secRows = data.secondary_breakdown.map(sb => {
       const isFiltered = query.secondary_facet_value === sb.key;
@@ -268,7 +270,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         </div>
 
         <div id="secondary-selection-toolbar" class="selection-toolbar" style="display:${selectedSecondaryKeys.length ? 'flex' : 'none'}; margin-bottom:12px;">
-          <strong>${selectedSecondaryKeys.length} sub-kategori dipilih (${totalSelectedAlerts.toLocaleString('id-ID')} ${metricLabel})</strong>
+          <strong>${selectedSecondaryKeys.length} sub-kategori dipilih (${totalSelectedAlerts.toLocaleString('id-ID')} ${metricLabel} · ${selectedPercentage}%)</strong>
           <button class="button primary" type="button" data-action="batch-secondary-create-incident">${icon('plus')} Buat insiden</button>
           <button class="button" type="button" data-action="batch-secondary-add-incident">${icon('cases')} Masukkan ke insiden</button>
           <button class="button" type="button" data-action="batch-secondary-review">Tandai direview</button>

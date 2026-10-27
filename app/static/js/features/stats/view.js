@@ -364,8 +364,10 @@ export function mount(ctx) {
       }
       selectedSecondaryKeys.clear();
       matched.forEach(sb => selectedSecondaryKeys.add(sb.key));
+      const primaryCategoryTotal = breakdown.reduce((acc, sb) => acc + (sb.count || 0), 0) || currentData?.total || 1;
       const totalAlerts = matched.reduce((acc, sb) => acc + (sb.count || 0), 0);
-      notify(`Malicious Spotter: ${matched.length} sub-kategori mencurigakan terpilih (${totalAlerts.toLocaleString('id-ID')} alert).`, 'success');
+      const pct = Math.round((totalAlerts / primaryCategoryTotal) * 1000) / 10;
+      notify(`Malicious Spotter: ${matched.length} sub-kategori mencurigakan terpilih (${totalAlerts.toLocaleString('id-ID')} alert · ${pct}%).`, 'success');
       renderView();
       return;
     }
@@ -382,8 +384,10 @@ export function mount(ctx) {
       }
       selectedSecondaryKeys.clear();
       matched.forEach(sb => selectedSecondaryKeys.add(sb.key));
+      const primaryCategoryTotal = breakdown.reduce((acc, sb) => acc + (sb.count || 0), 0) || currentData?.total || 1;
       const totalAlerts = matched.reduce((acc, sb) => acc + (sb.count || 0), 0);
-      notify(`Benign Spotter: ${matched.length} sub-kategori non-mencurigakan terpilih (${totalAlerts.toLocaleString('id-ID')} alert).`, 'success');
+      const pct = Math.round((totalAlerts / primaryCategoryTotal) * 1000) / 10;
+      notify(`Benign Spotter: ${matched.length} sub-kategori non-mencurigakan terpilih (${totalAlerts.toLocaleString('id-ID')} alert · ${pct}%).`, 'success');
       renderView();
       return;
     }

@@ -39,7 +39,27 @@ export async function mount(ctx) {
     } catch (error) {if (current === version && error.name !== 'AbortError') list.error = error.message;}
     finally {if (current === version) {list.loading = false; render();}}
   }
-  root.addEventListener('click', event => {
+  root.addEventListener('click', async event => {
+    const deleteBtn = event.target.closest?.('[data-action="delete-incident"]');
+    if (deleteBtn) {
+      const id = deleteBtn.dataset.incidentId;
+      const title = deleteBtn.dataset.incidentTitle || 'Insiden';
+      if (!id) return;
+      if (!confirm(`Hapus insiden “${title}”? Tindakan ini akan menghapus kasus dan tautan buktinya. Alert asli tidak akan terhapus.`)) return;
+      deleteBtn.disabled = true;
+      try {
+        await json(`/api/groups/${encodeURIComponent(id)}?${scopeParams({tenant: route.tenant})}`, {
+          method: 'DELETE',
+          signal,
+        });
+        ctx.notify?.(`Insiden “${title}” berhasil dihapus.`, 'success');
+        await loadList();
+      } catch (err) {
+        if (err.name !== 'AbortError') ctx.notify?.(`Gagal menghapus insiden: ${err.message}`, 'error');
+        deleteBtn.disabled = false;
+      }
+      return;
+    }
     const link = event.target.closest?.('[data-incident-nav]');
     if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {event.preventDefault(); ctx.navigate(link.getAttribute('href').slice(1)); return;}
     if (event.target.closest?.('[data-action="retry"]')) return loadList();
