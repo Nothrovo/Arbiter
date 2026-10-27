@@ -130,10 +130,14 @@ export function statsPage(query) {
       <form id="stats-batch-incident-form" class="stack">
         <p class="muted"><span id="stats-batch-incident-count">0</span> alert terpilih dari hasil drill-down akan ditautkan ke kasus insiden di bawah ini.</p>
         <div class="field">
-          <label for="stats-batch-incident-select">Pilih Insiden Sasaran</label>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label for="stats-batch-incident-select" style="margin-bottom:0;">Pilih Insiden Sasaran</label>
+            <button type="button" class="text-button meta" id="btn-reload-batch-incidents" style="cursor:pointer;" title="Muat ulang daftar insiden">${icon('refresh')} Muat ulang</button>
+          </div>
           <select class="select" id="stats-batch-incident-select" name="group_id" required>
             <option value="">Memuat daftar insiden…</option>
           </select>
+          <div id="stats-batch-incident-hint" class="meta" style="margin-top:6px;"></div>
         </div>
         <div class="dialog-actions" style="margin-top:20px; display:flex; justify-content:flex-end; gap:8px;">
           <button type="button" class="button" data-close-stats-batch-incident>Batal</button>

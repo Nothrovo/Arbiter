@@ -1,5 +1,6 @@
 import {json, apiURL, copyText} from '../../api/client.js';
-import {emptyState, errorState, loadingRows, defangText} from '../../ui/primitives.js';
+import {emptyState, errorState, loadingRows, defangText, esc, icon} from '../../ui/primitives.js';
+import {tenantValues} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {createStatsSession} from '../../state/stats.js';
 import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary} from './model.js';
@@ -88,6 +89,37 @@ export function mount(ctx) {
           msg = 'Endpoint statistik tidak ditemukan di server backend (404 Not Found). Jika menjalankan via Docker, pastikan container sudah dimuat ulang (docker compose restart arbiter).';
         }
         resultsContainer.innerHTML = errorState(msg);
+      }
+    }
+  }
+
+  async function loadBatchIncidentOptions() {
+    const selectEl = root.querySelector('#stats-batch-incident-select');
+    const hintEl = root.querySelector('#stats-batch-incident-hint');
+    if (!selectEl) return;
+
+    selectEl.innerHTML = '<option value="">Memuat daftar insiden…</option>';
+    if (hintEl) hintEl.innerHTML = '';
+
+    try {
+      const activeTenants = tenantValues(query);
+      const groups = await json(apiURL('/api/groups', {tenant: activeTenants}), {signal});
+      if (!groups.length) {
+        selectEl.innerHTML = '<option value="">Belum ada kasus insiden pada scope ini</option>';
+        if (hintEl) {
+          const ids = [...selectedIds].join(',');
+          hintEl.innerHTML = `Belum ada insiden aktif. <a href="#/incidents/new?tenant=${esc(query.tenant)}&alert_ids=${ids}" class="text-button" style="text-decoration:underline;">Buat kasus insiden baru sekarang &rarr;</a>`;
+        }
+      } else {
+        selectEl.innerHTML = '<option value="">Pilih insiden sasaran…</option>' +
+          groups.map(g => `<option value="${esc(g.id)}">${esc(g.title)} (${g.alert_count ?? 0} bukti)</option>`).join('');
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        selectEl.innerHTML = `<option value="">Gagal memuat insiden (${esc(err.message || 'Koneksi error')})</option>`;
+        if (hintEl) {
+          hintEl.innerHTML = `<span style="color:var(--danger, #ff8b8b);">Gagal terhubung ke server. Pastikan layanan aktif lalu klik 'Muat ulang'.</span>`;
+        }
       }
     }
   }
@@ -277,6 +309,10 @@ export function mount(ctx) {
       navigate(withParams('/incidents/new', p));
       return;
     }
+    if (btn.id === 'btn-reload-batch-incidents') {
+      await loadBatchIncidentOptions();
+      return;
+    }
     if (btn.dataset.statsAction === 'add-to-incident') {
       const ids = [...selectedIds];
       if (!ids.length) {
@@ -284,22 +320,9 @@ export function mount(ctx) {
         return;
       }
       const countEl = root.querySelector('#stats-batch-incident-count');
-      const selectEl = root.querySelector('#stats-batch-incident-select');
       if (countEl) countEl.textContent = String(ids.length);
       batchDialog?.showModal();
-      try {
-        const groups = await json(apiURL('/api/groups', {tenant: query.tenant}), {signal});
-        if (selectEl) {
-          if (!groups.length) {
-            selectEl.innerHTML = '<option value="">Belum ada kasus insiden pada tenant ini</option>';
-          } else {
-            selectEl.innerHTML = '<option value="">Pilih insiden sasaran…</option>' +
-              groups.map(g => `<option value="${esc(g.id)}">${esc(g.title)} (${g.alert_count ?? 0} bukti)</option>`).join('');
-          }
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError' && selectEl) selectEl.innerHTML = '<option value="">Gagal memuat insiden</option>';
-      }
+      await loadBatchIncidentOptions();
       return;
     }
     if (btn.hasAttribute('data-close-stats-batch-incident')) {
@@ -415,7 +438,8 @@ export function mount(ctx) {
     const submitBtn = batchForm.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
     try {
-      await json(apiURL(`/api/groups/${encodeURIComponent(groupId)}/members`, {tenant: query.tenant}), {
+      const activeTenants = tenantValues(query);
+      await json(apiURL(`/api/groups/${encodeURIComponent(groupId)}/members`, {tenant: activeTenants}), {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({alert_pks: ids, tenant: query.tenant}),

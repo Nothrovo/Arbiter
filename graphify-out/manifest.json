@@ -612,15 +612,15 @@
     "semantic_hash": ""
   },
   "app/static/js/features/stats/render.js": {
-    "mtime": 1793085625.783423,
-    "seen": 1793085715.6534238,
-    "ast_hash": "a9f269cbb9d0c591bdf306fca978303d",
+    "mtime": 1793085945.9682364,
+    "seen": 1793086012.0506382,
+    "ast_hash": "277229315380d75bab1e63a6b116a364",
     "semantic_hash": ""
   },
   "app/static/js/features/stats/view.js": {
-    "mtime": 1793085652.5846,
-    "seen": 1793085715.653435,
-    "ast_hash": "e19bab82dd90e1ed75e1614e87dc2d86",
+    "mtime": 1793085989.083404,
+    "seen": 1793086012.0506432,
+    "ast_hash": "695720f30f7208a308f6efc71c014dd3",
     "semantic_hash": ""
   },
   "app/static/js/state/stats.js": {
