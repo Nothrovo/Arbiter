@@ -1,7 +1,7 @@
 # Graph Report - Arbiter  (2026-10-27)
 
 ## Corpus Check
-- 98 files · ~77,009 words
+- 98 files · ~77,016 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d6ae09fe`
+- Built from commit: `05300ec3`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -42,10 +42,10 @@
 - 5. Halaman web, bagian demi bagian
 - intel.py
 - IPIntel — CyberSOC & Threat Intelligence Web
-- generate_gdocs_html_report
+- sanitize_text
 - 6. SOC Log Reader — bagian demi bagian
 - MANUAL — Menjalankan IP Intel Web
-- sanitize_text
+- generate_gdocs_html_report
 - get_db
 - 4. Menjalankan aplikasi
 - 7. Alur data
@@ -165,10 +165,6 @@ Nodes (6): enrich_ip(), is_private_ip(), is_valid_ip(), query_abuseipdb(), sync_
 Cohesion: 0.20
 Nodes (9): 10. Parser SOC dan aturan keamanan tampilan, 11. Konfigurasi dan keamanan, 12. Graphify dan dokumentasi struktur, 13. Troubleshooting, 14. Catatan operasional, 1. Ringkasan fungsi, 2. Arsitektur, 3. Struktur folder (+1 more)
 
-### Community 28 - "generate_gdocs_html_report"
-Cohesion: 0.20
-Nodes (9): generate_gdocs_html_report(), export_gdocs_html(), export_preview(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders, Task 3: Rich Forensic Correlation Cards (+1 more)
-
 ### Community 30 - "6. SOC Log Reader — bagian demi bagian"
 Cohesion: 0.22
 Nodes (9): 6.1 Sumber data dan tampilan, 6.2 Filter, 6.3 Impor, 6.4 Signature dan dedup, 6.5 Hit, waktu, dan tampilan log, 6.6 Hapus data, 6.7 Export, 6.8 API SOC (+1 more)
@@ -176,6 +172,10 @@ Nodes (9): 6.1 Sumber data dan tampilan, 6.2 Filter, 6.3 Impor, 6.4 Signature da
 ### Community 31 - "MANUAL — Menjalankan IP Intel Web"
 Cohesion: 0.25
 Nodes (7): 1. Cara cepat (otomatis), 2. Cara manual (langkah per langkah), 3. Fitur web, 4. Utilitas CLI (`ipintel/`), 5. Troubleshooting, 6. File penting, MANUAL — Menjalankan IP Intel Web
+
+### Community 32 - "generate_gdocs_html_report"
+Cohesion: 0.20
+Nodes (9): generate_gdocs_html_report(), export_gdocs_html(), export_preview(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders, Task 3: Rich Forensic Correlation Cards (+1 more)
 
 ### Community 33 - "get_db"
 Cohesion: 0.16

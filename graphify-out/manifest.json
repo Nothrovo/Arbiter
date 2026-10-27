@@ -378,9 +378,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/shell.test.mjs": {
-    "mtime": 1793076077.7566037,
-    "seen": 1793076172.4146824,
-    "ast_hash": "7ef50b30577a7f042adc162f4829b0d9",
+    "mtime": 1793077027.4636915,
+    "seen": 1793077054.4059157,
+    "ast_hash": "721dfebe6e2a23af026d912284af4749",
     "semantic_hash": ""
   },
   "tests/frontend/triage.test.mjs": {
