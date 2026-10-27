@@ -319,6 +319,58 @@ class StatsEndpointContractTests(unittest.TestCase):
         self.assertEqual(res_multi.json()["alert_pks"], [10, 11])
         self.assertEqual(res_multi.json()["total"], 2)
 
+    def test_facet_alert_ids_spotter_mode_isolates_individual_alerts(self):
+        self.db.add_alert(
+            20, "Alpha",
+            alert_id="syn-20", timestamp="2026-01-01T12:30:00Z",
+            agent_name="host-web-1", rule_id="31101", rule_level=5,
+            description="Web server 400 error code.", source_ip="203.0.113.88",
+            hit_count=1, is_reviewed=False,
+            parsed_details='{"status":"400","path":"/index.php/sebatik","method":"GET","ua":"Mozilla/5.0","log_type":"http"}',
+        )
+        self.db.add_alert(
+            21, "Alpha",
+            alert_id="syn-21", timestamp="2026-01-01T12:35:00Z",
+            agent_name="host-web-1", rule_id="31101", rule_level=5,
+            description="Web server 400 error code.", source_ip="114.12.10.151",
+            hit_count=1, is_reviewed=False,
+            parsed_details='{"status":"400","path":"/index.php/sebatik","method":"POST","ua":"Mozilla/5.0","log_type":"http"}',
+            raw='{"full_log":"172.18.0.2:80 114.12.10.151 - - \\"POST /index.php/sebatik HTTP/1.0\\" 400 482"}',
+        )
+
+        # Alerts pk 20 (GET) and pk 21 (POST) both have url_path '/index.php/sebatik'
+        # spotter_mode='all' returns both [20, 21]
+        res_all = self.client.post("/api/stats/facet-alert-ids", json={
+            "tenant": ["Alpha"],
+            "secondary_facet": "url_path",
+            "secondary_facet_values": ["/index.php/sebatik"],
+            "spotter_mode": "all",
+        })
+        self.assertEqual(res_all.status_code, 200, res_all.text)
+        self.assertEqual(set(res_all.json()["alert_pks"]), {20, 21})
+
+        # spotter_mode='benign' returns ONLY pk 20 (the legitimate GET) and excludes pk 21 (the POST)
+        res_benign = self.client.post("/api/stats/facet-alert-ids", json={
+            "tenant": ["Alpha"],
+            "secondary_facet": "url_path",
+            "secondary_facet_values": ["/index.php/sebatik"],
+            "spotter_mode": "benign",
+        })
+        self.assertEqual(res_benign.status_code, 200, res_benign.text)
+        self.assertEqual(res_benign.json()["alert_pks"], [20])
+        self.assertNotIn(21, res_benign.json()["alert_pks"])
+
+        # spotter_mode='malicious' returns ONLY pk 21 (the malicious POST) and excludes pk 20
+        res_malicious = self.client.post("/api/stats/facet-alert-ids", json={
+            "tenant": ["Alpha"],
+            "secondary_facet": "url_path",
+            "secondary_facet_values": ["/index.php/sebatik"],
+            "spotter_mode": "malicious",
+        })
+        self.assertEqual(res_malicious.status_code, 200, res_malicious.text)
+        self.assertEqual(res_malicious.json()["alert_pks"], [21])
+        self.assertNotIn(20, res_malicious.json()["alert_pks"])
+
 
 if __name__ == "__main__":
     unittest.main()

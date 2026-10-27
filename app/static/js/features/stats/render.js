@@ -1,5 +1,5 @@
 import {esc, icon, severity} from '../../ui/primitives.js';
-import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats, isMaliciousPath} from './model.js';
+import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {renderBarChart, renderDonutChart, renderLineChart} from '../../ui/charts.js';
 
 export function statsPage(query) {
@@ -307,10 +307,11 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
     const drilldownRows = drilldownAlerts.map(a => {
       const isSel = selectedSet.has(a.id);
       const isExp = showAllLogs || expandedLogIds.has(a.id);
+      const isMal = isMaliciousAlert(a);
       const logText = a.full_log || a.raw?.full_log || (a.raw ? JSON.stringify(a.raw, null, 2) : 'Log tidak tersedia.');
 
       const mainRow = `
-        <tr data-drilldown-row="${a.id}" class="${isSel ? 'is-selected' : ''}">
+        <tr data-drilldown-row="${a.id}" class="${isSel ? 'is-selected' : ''} ${isMal ? 'has-malicious-match' : ''}">
           <td style="width:40px;">
             <input type="checkbox" data-select-drilldown="${a.id}" ${isSel ? 'checked' : ''} aria-label="Pilih alert #${a.id}">
           </td>
@@ -319,6 +320,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
           <td>
             <span class="font-medium">${esc(a.description || 'Alert')}</span>
             <span class="meta mono">(${esc(a.rule_id || '—')})</span>
+            ${isMal ? `<span class="badge danger" style="font-size:10px; margin-left:6px; padding:1px 5px;" title="Terindikasi Malicious">Mencurigakan</span>` : ''}
             <button type="button" class="text-button meta" data-stats-action="toggle-log" data-alert-id="${a.id}" style="margin-left:6px; cursor:pointer;" title="Buka/tutup full log">
               [${isExp ? 'Tutup Log' : 'Log'}]
             </button>
@@ -358,7 +360,13 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
             <h2>Bukti Alert Hasil Drill-down</h2>
             <span class="meta">${drilldownAlerts.length} alert ditampilkan (${esc(query.facet)} = "${esc(query.facet_value)}"${query.secondary_facet_value ? ` · ${esc(query.secondary_facet)} = "${esc(query.secondary_facet_value)}"` : ''})</span>
           </div>
-          <div style="display:flex; gap:8px; align-items:center;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button type="button" class="button" id="btn-evidence-malicious-spotter" title="Pilih otomatis semua alert individual yang terindikasi berbahaya">
+              ${icon('alert')} Malicious Spotter
+            </button>
+            <button type="button" class="button" id="btn-evidence-benign-spotter" title="Pilih otomatis semua alert individual yang bersih/jinak">
+              ${icon('check')} Benign Spotter
+            </button>
             <button type="button" class="button" id="btn-toggle-all-stats-logs" aria-pressed="${showAllLogs}">
               ${icon('cases')} <span id="toggle-all-logs-label">${showAllLogs ? 'Tutup semua log' : 'Semua log'}</span>
             </button>

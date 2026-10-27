@@ -29,7 +29,7 @@ from app.exports import (
 )
 from app.parser import parse_export
 from app.privacy import sanitize_text
-from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS, FACET_COLUMNS
+from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS, FACET_COLUMNS, is_malicious_alert_record
 
 
 @asynccontextmanager
@@ -791,6 +791,7 @@ def get_facet_alert_ids(payload: dict[str, Any]):
     facet_value = payload.get("facet_value", "")
     secondary_facet = payload.get("secondary_facet", "")
     secondary_facet_values = payload.get("secondary_facet_values", [])
+    spotter_mode = str(payload.get("spotter_mode", "all")).strip().lower()
 
     if not isinstance(secondary_facet_values, list):
         raise HTTPException(status_code=422, detail="secondary_facet_values must be a list.")
@@ -811,14 +812,27 @@ def get_facet_alert_ids(payload: dict[str, Any]):
 
     with get_db() as conn:
         rows = conn.execute(
-            f"SELECT a.id FROM wazuh.alerts a {where_sql} ORDER BY a.rule_id ASC NULLS LAST, a.timestamp ASC NULLS LAST, a.id ASC LIMIT 10000",
+            f"SELECT a.id, a.data, a.parsed_details, a.raw FROM wazuh.alerts a {where_sql} ORDER BY a.rule_id ASC NULLS LAST, a.timestamp ASC NULLS LAST, a.id ASC LIMIT 10000",
             params,
         ).fetchall()
 
-    alert_pks = [int(r["id"]) for r in rows]
+    filtered_ids = []
+    for r in rows:
+        row_dict = dict(r)
+        if spotter_mode == "malicious":
+            if is_malicious_alert_record(row_dict):
+                filtered_ids.append(int(r["id"]))
+        elif spotter_mode == "benign":
+            if not is_malicious_alert_record(row_dict):
+                filtered_ids.append(int(r["id"]))
+        else:
+            filtered_ids.append(int(r["id"]))
+
     return {
-        "alert_pks": alert_pks,
-        "total": len(alert_pks),
+        "alert_pks": filtered_ids,
+        "total": len(filtered_ids),
+        "spotter_mode": spotter_mode,
+        "raw_total": len(rows),
     }
 
 

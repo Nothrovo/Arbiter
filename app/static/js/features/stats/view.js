@@ -3,7 +3,7 @@ import {emptyState, errorState, loadingRows, defangText, esc, icon} from '../../
 import {tenantValues} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {createStatsSession} from '../../state/stats.js';
-import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary, isMaliciousPath} from './model.js';
+import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {statsPage, statsResults} from './render.js';
 
 export function mount(ctx) {
@@ -16,6 +16,7 @@ export function mount(ctx) {
   let drilldownAlerts = null;
   const selectedIds = new Set();
   const selectedSecondaryKeys = new Set();
+  let activeSpotterMode = 'all';
   const expandedLogIds = new Set();
   let showAllLogs = false;
 
@@ -95,7 +96,7 @@ export function mount(ctx) {
     }
   }
 
-  async function resolveAlertIdsForSecondaryKeys(keys = []) {
+  async function resolveAlertIdsForSecondaryKeys(keys = [], spotterMode = 'all') {
     if (!keys.length) return [];
     try {
       const res = await json('/api/stats/facet-alert-ids', {
@@ -114,6 +115,7 @@ export function mount(ctx) {
           facet_value: query.facet_value,
           secondary_facet: query.secondary_pivot,
           secondary_facet_values: keys,
+          spotter_mode: spotterMode,
         }),
         signal,
       });
@@ -364,6 +366,7 @@ export function mount(ctx) {
       }
       selectedSecondaryKeys.clear();
       matched.forEach(sb => selectedSecondaryKeys.add(sb.key));
+      activeSpotterMode = 'malicious';
       const primaryCategoryTotal = breakdown.reduce((acc, sb) => acc + (sb.count || 0), 0) || currentData?.total || 1;
       const totalAlerts = matched.reduce((acc, sb) => acc + (sb.count || 0), 0);
       const pct = Math.round((totalAlerts / primaryCategoryTotal) * 1000) / 10;
@@ -384,6 +387,7 @@ export function mount(ctx) {
       }
       selectedSecondaryKeys.clear();
       matched.forEach(sb => selectedSecondaryKeys.add(sb.key));
+      activeSpotterMode = 'benign';
       const primaryCategoryTotal = breakdown.reduce((acc, sb) => acc + (sb.count || 0), 0) || currentData?.total || 1;
       const totalAlerts = matched.reduce((acc, sb) => acc + (sb.count || 0), 0);
       const pct = Math.round((totalAlerts / primaryCategoryTotal) * 1000) / 10;
@@ -391,8 +395,37 @@ export function mount(ctx) {
       renderView();
       return;
     }
+    if (btn.id === 'btn-evidence-malicious-spotter') {
+      if (!drilldownAlerts?.length) return;
+      const matched = drilldownAlerts.filter(a => isMaliciousAlert(a));
+      if (!matched.length) {
+        notify('Tidak ada alert mencurigakan di antara bukti yang tampil.', 'info');
+        return;
+      }
+      selectedIds.clear();
+      matched.forEach(a => selectedIds.add(a.id));
+      const pct = Math.round((matched.length / drilldownAlerts.length) * 1000) / 10;
+      notify(`Malicious Spotter: ${matched.length} alert individual mencurigakan terpilih (${pct}% dari bukti tampil).`, 'success');
+      renderView();
+      return;
+    }
+    if (btn.id === 'btn-evidence-benign-spotter') {
+      if (!drilldownAlerts?.length) return;
+      const matched = drilldownAlerts.filter(a => !isMaliciousAlert(a));
+      if (!matched.length) {
+        notify('Tidak ada alert non-mencurigakan di antara bukti yang tampil.', 'info');
+        return;
+      }
+      selectedIds.clear();
+      matched.forEach(a => selectedIds.add(a.id));
+      const pct = Math.round((matched.length / drilldownAlerts.length) * 1000) / 10;
+      notify(`Benign Spotter: ${matched.length} alert individual non-mencurigakan terpilih (${pct}% dari bukti tampil).`, 'success');
+      renderView();
+      return;
+    }
     if (btn.dataset.action === 'clear-secondary-selection') {
       selectedSecondaryKeys.clear();
+      activeSpotterMode = 'all';
       renderView();
       return;
     }
@@ -402,7 +435,7 @@ export function mount(ctx) {
       btn.disabled = true;
       notify(`Mengambil alert untuk sub-kategori "${key}"…`, 'info');
       try {
-        const pks = await resolveAlertIdsForSecondaryKeys([key]);
+        const pks = await resolveAlertIdsForSecondaryKeys([key], 'all');
         if (!pks.length) {
           notify('Tidak ada alert yang ditemukan untuk kategori ini.', 'error');
           return;
@@ -425,11 +458,11 @@ export function mount(ctx) {
         return;
       }
       btn.disabled = true;
-      notify(`Mengambil alert untuk ${keys.length} sub-kategori terpilih…`, 'info');
+      notify(`Mengambil alert untuk ${keys.length} sub-kategori terpilih (${activeSpotterMode})…`, 'info');
       try {
-        const pks = await resolveAlertIdsForSecondaryKeys(keys);
+        const pks = await resolveAlertIdsForSecondaryKeys(keys, activeSpotterMode);
         if (!pks.length) {
-          notify('Tidak ada alert yang ditemukan untuk kategori terpilih.', 'error');
+          notify('Tidak ada alert yang sesuai dengan filter spotter untuk kategori terpilih.', 'error');
           return;
         }
         pks.forEach(pk => selectedIds.add(pk));
@@ -451,9 +484,9 @@ export function mount(ctx) {
       }
       btn.disabled = true;
       try {
-        const pks = await resolveAlertIdsForSecondaryKeys(keys);
+        const pks = await resolveAlertIdsForSecondaryKeys(keys, activeSpotterMode);
         if (!pks.length) {
-          notify('Tidak ada alert yang ditemukan untuk kategori terpilih.', 'error');
+          notify('Tidak ada alert yang sesuai dengan filter spotter untuk kategori terpilih.', 'error');
           return;
         }
         const p = new URLSearchParams({tenant: query.tenant, alert_ids: pks.join(',')});
@@ -468,7 +501,7 @@ export function mount(ctx) {
       if (!keys.length) return;
       btn.disabled = true;
       try {
-        const pks = await resolveAlertIdsForSecondaryKeys(keys);
+        const pks = await resolveAlertIdsForSecondaryKeys(keys, activeSpotterMode);
         if (pks.length) {
           await json(apiURL('/api/alerts/batch-review', {tenant: query.tenant}), {
             method: 'POST',

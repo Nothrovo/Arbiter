@@ -1,10 +1,12 @@
 """Shared parameterized alert predicates; no database or configuration imports."""
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import unquote
 
 from fastapi import HTTPException
 
@@ -58,6 +60,10 @@ PIVOT_DEFINITIONS: dict[str, dict[str, str]] = {
             "NULLIF(a.parsed_details->>'http_status', ''), "
             "'Tidak tersedia')"
         ),
+    },
+    "http_method": {
+        "label": "HTTP Method",
+        "sql": "COALESCE(NULLIF(UPPER(a.parsed_details->>'method'), ''), 'Tidak tersedia')",
     },
     "url_path": {
         "label": "URL / Path",
@@ -209,3 +215,120 @@ def alert_where(
             clauses.append(f"{FACET_COLUMNS[secondary_facet]} = %s")
             params.append(sec_val)
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params
+
+
+MALICIOUS_URI_RX = re.compile(
+    r'(?i)(?:'
+    r'/\.(?!well-known[/?#]|$)[a-zA-Z0-9_.-]+|'
+    r'/(?:[^/]+/)*(?:gcp|firebase|google-(?:services|key)|aws|boto|azure-pipelines|bitbucket-pipelines|docker-compose|service-account|appsettings|_?env\d*)[^/]*\.(?:json|ya?ml|cfg|properties|template)|'
+    r'^/[^/]+\.(?:json|ya?ml|cfg|properties|template|key|boto|htpasswd)(?:\?|$)|'
+    r'/(?:db|database|websql|dbweb|geoserver|jmx-console|web-console|jboss|invoker|coldfusion|cfide|cobbler(?:_api)?|uploadedfiles?|filemanager|cache_template|esp/cms_changeDeviceContext|avi/avigui)(?:/|$)|'
+    r'/(?:icons/|custom_403\.html)|'
+    r'\.(?:js|png|jpg|gif|css|txt|tpl)\.php(?:\?|$)|'
+    r'/(?:info|debug|test|configuration|web\.config|xmlrpc)\.php(?:\?|$)|'
+    r'^/[a-zA-Z0-9_-]{10,}(?:\?|$)'
+    r')'
+)
+
+MALICIOUS_QUERY_RX = re.compile(
+    r'(?i)(?:'
+    r'%22|%27|%3C|%3E|%7C|[\"\'<>]|\|s\.|'
+    r'rest_route=|'
+    r'phpinfo=|'
+    r'^/index\.php\?(?:lang|id|file|page)=|'
+    r'\b1337\b'
+    r')'
+)
+
+MALICIOUS_METHOD_RX = re.compile(
+    r'(?i)(?:'
+    r'^POST\s+(?:/|/(?:account|avi/)[^\s]*|/index\.php/sebatik)(?:\s+HTTP/|$)|'
+    r'\"POST\s+(?:/|/(?:account|avi/)[^\s]*|/index\.php/sebatik)\s+HTTP/'
+    r')'
+)
+
+MALICIOUS_UA_RX = re.compile(
+    r'(?i)(?:'
+    r'zgrab|Go Web Pentest Tool|masscan|nuclei|nikto|sqlmap|nmap|'
+    r'^-+$|^Mozilla/5\.0 \(compatible\)$|^Mozilla/5\.0 \([^)]+\) AppleWebKit/[0-9.]+$|'
+    r'Firefox/3\.|Linux i686'
+    r')'
+)
+
+BENIGN_WHITELIST_RX = re.compile(
+    r'(?i)(?:'
+    r'^/index\.php/(?:sebatik|informatika|snsebatik2018|index)(?:/[^\s?#\"\'%|<>]*|$)|'
+    r'^/plugins/generic/pdfJsViewer/|'
+    r'^/lib/pkp/|'
+    r'^/\.well-known/|'
+    r'^/(?:sitemap\.xml|ads\.txt|robots\.txt|favicon\.ico)(?:\?|$)'
+    r')'
+)
+
+
+def is_malicious_alert_record(row: dict[str, Any]) -> bool:
+    data = row.get("data") or {}
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except Exception:
+            data = {}
+    parsed = row.get("parsed_details") or {}
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except Exception:
+            parsed = {}
+    raw = row.get("raw") or {}
+    if isinstance(raw, str):
+        try:
+            raw_obj = json.loads(raw)
+            full_log = raw_obj.get("full_log") or raw
+        except Exception:
+            full_log = raw
+    else:
+        full_log = raw.get("full_log") or ""
+
+    url = str(data.get("url") or data.get("uri") or parsed.get("path") or parsed.get("uri") or "").strip()
+    if not url and full_log:
+        m = re.search(r'\"(?:GET|POST|HEAD|PUT|DELETE)\s+([^\s]+)\s+HTTP/', full_log)
+        if m:
+            url = m.group(1)
+
+    method = str(parsed.get("method") or "").strip().upper()
+    if not method and full_log:
+        m = re.search(r'\"([A-Z]+)\s+[^\s]+\s+HTTP/', full_log)
+        if m:
+            method = m.group(1)
+
+    ua = str(parsed.get("ua") or parsed.get("user_agent") or "").strip()
+    if not ua and full_log:
+        parts = re.findall(r'\"([^\"]*)\"', full_log)
+        if len(parts) >= 3:
+            ua = parts[-1]
+
+    decoded_url = unquote(url)
+
+    # 1. Suspicious HTTP Method
+    if method == "POST" and (url in ("/", "/account", "/index.php/sebatik") or url.startswith("/avi/")):
+        return True
+    if full_log and MALICIOUS_METHOD_RX.search(full_log):
+        return True
+
+    # 2. Scanner / Anomalous User Agent
+    if ua and MALICIOUS_UA_RX.search(ua):
+        return True
+
+    # 3. Query injection / fuzzing (overrides whitelist)
+    if MALICIOUS_QUERY_RX.search(url) or MALICIOUS_QUERY_RX.search(decoded_url) or (full_log and MALICIOUS_QUERY_RX.search(full_log)):
+        return True
+
+    # 4. Legitimate Whitelist Guardrail
+    if BENIGN_WHITELIST_RX.match(url) or BENIGN_WHITELIST_RX.match(decoded_url):
+        return False
+
+    # 5. Malicious URI / path
+    if MALICIOUS_URI_RX.search(url) or MALICIOUS_URI_RX.search(decoded_url):
+        return True
+
+    return False

@@ -204,3 +204,40 @@ test('isMaliciousPath detects real-world exploit probe paths from telemetry (JBo
   assert.equal(isMaliciousPath('/index.html'), false);
   assert.equal(isMaliciousPath('/favicon.ico'), false);
 });
+
+test('isMaliciousAlert differentiates individual alerts sharing the same sub-category URL path', async () => {
+  const {isMaliciousAlert} = await import('../../app/static/js/features/stats/model.js');
+
+  const benignAlert = {
+    id: 1,
+    data: {url: '/index.php/sebatik'},
+    parsed_details: {method: 'GET', path: '/index.php/sebatik', ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'},
+    full_log: '192.178.4.10 - - "GET /index.php/sebatik HTTP/1.1" 200 15200',
+  };
+
+  const maliciousAlert = {
+    id: 2,
+    data: {url: '/index.php/sebatik'},
+    parsed_details: {method: 'POST', path: '/index.php/sebatik', ua: 'Mozilla/5.0'},
+    full_log: '114.12.10.151 - - "POST /index.php/sebatik HTTP/1.0" 404 482',
+  };
+
+  const injectionAlert = {
+    id: 3,
+    data: {url: '/article/view/2214/%22%22'},
+    parsed_details: {method: 'GET', path: '/article/view/2214/%22%22', ua: 'Mozilla/5.0'},
+    full_log: '45.148.10.169 - - "GET /article/view/2214/%22%22 HTTP/1.1" 404 180',
+  };
+
+  const scannerAlert = {
+    id: 4,
+    data: {url: '/index.html'},
+    parsed_details: {method: 'GET', path: '/index.html', ua: 'Go Web Pentest Tool'},
+    full_log: '115.191.6.112 - - "GET /index.html HTTP/1.1" 404 180 "-" "Go Web Pentest Tool"',
+  };
+
+  assert.equal(isMaliciousAlert(benignAlert), false);
+  assert.equal(isMaliciousAlert(maliciousAlert), true);
+  assert.equal(isMaliciousAlert(injectionAlert), true);
+  assert.equal(isMaliciousAlert(scannerAlert), true);
+});

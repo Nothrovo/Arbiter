@@ -8,6 +8,7 @@ export const PIVOT_OPTIONS = [
   ['source_ip', 'Source IP'],
   ['agent', 'Host / Agent'],
   ['http_status', 'HTTP status code'],
+  ['http_method', 'HTTP Method'],
   ['url_path', 'URL / Path'],
   ['referer', 'HTTP Referer'],
   ['user_agent', 'User-Agent'],
@@ -294,4 +295,32 @@ export function isMaliciousPath(text = '') {
 
   // 3. Signature matching against malicious patterns
   return MALICIOUS_PATTERNS.some(rx => rx.test(str) || rx.test(decoded));
+}
+
+export function isMaliciousAlert(alert) {
+  if (!alert) return false;
+  const rawLog = alert.full_log || alert.raw?.full_log || (typeof alert.raw === 'string' ? alert.raw : '');
+  let url = alert.data?.url || alert.data?.uri || alert.parsed_details?.path || alert.parsed_details?.uri || '';
+  if ((!url || url === '/') && rawLog) {
+    const m = rawLog.match(/\"(?:GET|POST|HEAD|PUT|DELETE)\s+([^\s]+)\s+HTTP\//i);
+    if (m) url = m[1];
+  }
+  const method = String(alert.parsed_details?.method || (rawLog.match(/\"([A-Z]+)\s+[^\s]+\s+HTTP\//i)?.[1] || '')).toUpperCase();
+  const ua = String(alert.parsed_details?.ua || alert.parsed_details?.user_agent || (rawLog.match(/\"([^\"]*)\"\s*$/)?.[1] || ''));
+
+  // 1. Check suspicious method on unhandled endpoints
+  if (method === 'POST' && (url === '/' || url === '/account' || url === '/index.php/sebatik' || url.startsWith('/avi/'))) {
+    return true;
+  }
+  if (rawLog && /\"POST\s+(?:\/|\/(?:account|avi\/)[^\s]*|\/index\.php\/sebatik)\s+HTTP\//i.test(rawLog)) {
+    return true;
+  }
+
+  // 2. Check scanner / anomalous User-Agent
+  if (ua && /zgrab|Go Web Pentest Tool|masscan|nuclei|nikto|sqlmap|nmap|Firefox\/3\.|Linux i686/i.test(ua)) {
+    return true;
+  }
+
+  // 3. Check path and query payload on the extracted URI
+  return isMaliciousPath(url);
 }
