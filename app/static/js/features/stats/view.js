@@ -3,7 +3,7 @@ import {emptyState, errorState, loadingRows, defangText, esc, icon} from '../../
 import {tenantValues} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {createStatsSession} from '../../state/stats.js';
-import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary} from './model.js';
+import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary, isMaliciousPath} from './model.js';
 import {statsPage, statsResults} from './render.js';
 
 export function mount(ctx) {
@@ -349,6 +349,24 @@ export function mount(ctx) {
     }
     if (btn.dataset.action === 'retry') {
       await loadData();
+      return;
+    }
+    if (btn.id === 'btn-malicious-spotter') {
+      const breakdown = currentData?.secondary_breakdown || [];
+      if (!breakdown.length) {
+        notify('Belum ada rincian sub-kategori untuk diperiksa.', 'info');
+        return;
+      }
+      const matched = breakdown.filter(sb => isMaliciousPath(sb.key));
+      if (!matched.length) {
+        notify('Tidak ditemukan sub-kategori dengan pola mencurigakan.', 'info');
+        return;
+      }
+      selectedSecondaryKeys.clear();
+      matched.forEach(sb => selectedSecondaryKeys.add(sb.key));
+      const totalAlerts = matched.reduce((acc, sb) => acc + (sb.count || 0), 0);
+      notify(`Malicious Spotter: ${matched.length} sub-kategori mencurigakan terpilih (${totalAlerts.toLocaleString('id-ID')} alert).`, 'success');
+      renderView();
       return;
     }
     if (btn.dataset.action === 'clear-secondary-selection') {

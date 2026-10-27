@@ -1,5 +1,5 @@
 import {esc, icon, severity} from '../../ui/primitives.js';
-import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats} from './model.js';
+import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats, isMaliciousPath} from './model.js';
 import {renderBarChart, renderDonutChart, renderLineChart} from '../../ui/charts.js';
 
 export function statsPage(query) {
@@ -216,13 +216,17 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
     const secRows = data.secondary_breakdown.map(sb => {
       const isFiltered = query.secondary_facet_value === sb.key;
       const isChecked = selectedSecSet.has(sb.key);
+      const isMalicious = isMaliciousPath(sb.key);
       const keyEsc = esc(sb.key);
       return `
-        <tr class="${isFiltered ? 'is-selected' : ''}">
+        <tr class="${isFiltered ? 'is-selected' : ''} ${isMalicious ? 'has-malicious-match' : ''}">
           <td style="width:40px;">
             <input type="checkbox" data-select-secondary-key="${keyEsc}" ${isChecked ? 'checked' : ''} aria-label="Pilih sub-kategori ${keyEsc}">
           </td>
-          <td class="mono font-medium">${keyEsc}</td>
+          <td class="mono font-medium">
+            ${keyEsc}
+            ${isMalicious ? `<span class="badge danger" style="font-size:10px; margin-left:6px; padding:1px 5px;" title="Terdeteksi oleh Malicious Spotter">Mencurigakan</span>` : ''}
+          </td>
           <td class="numeric">${sb.count.toLocaleString('id-ID')}</td>
           <td class="numeric">${sb.percentage}%</td>
           <td class="actions-col" style="text-align:right; white-space:nowrap;">
@@ -250,9 +254,14 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
             <h3>Rincian ${esc(secLabel)} (dalam "${esc(query.facet_value)}")</h3>
             <span class="meta">${data.secondary_breakdown.length} sub-kategori ditemukan</span>
           </div>
-          ${query.secondary_facet_value ? `
-            <button type="button" class="button text-button" id="btn-clear-secondary-drilldown">Tampilkan Semua Sub-kategori</button>
-          ` : ''}
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button type="button" class="button" id="btn-malicious-spotter" title="Pilih otomatis semua sub-kategori yang mengandung pola mencurigakan (.env, credential, xmlrpc, config, git, admin, dll)">
+              ${icon('alert')} Malicious Spotter
+            </button>
+            ${query.secondary_facet_value ? `
+              <button type="button" class="button text-button" id="btn-clear-secondary-drilldown">Tampilkan Semua Sub-kategori</button>
+            ` : ''}
+          </div>
         </div>
 
         <div id="secondary-selection-toolbar" class="selection-toolbar" style="display:${selectedSecondaryKeys.length ? 'flex' : 'none'}; margin-bottom:12px;">

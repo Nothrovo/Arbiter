@@ -1,27 +1,27 @@
 # Graph Report - Arbiter  (2026-10-27)
 
 ## Corpus Check
-- 99 files · ~81,064 words
+- 99 files · ~81,298 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
 
 ## Summary
-- 841 nodes · 1900 edges · 41 communities (32 shown, 9 thin omitted)
+- 843 nodes · 1907 edges · 38 communities (29 shown, 9 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 57 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `834084d0`
+- Built from commit: `2b186c4b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - parser.py
 - normalize_tenants
-- Task 2: Build SQL aggregation endpoints and schema support
-- reports/view.js
+- test_ui_api.py
+- Control
 - main.py
-- imports/render.js
+- Control
 - ApiIntegrationTests
 - init-db.sql
 - start.sh
@@ -32,7 +32,6 @@
 - AGENTS.md — Arbiter Project Context for AI Agents
 - scope.js
 - incidents-view.test.mjs
-- state.js
 - app.js
 - SafetyTests
 - SyntheticDB
@@ -43,15 +42,13 @@
 - intel.py
 - IPIntel — CyberSOC & Threat Intelligence Web
 - 📋 Protokol Eksekusi Wajib
-- File Map and Interfaces
+- stats/model.js
 - 6. SOC Log Reader — bagian demi bagian
 - MANUAL — Menjalankan IP Intel Web
-- sanitize_text
 - Any
 - 4. Menjalankan aplikasi
 - 7. Alur data
 - 9. Database
-- Arbiter SOC Desk Upgrades Implementation Plan
 - esc
 - StatsEndpointContractTests
 - Struktur Proyek `ipintel/`
@@ -65,7 +62,7 @@
 6. `icon()` - 27 edges
 7. `mountWorkspace()` - 26 edges
 8. `errorState()` - 26 edges
-9. `mount()` - 24 edges
+9. `mount()` - 25 edges
 10. `scopeParams()` - 24 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -73,41 +70,37 @@
   GUIDE_WIRA/STRUCTURE.md → app/static/js/features/triage/view.js
 - `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `suggest_groups()`  [INFERRED]
   docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/core.py
-- `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `generate_tsv_table()`  [INFERRED]
-  docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/exports.py
-- `Task 2: GDocs & TSV Export: Full Log & Clean Borders` --references--> `generate_tsv_table()`  [INFERRED]
-  docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/exports.py
-- `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `generate_gdocs_html_report()`  [INFERRED]
-  docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/exports.py
+- `Task 1: Establish precise shared multi-tenant scope and safe facet contract` --references--> `alert_where()`  [INFERRED]
+  docs/superpowers/plans/2026-10-27-alert-statistics-pivot.md → app/query.py
+- `Task 2: Build SQL aggregation endpoints and schema support` --references--> `alert_where()`  [INFERRED]
+  docs/superpowers/plans/2026-10-27-alert-statistics-pivot.md → app/query.py
+- `Task 1: Establish precise shared multi-tenant scope and safe facet contract` --references--> `apiURL()`  [INFERRED]
+  docs/superpowers/plans/2026-10-27-alert-statistics-pivot.md → app/static/js/api/client.js
 
 ## Import Cycles
 - None detected.
 
-## Communities (41 total, 9 thin omitted)
+## Communities (38 total, 9 thin omitted)
 
 ### Community 0 - "parser.py"
 Cohesion: 0.06
-Nodes (23): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ollama_request(), suggest_groups(), suggestions_with_fallback(), as_dict(), build_log_signature() (+15 more)
+Nodes (24): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ollama_request(), suggest_groups(), suggestions_with_fallback(), as_dict(), build_log_signature() (+16 more)
 
 ### Community 1 - "normalize_tenants"
-Cohesion: 0.16
-Nodes (14): add_group_members(), delete_group(), export_scope(), remove_group_member(), _scope_tenant_value(), _scoped_groups(), update_alert_review(), update_group() (+6 more)
+Cohesion: 0.14
+Nodes (16): add_group_members(), create_group(), delete_group(), export_scope(), get_alert_detail(), remove_group_member(), _scope_tenant_value(), _scoped_groups() (+8 more)
 
-### Community 2 - "Task 2: Build SQL aggregation endpoints and schema support"
-Cohesion: 0.25
-Nodes (3): scoped(), Task 2: Build SQL aggregation endpoints and schema support, load_isolated_api()
-
-### Community 3 - "reports/view.js"
-Cohesion: 0.12
-Nodes (23): ApiError, copyHTML(), copyText(), download(), request(), caseReportRoute(), createReportSession(), exportURL() (+15 more)
+### Community 3 - "Control"
+Cohesion: 0.22
+Nodes (3): click(), Control, fixture()
 
 ### Community 4 - "main.py"
-Cohesion: 0.17
-Nodes (24): get_db(), generate_gdocs_html_report(), api_database_status(), export_docx(), export_gdocs_html(), export_markdown(), export_preview(), export_tsv() (+16 more)
+Cohesion: 0.19
+Nodes (15): get_db(), init_database(), favicon(), get_facet_alert_ids(), get_group_detail(), get_stats(), get_suggestions(), get_tenants() (+7 more)
 
-### Community 5 - "imports/render.js"
-Cohesion: 0.13
-Nodes (9): createImportSession(), importPage(), importResult(), mount(), update(), moduleURL, click(), Control (+1 more)
+### Community 5 - "Control"
+Cohesion: 0.22
+Nodes (3): click(), Control, fixture()
 
 ### Community 7 - "init-db.sql"
 Cohesion: 0.25
@@ -130,32 +123,28 @@ Cohesion: 0.15
 Nodes (12): AGENTS.md — Arbiter Project Context for AI Agents, Architecture (frontend), Design direction: Quiet Evidence Desk, Four destinations (not a monolithic page), Graph, Key policies, Privacy — STRICT, Running production (+4 more)
 
 ### Community 16 - "scope.js"
-Cohesion: 0.06
-Nodes (39): CHART_OPTIONS, distributionPercentages(), generateMarkdownSummary(), generateStatsCSV(), METRIC_OPTIONS, normalizeStatsQuery(), PIVOT_OPTIONS, triageRouteFromStats() (+31 more)
+Cohesion: 0.07
+Nodes (34): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), SEVERITIES (+26 more)
 
 ### Community 17 - "incidents-view.test.mjs"
 Cohesion: 0.25
 Nodes (3): context(), load(), SyntheticRoot
 
-### Community 18 - "state.js"
-Cohesion: 0.14
-Nodes (19): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), SEVERITIES (+11 more)
-
 ### Community 19 - "app.js"
-Cohesion: 0.10
-Nodes (22): canLeave(), closeNav(), health(), help, main, navigationMemory, pageTitles, renderTenantOptions() (+14 more)
+Cohesion: 0.07
+Nodes (28): canLeave(), closeNav(), health(), help, main, navigationMemory, pageTitles, renderTenantOptions() (+20 more)
 
 ### Community 22 - "database.py"
-Cohesion: 0.12
-Nodes (12): get_active_profile(), get_database_status(), get_db_connection(), ingest_alert_with_dedup(), init_database(), mask_connection_url(), purge_alerts(), purge_incidents() (+4 more)
+Cohesion: 0.15
+Nodes (11): get_active_profile(), get_database_status(), get_db_connection(), ingest_alert_with_dedup(), mask_connection_url(), purge_alerts(), purge_incidents(), set_active_profile() (+3 more)
 
 ### Community 23 - "Arbiter"
 Cohesion: 0.33
 Nodes (5): Arbiter, Audience and usage, Development verification, Implemented case policy without schema changes, Product boundaries
 
 ### Community 24 - "exports.py"
-Cohesion: 0.10
-Nodes (6): generate_docx_landscape_report(), generate_markdown_report(), generate_tsv_table(), generate_xlsx_workbook(), export_csv(), ExportTests
+Cohesion: 0.07
+Nodes (21): generate_docx_landscape_report(), generate_gdocs_html_report(), generate_markdown_report(), generate_tsv_table(), generate_xlsx_workbook(), export_csv(), export_docx(), export_gdocs_html() (+13 more)
 
 ### Community 25 - "5. Halaman web, bagian demi bagian"
 Cohesion: 0.08
@@ -173,9 +162,9 @@ Nodes (11): 10. Parser SOC dan aturan keamanan tampilan, 11. Konfigurasi dan kea
 Cohesion: 0.22
 Nodes (8): 1. Inisialisasi Task Otomatis (`todo_list`), 2. Proaktif Menggunakan Skills & Subagents, 3. Pelacakan Jahitan Data Ujung-ke-Ujung (*Trace Every Seam*), 4. Pengujian Kasus Negatif (Bukan Cuma Kasus Ideal), 5. Verifikasi Lingkungan & Container, 🎯 Filosofi Inti: "No Stubs, Full Seam, Zero Hallucination", 📋 Protokol Eksekusi Wajib, Standar Operasional Prosedur (SOP) Autonomous Engineering & Rigor
 
-### Community 29 - "File Map and Interfaces"
-Cohesion: 0.22
-Nodes (8): Alert Statistics & Pivot Implementation Plan, File Map and Interfaces, Global Constraints, Review Focus, Self-Review, Task 4: Add the compact Triage filter-summary strip, Task 5: Add approved post-core statistics enhancements, Task 6: Document the completed navigation and verification contract
+### Community 29 - "stats/model.js"
+Cohesion: 0.11
+Nodes (29): CHART_OPTIONS, distributionPercentages(), generateMarkdownSummary(), generateStatsCSV(), isMaliciousPath(), MALICIOUS_PATTERNS, METRIC_OPTIONS, normalizeStatsQuery() (+21 more)
 
 ### Community 30 - "6. SOC Log Reader — bagian demi bagian"
 Cohesion: 0.22
@@ -186,8 +175,8 @@ Cohesion: 0.25
 Nodes (7): 1. Cara cepat (otomatis), 2. Cara manual (langkah per langkah), 3. Fitur web, 4. Utilitas CLI (`ipintel/`), 5. Troubleshooting, 6. File penting, MANUAL — Menjalankan IP Intel Web
 
 ### Community 33 - "Any"
-Cohesion: 0.23
-Nodes (11): api_database_config(), api_database_purge_alerts(), api_database_purge_incidents(), api_database_switch(), api_database_test(), api_sanitize_logs(), batch_update_review(), create_group() (+3 more)
+Cohesion: 0.27
+Nodes (10): api_database_config(), api_database_purge_alerts(), api_database_purge_incidents(), api_database_switch(), api_database_test(), api_sanitize_logs(), batch_update_review(), import_file() (+2 more)
 
 ### Community 34 - "4. Menjalankan aplikasi"
 Cohesion: 0.50
@@ -201,13 +190,9 @@ Nodes (4): 7.1 Enrichment IP, 7.2 Impor SOC, 7.3 MISP / CTI, 7. Alur data
 Cohesion: 0.50
 Nodes (4): 9.1 Tabel inti, 9.2 Tabel CTI, 9.3 Tabel SOC, 9. Database
 
-### Community 37 - "Arbiter SOC Desk Upgrades Implementation Plan"
-Cohesion: 0.29
-Nodes (6): Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders, Task 3: Rich Forensic Correlation Cards, Task 4: Two-Way IP Intel Live Enrichment
-
 ### Community 38 - "esc"
-Cohesion: 0.10
-Nodes (75): apiURL(), json(), notify(), render(), scopeParams(), summarizeTelemetryRange(), mount(), loadStatus() (+67 more)
+Cohesion: 0.06
+Nodes (101): ApiError, apiURL(), copyHTML(), copyText(), download(), json(), request(), notify() (+93 more)
 
 ### Community 40 - "Struktur Proyek `ipintel/`"
 Cohesion: 0.29
@@ -219,17 +204,17 @@ Nodes (6): 1. Tree + ukuran file, 2. Graph dependensi modul (siapa import siapa)
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Task 1: Establish precise shared multi-tenant scope and safe facet contract` connect `normalize_tenants` to `scope.js`, `main.py`, `File Map and Interfaces`, `esc`?**
+- **Why does `Task 1: Establish precise shared multi-tenant scope and safe facet contract` connect `normalize_tenants` to `main.py`, `stats/model.js`, `esc`?**
   _High betweenness centrality (0.235) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `json()` (e.g. with `mount()` and `loadSelected()`) actually correct?**
   _`json()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Should `parser.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.05741626794258373 - nodes in this community are weakly interconnected._
-- **Why does `Task 2: Build SQL aggregation endpoints and schema support` connect `Task 2: Build SQL aggregation endpoints and schema support` to `SyntheticDB`, `main.py`, `File Map and Interfaces`, `esc`?**
+  _Cohesion score 0.06034801925212884 - nodes in this community are weakly interconnected._
+- **Why does `Task 2: Build SQL aggregation endpoints and schema support` connect `SyntheticDB` to `test_ui_api.py`, `main.py`, `esc`, `scope.js`, `stats/model.js`?**
   _High betweenness centrality (0.173) - this node is a cross-community bridge._
-- **Should `reports/view.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.11861861861861862 - nodes in this community are weakly interconnected._
-- **Why does `selectedIds()` connect `state.js` to `Arbiter — audit UI/UX dan keputusan redesign`?**
+- **Should `normalize_tenants` be split into smaller, more focused modules?**
+  _Cohesion score 0.14153846153846153 - nodes in this community are weakly interconnected._
+- **Why does `selectedIds()` connect `scope.js` to `Arbiter — audit UI/UX dan keputusan redesign`?**
   _High betweenness centrality (0.146) - this node is a cross-community bridge._
-- **Should `imports/render.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.12681159420289856 - nodes in this community are weakly interconnected._
+- **Should `test_ui_api.py` be split into smaller, more focused modules?**
+  _Cohesion score 0.12380952380952381 - nodes in this community are weakly interconnected._

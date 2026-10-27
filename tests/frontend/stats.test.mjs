@@ -73,3 +73,28 @@ test('stats export formatters generate clean CSV and markdown analysis summary',
   assert.match(md, /SQL Injection: 60 \(60%\)/);
   assert.match(md, /Total: 100 alert/);
 });
+
+test('isMaliciousPath identifies high-signal sensitive and probe paths', async () => {
+  const {isMaliciousPath} = await import('../../app/static/js/features/stats/model.js');
+  
+  // Malicious / sensitive paths
+  assert.equal(isMaliciousPath('/.env'), true);
+  assert.equal(isMaliciousPath('/.env.bak'), true);
+  assert.equal(isMaliciousPath('/.git/config'), true);
+  assert.equal(isMaliciousPath('/.ssh/id_rsa'), true);
+  assert.equal(isMaliciousPath('/xmlrpc.php'), true);
+  assert.equal(isMaliciousPath('/wp-config.php.save'), true);
+  assert.equal(isMaliciousPath('/config.php.bak'), true);
+  assert.equal(isMaliciousPath('/administrator/index.php'), true);
+  assert.equal(isMaliciousPath('/admin/login'), true);
+  assert.equal(isMaliciousPath('/.aws/credentials.bak'), true);
+  assert.equal(isMaliciousPath('/dump.sql'), true);
+  assert.equal(isMaliciousPath('/c99shell.php'), true);
+
+  // Benign / normal paths
+  assert.equal(isMaliciousPath('/plugins/generic/pdfJsViewer/locale/locale.properties'), false);
+  assert.equal(isMaliciousPath('/index.html'), false);
+  assert.equal(isMaliciousPath('/static/css/style.css'), false);
+  assert.equal(isMaliciousPath('/assets/logo.png'), false);
+  assert.equal(isMaliciousPath(''), false);
+});

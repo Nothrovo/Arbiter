@@ -148,3 +148,33 @@ export function generateMarkdownSummary(data) {
   }
   return lines.join('\n');
 }
+
+export const MALICIOUS_PATTERNS = [
+  /\.env(\b|\.|\/|$)/i,
+  /\.git(\b|\/|$)/i,
+  /\.ssh(\b|\/|$)/i,
+  /id_rsa/i,
+  /xmlrpc(\.php)?/i,
+  /(wp-)?config(\.php)?(\.bak|\.old|\.save|\.swp|\.orig)?(\b|$)/i,
+  /credentials?/i,
+  /secret/i,
+  /admin(istrator)?(\b|\/|\.|$)/i,
+  /phpinfo/i,
+  /shell(\.php)?/i,
+  /backup(\b|\/|\.|$)/i,
+  /\.(bak|old|save|swp|sql|tar|gz|zip|rar)$/i,
+  /\.(aws|firebase)(\b|\/|$)/i,
+  /etc\/(passwd|shadow)/i,
+  /eval-stdin/i,
+  /cmd(\.exe)?/i,
+  /setup(\.php)?/i,
+  /install(\.php)?/i,
+  /web\.config/i,
+  /\.htaccess/i,
+];
+
+export function isMaliciousPath(text = '') {
+  const str = String(text || '').trim();
+  if (!str) return false;
+  return MALICIOUS_PATTERNS.some(rx => rx.test(str));
+}
