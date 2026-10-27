@@ -34,7 +34,7 @@ export function mount(ctx) {
     if (!state.file) file.value = '';
     result.hidden = !state.result;
     if (state.result && state.result !== lastResult) {
-      result.innerHTML = importResult(state.result, ctx.route.params.get('tenant') || 'all');
+      result.innerHTML = importResult(state.result, ctx.route.params);
       lastResult = state.result;
     }
   }

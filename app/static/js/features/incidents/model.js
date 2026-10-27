@@ -1,4 +1,4 @@
-import {scopeParams} from '../../state/scope.js';
+import {scopeParams, tenantScope} from '../../state/scope.js';
 
 export function selectedIds(value = '') {
   if (!String(value).trim()) return [];
@@ -9,10 +9,15 @@ export function selectedIds(value = '') {
 export function incidentRoute(route) {
   const params = route.params || new URLSearchParams();
   const tail = route.path.replace(/^\/incidents\/?/, '').replace(/\/$/, '');
-  return {mode: !tail ? 'list' : tail === 'new' ? 'create' : 'edit', id: !tail || tail === 'new' ? null : decodeURIComponent(tail), tenant: params.get('tenant') || 'all', alertIds: selectedIds(params.get('alert_ids') || '')};
+  const scope = tenantScope(params);
+  const tenant = scope.all ? 'all' : scope.tenants.length === 1 ? scope.tenants[0] : scope.tenants;
+  return {mode: !tail ? 'list' : tail === 'new' ? 'create' : 'edit', id: !tail || tail === 'new' ? null : decodeURIComponent(tail), tenant, alertIds: selectedIds(params.get('alert_ids') || '')};
 }
 export function caseHref(id, tenant, extra = {}) {
-  const params = new URLSearchParams({tenant: tenant || 'all', ...extra});
+  const scope = tenantScope(tenant);
+  const params = new URLSearchParams();
+  for (const value of scope.all ? ['all'] : scope.tenants) params.append('tenant', value);
+  for (const [key, value] of Object.entries(extra)) if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
   return `/incidents${id ? `/${encodeURIComponent(id)}` : ''}?${params}`;
 }
 export function evidenceParams({tenant = 'all', groupId, offset = 0, q = '', limit = 50} = {}) {

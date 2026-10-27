@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -29,7 +29,7 @@ from app.exports import (
 )
 from app.parser import parse_export
 from app.privacy import sanitize_text
-from app.query import alert_where, positive_ids, validated_group_id
+from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id
 
 
 @asynccontextmanager
@@ -104,6 +104,19 @@ def _process_alerts_ingest(raw_alerts: list[dict[str, Any]]) -> dict[str, int]:
     }
 
 
+def _scope_tenant_value(tenant: str | list[str] | tuple[str, ...] | None) -> str | list[str]:
+    """Normalize a request scope while retaining the legacy single-tenant echo."""
+    tenants = normalize_tenants(tenant)
+    if not tenants:
+        return "all"
+    return tenants[0] if len(tenants) == 1 else list(tenants)
+
+
+def _tenant_label(tenant: str | list[str] | tuple[str, ...] | None) -> str:
+    tenants = normalize_tenants(tenant)
+    return ", ".join(tenants) if tenants else "Semua Tenant"
+
+
 @app.post("/api/import")
 async def import_file(file: UploadFile = File(...)):
     raw_bytes = await file.read()
@@ -138,7 +151,7 @@ def import_text(payload: dict[str, Any]):
 @app.get("/api/alerts")
 def list_alerts(
     q: str = "",
-    tenant: str = "all",
+    tenant: list[str] = Query(default=["all"]),
     status: str = "all",
     group_id: str | None = None,
     filter_preset: str = "",
@@ -209,12 +222,13 @@ def list_alerts(
 
 
 @app.get("/api/alerts/{alert_id}")
-def get_alert_detail(alert_id: int, tenant: str = "all"):
+def get_alert_detail(alert_id: int, tenant: list[str] = Query(default=["all"])):
     where = "a.id = %s"
     params: list[Any] = [alert_id]
-    if tenant and tenant != "all":
-        where += " AND a.tenant = %s"
-        params.append(tenant)
+    tenant_sql, tenant_params = tenant_clause("a", tenant)
+    if tenant_sql:
+        where += " AND " + tenant_sql
+        params.extend(tenant_params)
     with get_db() as conn:
         row = conn.execute(
             f"""SELECT a.*, COALESCE(a.raw->>'full_log', '') AS full_log,
@@ -237,7 +251,7 @@ def get_alert_detail(alert_id: int, tenant: str = "all"):
 
 
 @app.put("/api/alerts/{alert_id}/review")
-def update_alert_review(alert_id: int, payload: dict[str, Any], tenant: str = "all"):
+def update_alert_review(alert_id: int, payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
     is_reviewed = bool(payload.get("is_reviewed", True))
     notes = str(payload.get("reviewer_notes") or "").strip()
     with get_db() as conn:
@@ -254,7 +268,8 @@ def update_alert_review(alert_id: int, payload: dict[str, Any], tenant: str = "a
 
 
 @app.post("/api/alerts/batch-review")
-def batch_update_review(payload: dict[str, Any], tenant: str = "all"):
+def batch_update_review(payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
+    normalize_tenants(tenant)
     alert_ids = payload.get("alert_ids") or []
     is_reviewed = bool(payload.get("is_reviewed", True))
     if not alert_ids:
@@ -272,7 +287,8 @@ def batch_update_review(payload: dict[str, Any], tenant: str = "all"):
 
 
 @app.post("/api/intel/enrich")
-def enrich_intel(payload: dict[str, Any], tenant: str = "all"):
+def enrich_intel(payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
+    normalize_tenants(tenant)
     raw_ips = payload.get("ips") or []
     if isinstance(raw_ips, str):
         raw_ips = [raw_ips]
@@ -286,13 +302,14 @@ def enrich_intel(payload: dict[str, Any], tenant: str = "all"):
         clean_pks = positive_ids(alert_ids)
         if clean_pks:
             with get_db() as conn:
-                where_clause = "WHERE id = ANY(%s)"
+                where_clause = "WHERE a.id = ANY(%s)"
                 params: list[Any] = [clean_pks]
-                if tenant and tenant != "all":
-                    where_clause += " AND tenant = %s"
-                    params.append(tenant)
+                tenant_sql, tenant_params = tenant_clause("a", tenant)
+                if tenant_sql:
+                    where_clause += " AND " + tenant_sql
+                    params.extend(tenant_params)
                 rows = conn.execute(
-                    f"SELECT DISTINCT source_ip FROM wazuh.alerts {where_clause} AND source_ip IS NOT NULL AND source_ip != ''",
+                    f"SELECT DISTINCT a.source_ip FROM wazuh.alerts a {where_clause} AND a.source_ip IS NOT NULL AND a.source_ip != ''",
                     params,
                 ).fetchall()
                 for r in rows:
@@ -323,13 +340,14 @@ def enrich_intel(payload: dict[str, Any], tenant: str = "all"):
     }
 
 
-def _scoped_groups(conn, tenant: str = "all", group_id: str | None = None):
+def _scoped_groups(conn, tenant: str | list[str] | tuple[str, ...] | None = "all", group_id: str | None = None):
     group_id = validated_group_id(group_id)
     clauses: list[str] = []
     params: list[Any] = []
-    if tenant and tenant != "all":
-        clauses.append("a.tenant = %s")
-        params.append(tenant)
+    tenant_sql, tenant_params = tenant_clause("a", tenant)
+    if tenant_sql:
+        clauses.append(tenant_sql)
+        params.extend(tenant_params)
     if group_id:
         clauses.append("g.id = %s")
         params.append(group_id)
@@ -350,13 +368,13 @@ def _scoped_groups(conn, tenant: str = "all", group_id: str | None = None):
 
 
 @app.get("/api/groups")
-def list_groups(tenant: str = "all"):
+def list_groups(tenant: list[str] = Query(default=["all"])):
     with get_db() as conn:
         return _scoped_groups(conn, tenant)
 
 
 @app.get("/api/groups/{group_id}")
-def get_group_detail(group_id: str, tenant: str = "all"):
+def get_group_detail(group_id: str, tenant: list[str] = Query(default=["all"])):
     with get_db() as conn:
         rows = _scoped_groups(conn, tenant, group_id)
     if not rows:
@@ -365,11 +383,12 @@ def get_group_detail(group_id: str, tenant: str = "all"):
 
 
 @app.post("/api/groups")
-def create_group(payload: dict[str, Any], tenant: str = "all"):
+def create_group(payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
+    normalize_tenants(tenant)
     title = str(payload.get("title", "")).strip()
     if not title:
         raise HTTPException(status_code=400, detail="Group / Incident title is required.")
-    if tenant != "all" and not payload.get("alert_pks"):
+    if normalize_tenants(tenant) and not payload.get("alert_pks"):
         raise HTTPException(status_code=400, detail="Pilih minimal satu bukti untuk tenant ini, atau buat kasus kosong dari scope Semua tenant.")
     group_id = uuid.uuid4()
     with get_db() as conn:
@@ -399,7 +418,8 @@ def create_group(payload: dict[str, Any], tenant: str = "all"):
 
 
 @app.put("/api/groups/{group_id}")
-def update_group(group_id: str, payload: dict[str, Any], tenant: str = "all"):
+def update_group(group_id: str, payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
+    normalize_tenants(tenant)
     validated_group_id(group_id)
     if "title" in payload and not str(payload["title"] or "").strip():
         raise HTTPException(status_code=400, detail="Judul insiden wajib diisi.")
@@ -434,7 +454,8 @@ def update_group(group_id: str, payload: dict[str, Any], tenant: str = "all"):
 
 
 @app.delete("/api/groups/{group_id}")
-def delete_group(group_id: str, tenant: str = "all"):
+def delete_group(group_id: str, tenant: list[str] = Query(default=["all"])):
+    normalize_tenants(tenant)
     validated_group_id(group_id)
     with get_db() as conn:
         if not _scoped_groups(conn, tenant, group_id):
@@ -444,11 +465,12 @@ def delete_group(group_id: str, tenant: str = "all"):
 
 
 @app.post("/api/groups/{group_id}/members")
-def add_group_members(group_id: str, payload: dict[str, Any], tenant: str = "all"):
+def add_group_members(group_id: str, payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
+    normalize_tenants(tenant)
     validated_group_id(group_id)
     with get_db() as conn:
-        if not conn.execute("SELECT 1 FROM wazuh.analysis_groups WHERE id = %s", (group_id,)).fetchone():
-            raise HTTPException(status_code=404, detail="Incident group not found.")
+        if not _scoped_groups(conn, tenant, group_id):
+            raise HTTPException(status_code=404, detail="Incident group not found in this scope.")
         pks = _validate_membership(conn, payload.get("alert_pks", []), tenant)
         for pk in pks:
             conn.execute(
@@ -458,7 +480,7 @@ def add_group_members(group_id: str, payload: dict[str, Any], tenant: str = "all
     return {"status": "ok"}
 
 
-def _validate_membership(conn, values, tenant: str) -> list[int]:
+def _validate_membership(conn, values, tenant: str | list[str] | tuple[str, ...] | None) -> list[int]:
     if not isinstance(values, list):
         raise HTTPException(status_code=422, detail="alert_pks must be a list.")
     try:
@@ -468,24 +490,25 @@ def _validate_membership(conn, values, tenant: str) -> list[int]:
     if pks:
         where = "id = ANY(%s)"
         params: list[Any] = [pks]
-        if tenant and tenant != "all":
-            where += " AND tenant = %s"
-            params.append(tenant)
-        rows = conn.execute(f"SELECT id FROM wazuh.alerts WHERE {where}", params).fetchall()
+        tenant_sql, tenant_params = tenant_clause("a", tenant)
+        if tenant_sql:
+            where += " AND " + tenant_sql
+            params.extend(tenant_params)
+        rows = conn.execute(f"SELECT a.id FROM wazuh.alerts a WHERE {where}", params).fetchall()
         if {row["id"] for row in rows} != set(pks):
             raise HTTPException(status_code=400, detail="Selected alerts are missing or outside the active tenant.")
     return pks
 
 
 @app.delete("/api/groups/{group_id}/members/{alert_pk}")
-def remove_group_member(group_id: str, alert_pk: int, tenant: str = "all"):
+def remove_group_member(group_id: str, alert_pk: int, tenant: list[str] = Query(default=["all"])):
     validated_group_id(group_id)
     with get_db() as conn:
         _validate_membership(conn, [alert_pk], tenant)
         groups = _scoped_groups(conn, tenant, group_id)
         if not groups:
             raise HTTPException(status_code=404, detail="Incident group not found in this scope.")
-        if tenant != "all" and alert_pk in groups[0]["alert_pks"] and groups[0]["alert_count"] <= 1:
+        if normalize_tenants(tenant) and alert_pk in groups[0]["alert_pks"] and groups[0]["alert_count"] <= 1:
             raise HTTPException(status_code=409, detail="Bukti terakhir tenant tidak dapat dilepas dari scope ini. Gunakan Semua tenant untuk meninjau kasus sebelum melepasnya.")
         conn.execute(
             "DELETE FROM wazuh.alert_group_members WHERE group_id = %s AND alert_pk = %s",
@@ -496,7 +519,7 @@ def remove_group_member(group_id: str, alert_pk: int, tenant: str = "all"):
 
 @app.get("/api/suggestions")
 def get_suggestions(
-    use_local_ai: bool = False, tenant: str = "all", q: str = "",
+    use_local_ai: bool = False, tenant: list[str] = Query(default=["all"]), q: str = "",
     review_status: str = "all", filter_preset: str = "", status: str = "all",
     group_id: str | None = None, time_from: str = "", time_to: str = "",
 ):
@@ -523,7 +546,7 @@ MAX_EXPORT_ALERTS = 10_000
 
 
 def _get_alerts_for_export(
-    group_id: str | None = None, alert_ids: str | None = None, tenant: str = "all",
+    group_id: str | None = None, alert_ids: str | None = None, tenant: str | list[str] | tuple[str, ...] | None = "all",
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
     time_from: str = "", time_to: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -562,16 +585,17 @@ def _get_alerts_for_export(
     if alert_ids:
         meta["title"] = f"Investigasi Kasus ({len(alerts)} Alert Terpilih)"
     elif not group_id:
-        tenant_tag = f"Tenant: {tenant}" if tenant != "all" else "Semua Tenant"
+        tenant_tag = f"Tenant: {_tenant_label(tenant)}" if normalize_tenants(tenant) else "Semua Tenant"
         meta["title"] = f"Laporan Rekapitulasi Triage ({tenant_tag})"
     return alerts, meta
 
 
 def export_scope(
-    group_id: str | None = None, alert_ids: str | None = None, tenant: str = "all",
+    group_id: str | None = None, alert_ids: str | None = None, tenant: list[str] = Query(default=["all"]),
     q: str = "", review_status: str = "all", filter_preset: str = "", status: str = "all",
     time_from: str = "", time_to: str = "",
 ) -> dict[str, Any]:
+    normalize_tenants(tenant)
     # Explicit selection replaces triage filters, never tenant context.
     if alert_ids is not None:
         try:
@@ -579,7 +603,7 @@ def export_scope(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         group_id, q, review_status, filter_preset, status, time_from, time_to = None, "", "all", "", "all", "", ""
-    return dict(group_id=group_id, alert_ids=alert_ids, tenant=tenant, q=q,
+    return dict(group_id=group_id, alert_ids=alert_ids, tenant=_scope_tenant_value(tenant), q=q,
                 review_status=review_status, filter_preset=filter_preset, status=status,
                 time_from=time_from, time_to=time_to)
 

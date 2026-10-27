@@ -58,3 +58,19 @@ test('Reports invalid selection does not call any endpoint or offer broad export
   try {const cleanup = mount(f.ctx); await tick(); assert.match(f.root.innerHTML, /Pilihan alert tidak valid/); f.abort.abort(); cleanup();}
   finally {globalThis.fetch = original;}
 });
+
+test('Reports group request retains every repeated tenant parameter', async () => {
+  const {mount} = await import('../../app/static/js/features/reports/view.js');
+  const f = fixture('tenant=Beta&tenant=Alpha'); const requests = []; const original = globalThis.fetch;
+  globalThis.fetch = async path => {
+    const url = new URL(path, 'http://synthetic.invalid'); requests.push(url);
+    if (url.pathname === '/api/groups') return new Response(JSON.stringify([]));
+    return new Response(JSON.stringify({count: 0, meta: {title: 'Synthetic report'}, scope: {tenant: url.searchParams.getAll('tenant')}, html: '<p>Synthetic evidence</p>', truncated: false}));
+  };
+  try {
+    const cleanup = mount(f.ctx); await tick(); await tick();
+    const groups = requests.find(url => url.pathname === '/api/groups');
+    assert.deepEqual(groups.searchParams.getAll('tenant'), ['Alpha', 'Beta']);
+    f.abort.abort(); cleanup();
+  } finally {globalThis.fetch = original;}
+});

@@ -1,17 +1,17 @@
-# Graph Report - Arbiter  (2026-10-23)
+# Graph Report - Arbiter  (2026-10-27)
 
 ## Corpus Check
-- 88 files · ~65,203 words
+- 89 files · ~70,220 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
 
 ## Summary
-- 727 nodes · 1529 edges · 37 communities (27 shown, 10 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 32 edges (avg confidence: 0.89)
+- 763 nodes · 1654 edges · 46 communities (38 shown, 8 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 50 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `de9ea5ef`
+- Built from commit: `ee86cd51`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,7 +20,7 @@
 - main.py
 - test_ui_api.py
 - esc
-- state.js
+- Control
 - sanitize_text
 - ApiIntegrationTests
 - init-db.sql
@@ -31,8 +31,8 @@
 - UIAPIContractTests
 - AGENTS.md — Arbiter Project Context for AI Agents
 - incidents-view.test.mjs
-- Control
-- reports/view.js
+- imports/view.js
+- state.js
 - app.js
 - SafetyTests
 - SyntheticDB
@@ -42,72 +42,81 @@
 - 5. Halaman web, bagian demi bagian
 - intel.py
 - IPIntel — CyberSOC & Threat Intelligence Web
-- _get_alerts_for_export
-- positive_ids
+- generate_tsv_table
+- normalize_tenants
 - 6. SOC Log Reader — bagian demi bagian
 - MANUAL — Menjalankan IP Intel Web
 - Struktur Proyek `ipintel/`
-- Any
+- get_db
 - 4. Menjalankan aplikasi
 - 7. Alur data
 - 9. Database
+- File Map and Interfaces
+- 8. Daftar route
+- Arbiter UI/UX Redesign — Quiet Evidence Desk
+- DESIGN.md
+- ui-ux-redesign/README.md
+- 8. Roadmap implementasi, tiap tahap bisa diverifikasi
+- 4. Wireframe dan first viewport
+- Layout
+- 5. Information architecture & interaction contracts
 
 ## God Nodes (most connected - your core abstractions)
 1. `esc()` - 38 edges
 2. `mount()` - 31 edges
-3. `json()` - 30 edges
-4. `get_db()` - 27 edges
-5. `UIAPIContractTests` - 27 edges
-6. `mountWorkspace()` - 25 edges
+3. `UIAPIContractTests` - 31 edges
+4. `json()` - 30 edges
+5. `get_db()` - 27 edges
+6. `mountWorkspace()` - 26 edges
 7. `5. Halaman web, bagian demi bagian` - 24 edges
-8. `mount()` - 22 edges
-9. `icon()` - 22 edges
-10. `errorState()` - 22 edges
+8. `errorState()` - 23 edges
+9. `mount()` - 22 edges
+10. `scopeParams()` - 22 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `3. Peta route Flask (`app.py`)` --references--> `batch()`  [INFERRED]
   GUIDE_WIRA/STRUCTURE.md → app/static/js/features/triage/view.js
-- `Key policies` --references--> `scopeParams()`  [INFERRED]
-  AGENTS.md → app/static/js/state/scope.js
 - `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `suggest_groups()`  [INFERRED]
   docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/core.py
-- `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `generate_tsv_table()`  [INFERRED]
+- `Arbiter SOC Desk Upgrades Implementation Plan` --references--> `generate_gdocs_html_report()`  [INFERRED]
   docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/exports.py
-- `Task 2: GDocs & TSV Export: Full Log & Clean Borders` --references--> `generate_tsv_table()`  [INFERRED]
+- `Task 2: GDocs & TSV Export: Full Log & Clean Borders` --references--> `generate_gdocs_html_report()`  [INFERRED]
   docs/superpowers/plans/2026-10-23-arbiter-enrichment-reports-favicon-correlation.md → app/exports.py
+- `Task 1: Establish precise shared multi-tenant scope and safe facet contract` --references--> `_scoped_groups()`  [INFERRED]
+  docs/superpowers/plans/2026-10-27-alert-statistics-pivot.md → app/main.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (37 total, 10 thin omitted)
+## Communities (46 total, 8 thin omitted)
 
 ### Community 0 - "parser.py"
 Cohesion: 0.08
-Nodes (22): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ollama_request(), suggest_groups(), suggestions_with_fallback(), as_dict(), build_log_signature() (+14 more)
+Nodes (21): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ollama_request(), suggest_groups(), suggestions_with_fallback(), as_dict(), build_log_signature() (+13 more)
 
 ### Community 1 - "main.py"
-Cohesion: 0.15
-Nodes (19): get_db(), init_database(), api_database_status(), delete_group(), favicon(), get_alert_detail(), get_group_detail(), get_suggestions() (+11 more)
+Cohesion: 0.17
+Nodes (8): init_database(), api_database_status(), export_csv(), favicon(), get_tenants(), health_check(), index_page(), lifespan()
 
 ### Community 3 - "esc"
 Cohesion: 0.09
-Nodes (66): apiURL(), json(), notify(), render(), summarizeTelemetryRange(), mount(), loadStatus(), render() (+58 more)
+Nodes (77): ApiError, apiURL(), copyHTML(), copyText(), download(), json(), request(), notify() (+69 more)
 
-### Community 4 - "state.js"
-Cohesion: 0.13
-Nodes (19): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), SEVERITIES (+11 more)
+### Community 4 - "Control"
+Cohesion: 0.22
+Nodes (3): click(), Control, fixture()
 
 ### Community 7 - "init-db.sql"
 Cohesion: 0.33
 Nodes (10): idx_wazuh_alerts_reviewed, idx_wazuh_alerts_rule_id, idx_wazuh_alerts_sig, idx_wazuh_alerts_source_ip, idx_wazuh_alerts_tenant, idx_wazuh_alerts_timestamp, public.ip_intel_cache, wazuh.alert_group_members (+2 more)
 
 ### Community 11 - "Arbiter — blueprint rombak UI/UX"
-Cohesion: 0.07
-Nodes (30): 10. Open decisions sebelum build, 1. Keputusan desain, 2. Sitemap yang diusulkan, 3. Apa yang boleh muncul di depan, 4. Wireframe dan first viewport, 5. Information architecture & interaction contracts, 6. Arsitektur module yang disarankan, 7. Kesiapan backend: pakai yang ada vs perlu kerja (+22 more)
+Cohesion: 0.17
+Nodes (12): 10. Open decisions sebelum build, 1. Keputusan desain, 2. Sitemap yang diusulkan, 3. Apa yang boleh muncul di depan, 6. Arsitektur module yang disarankan, 7. Kesiapan backend: pakai yang ada vs perlu kerja, 9. Acceptance checklist, Alternatif yang dibandingkan (+4 more)
 
 ### Community 12 - "Arbiter — audit UI/UX dan keputusan redesign"
-Cohesion: 0.04
-Nodes (40): Arbiter — audit UI/UX dan keputusan redesign, Bukti komposisi dan responsive, Detector Impeccable — hasil nyata, bukan daftar bug unik, Hallmark audit — subset yang sesuai operational app, Handoff, Metode dan batas bukti, Nielsen heuristics, Persona dan emotional journey (+32 more)
+Cohesion: 0.15
+Nodes (13): Arbiter — audit UI/UX dan keputusan redesign, Bukti komposisi dan responsive, Detector Impeccable — hasil nyata, bukan daftar bug unik, Hallmark audit — subset yang sesuai operational app, Handoff, Metode dan batas bukti, Nielsen heuristics, Persona dan emotional journey (+5 more)
 
 ### Community 13 - "⚡ Key Capabilities"
 Cohesion: 0.08
@@ -121,21 +130,25 @@ Nodes (12): AGENTS.md — Arbiter Project Context for AI Agents, Architecture (f
 Cohesion: 0.25
 Nodes (3): context(), load(), SyntheticRoot
 
-### Community 17 - "Control"
-Cohesion: 0.22
-Nodes (3): click(), Control, fixture()
+### Community 17 - "imports/view.js"
+Cohesion: 0.13
+Nodes (9): createImportSession(), importPage(), importResult(), mount(), update(), moduleURL, click(), Control (+1 more)
 
-### Community 18 - "reports/view.js"
+### Community 18 - "state.js"
 Cohesion: 0.06
-Nodes (39): ApiError, copyHTML(), copyText(), download(), request(), caseReportRoute(), createReportSession(), exportURL() (+31 more)
+Nodes (45): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), SEVERITIES (+37 more)
 
 ### Community 19 - "app.js"
-Cohesion: 0.08
-Nodes (19): closeNav(), health(), help, main, navigationMemory, pageTitles, router, scrim (+11 more)
+Cohesion: 0.07
+Nodes (26): canLeave(), closeNav(), health(), help, main, navigationMemory, pageTitles, render() (+18 more)
+
+### Community 21 - "SyntheticDB"
+Cohesion: 0.18
+Nodes (3): scoped(), Task 2: Build SQL aggregation endpoints and schema support, SyntheticDB
 
 ### Community 22 - "database.py"
-Cohesion: 0.17
-Nodes (9): get_active_profile(), get_database_status(), get_db_connection(), mask_connection_url(), purge_alerts(), purge_incidents(), set_active_profile(), test_db_connection() (+1 more)
+Cohesion: 0.16
+Nodes (10): get_active_profile(), get_database_status(), get_db_connection(), ingest_alert_with_dedup(), mask_connection_url(), purge_alerts(), purge_incidents(), set_active_profile() (+2 more)
 
 ### Community 23 - "Arbiter"
 Cohesion: 0.33
@@ -143,23 +156,27 @@ Nodes (5): Arbiter, Audience and usage, Development verification, Implemented ca
 
 ### Community 24 - "exports.py"
 Cohesion: 0.09
-Nodes (10): generate_docx_landscape_report(), generate_markdown_report(), generate_tsv_table(), generate_xlsx_workbook(), export_csv(), export_docx(), export_markdown(), export_tsv() (+2 more)
+Nodes (11): generate_docx_landscape_report(), generate_gdocs_html_report(), generate_markdown_report(), generate_xlsx_workbook(), export_docx(), export_gdocs_html(), export_markdown(), export_preview() (+3 more)
 
 ### Community 25 - "5. Halaman web, bagian demi bagian"
 Cohesion: 0.08
 Nodes (24): 5.10 MITRE ATT&CK — `GET /mitre`, 5.11 MISP Events — `GET /misp`, 5.12 Detail Event MISP — `GET /misp/event/<id>`, 5.13 Import MISP — `GET/POST /misp/import`, 5.14 Universal IoCs — `GET /iocs`, 5.15 Korelasi IOC — `GET /correlate?val=...`, 5.16 Threat Feeds — `GET /threat-feeds`, 5.17 Threat Actors / APT — `GET /actors` (+16 more)
 
 ### Community 26 - "intel.py"
-Cohesion: 0.14
+Cohesion: 0.13
 Nodes (7): enrich_ip(), is_private_ip(), is_valid_ip(), query_abuseipdb(), sync_remote_cache(), upsert_ip_cache(), enrich_intel()
 
 ### Community 27 - "IPIntel — CyberSOC & Threat Intelligence Web"
-Cohesion: 0.17
-Nodes (11): 10. Parser SOC dan aturan keamanan tampilan, 11. Konfigurasi dan keamanan, 13. Troubleshooting, 14. Catatan operasional, 1. Ringkasan fungsi, 2. Arsitektur, 3. Struktur folder, 8.1 Halaman (+3 more)
+Cohesion: 0.20
+Nodes (9): 10. Parser SOC dan aturan keamanan tampilan, 11. Konfigurasi dan keamanan, 12. Graphify dan dokumentasi struktur, 13. Troubleshooting, 14. Catatan operasional, 1. Ringkasan fungsi, 2. Arsitektur, 3. Struktur folder (+1 more)
 
-### Community 28 - "_get_alerts_for_export"
-Cohesion: 0.18
-Nodes (10): generate_gdocs_html_report(), export_gdocs_html(), export_preview(), _get_alerts_for_export(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders (+2 more)
+### Community 28 - "generate_tsv_table"
+Cohesion: 0.20
+Nodes (8): generate_tsv_table(), export_tsv(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders, Task 3: Rich Forensic Correlation Cards, Task 4: Two-Way IP Intel Live Enrichment
+
+### Community 29 - "normalize_tenants"
+Cohesion: 0.15
+Nodes (11): export_scope(), get_alert_detail(), get_suggestions(), list_alerts(), _scope_tenant_value(), _tenant_label(), alert_where(), normalize_tenants() (+3 more)
 
 ### Community 30 - "6. SOC Log Reader — bagian demi bagian"
 Cohesion: 0.22
@@ -173,9 +190,9 @@ Nodes (7): 1. Cara cepat (otomatis), 2. Cara manual (langkah per langkah), 3. Fi
 Cohesion: 0.29
 Nodes (6): 1. Tree + ukuran file, 2. Graph dependensi modul (siapa import siapa), 3. Peta route Flask (`app.py`), 4. Alur data enrichment (DB-first), 5. Tabel database, Struktur Proyek `ipintel/`
 
-### Community 33 - "Any"
-Cohesion: 0.19
-Nodes (15): ingest_alert_with_dedup(), add_group_members(), api_database_config(), api_database_purge_alerts(), api_database_purge_incidents(), api_database_switch(), api_database_test(), api_sanitize_logs() (+7 more)
+### Community 33 - "get_db"
+Cohesion: 0.17
+Nodes (22): get_db(), add_group_members(), api_database_config(), api_database_purge_alerts(), api_database_purge_incidents(), api_database_switch(), api_database_test(), api_sanitize_logs() (+14 more)
 
 ### Community 34 - "4. Menjalankan aplikasi"
 Cohesion: 0.50
@@ -189,23 +206,59 @@ Nodes (4): 7.1 Enrichment IP, 7.2 Impor SOC, 7.3 MISP / CTI, 7. Alur data
 Cohesion: 0.50
 Nodes (4): 9.1 Tabel inti, 9.2 Tabel CTI, 9.3 Tabel SOC, 9. Database
 
+### Community 37 - "File Map and Interfaces"
+Cohesion: 0.22
+Nodes (8): Alert Statistics & Pivot Implementation Plan, File Map and Interfaces, Global Constraints, Review Focus, Self-Review, Task 4: Add the compact Triage filter-summary strip, Task 5: Add approved post-core statistics enhancements, Task 6: Document the completed navigation and verification contract
+
+### Community 38 - "8. Daftar route"
+Cohesion: 0.67
+Nodes (3): 8.1 Halaman, 8.2 API utama, 8. Daftar route
+
+### Community 39 - "Arbiter UI/UX Redesign — Quiet Evidence Desk"
+Cohesion: 0.18
+Nodes (11): Arbiter UI/UX Redesign — Quiet Evidence Desk, Arsitektur yang Terpasang, Audit (sebelum), Batas dan Catatan, Deliverable Desain, Evidence, Implementasi (sesudah), Keputusan Arsitektur Kunci (+3 more)
+
+### Community 40 - "DESIGN.md"
+Cohesion: 0.25
+Nodes (7): Colors, Components, Do's and Don'ts, Elevation & Depth, Overview, Shapes, Typography
+
+### Community 41 - "ui-ux-redesign/README.md"
+Cohesion: 0.29
+Nodes (3): Approved implementation contract — Arbiter, Direction contract, Integration boundary
+
+### Community 42 - "8. Roadmap implementasi, tiap tahap bisa diverifikasi"
+Cohesion: 0.29
+Nodes (7): 8. Roadmap implementasi, tiap tahap bisa diverifikasi, Phase 0 — safety & baseline, Phase 1 — modular foundation + shell, Phase 2 — triage-first experience, Phase 3 — insiden workspace, Phase 4 — impor dan laporan, Phase 5 — hardening & rollout
+
+### Community 43 - "4. Wireframe dan first viewport"
+Cohesion: 0.33
+Nodes (6): 4. Wireframe dan first viewport, A. Triage desktop, B. Insiden index dan case workspace, C. Impor, D. Laporan, E. Mobile
+
+### Community 44 - "Layout"
+Cohesion: 0.33
+Nodes (6): Global shell, Impor dan Laporan, Insiden, Layout, Responsive, Triage
+
+### Community 45 - "5. Information architecture & interaction contracts"
+Cohesion: 0.40
+Nodes (5): 5. Information architecture & interaction contracts, Accessibility, Editing dan destructive actions, Refresh, Scope
+
 ## Knowledge Gaps
-- **10 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **8 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Task 4: Two-Way IP Intel Live Enrichment` connect `_get_alerts_for_export` to `esc`?**
-  _High betweenness centrality (0.429) - this node is a cross-community bridge._
+- **Why does `Task 1: Establish precise shared multi-tenant scope and safe facet contract` connect `normalize_tenants` to `get_db`, `state.js`, `esc`, `File Map and Interfaces`?**
+  _High betweenness centrality (0.259) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `json()` (e.g. with `mount()` and `loadSelected()`) actually correct?**
   _`json()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Should `parser.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.0750925436277102 - nodes in this community are weakly interconnected._
-- **Why does `intelSummary()` connect `esc` to `_get_alerts_for_export`?**
-  _High betweenness centrality (0.429) - this node is a cross-community bridge._
-- **Should `main.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.14838709677419354 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07796610169491526 - nodes in this community are weakly interconnected._
+- **Why does `queryFrom()` connect `state.js` to `esc`, `normalize_tenants`?**
+  _High betweenness centrality (0.165) - this node is a cross-community bridge._
 - **Should `test_ui_api.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.13725490196078433 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.13970588235294118 - nodes in this community are weakly interconnected._
+- **Why does `selectedIds()` connect `state.js` to `Arbiter UI/UX Redesign — Quiet Evidence Desk`?**
+  _High betweenness centrality (0.160) - this node is a cross-community bridge._
 - **Should `esc` be split into smaller, more focused modules?**
-  _Cohesion score 0.0910960916838084 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0851063829787234 - nodes in this community are weakly interconnected._

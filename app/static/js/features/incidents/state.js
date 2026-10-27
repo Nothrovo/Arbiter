@@ -1,4 +1,5 @@
 import {draftFrom, draftsEqual, TEXT_FIELDS, cleanIds, incidentPayload, validateDraft, evidenceParams} from './model.js';
+import {tenantScope, tenantValues} from '../../state/scope.js';
 
 const EVIDENCE_FIELDS = ['id', 'description', 'tenant', 'timestamp', 'first_seen', 'last_seen', 'hit_count', 'agent_name', 'agent_ip', 'source_ip', 'rule_id', 'rule_level', 'mitre_ids'];
 const evidenceSummary = row => Object.fromEntries(EVIDENCE_FIELDS.map(key => [key, row[key]]));
@@ -11,8 +12,9 @@ export async function loadSelectedEvidence({ids, tenant, json, signal}) {
   for (let offset = 0; offset < pending.length && !signal?.aborted; offset += 6) {
     await Promise.all(pending.slice(offset, offset + 6).map(async id => {
       try {
-        const row = await json(`/api/alerts/${id}?${new URLSearchParams({tenant})}`, {signal});
-        if (Number(row?.id) !== id || tenant !== 'all' && row.tenant !== tenant) throw new Error('Evidence is outside the active scope.');
+        const row = await json(scoped(`/api/alerts/${id}`, tenant), {signal});
+        const scope = tenantScope(tenant);
+        if (Number(row?.id) !== id || !scope.all && !scope.tenants.includes(row.tenant)) throw new Error('Evidence is outside the active scope.');
         rows.push(evidenceSummary(row));
       } catch (error) {if (!aborted(error)) failedIds.push(id);}
     }));
@@ -48,7 +50,11 @@ export function createEvidenceState({tenant = 'all', groupId = '', json, signal,
 }
 
 
-const scoped = (path, tenant) => `${path}?${new URLSearchParams({tenant})}`;
+const scoped = (path, tenant) => {
+  const params = new URLSearchParams();
+  for (const value of tenantValues(tenant)) params.append('tenant', value);
+  return `${path}?${params}`;
+};
 const writeOptions = (method, body, signal) => ({method, signal, headers: {'Content-Type': 'application/json'}, ...(body ? {body: JSON.stringify(body)} : {})});
 
 const message = error => error?.message || 'The request failed. Try again.';
@@ -75,7 +81,7 @@ export function createCaseState({id = null, tenant = 'all', alertIds = [], json,
       if (state.pending || state.loading) return false;
       const errors = validateDraft(state.draft);
       if (Object.keys(errors).length) {state.error = Object.values(errors)[0]; return false;}
-      if (!state.id && tenant !== 'all' && !state.draft.alert_pks.length) {state.error = 'Pilih minimal satu bukti untuk tenant ini, atau buat kasus kosong dari scope Semua tenant.'; return false;}
+      if (!state.id && !tenantScope(tenant).all && !state.draft.alert_pks.length) {state.error = 'Pilih minimal satu bukti untuk tenant ini, atau buat kasus kosong dari scope Semua tenant.'; return false;}
       state.pending = true;
       state.error = '';
       state.notice = '';
@@ -137,7 +143,7 @@ export function createCaseState({id = null, tenant = 'all', alertIds = [], json,
       state.loading = true;
       state.error = '';
       try {
-        const group = await json(`/api/groups/${encodeURIComponent(state.id)}?${new URLSearchParams({tenant})}`, {signal});
+        const group = await json(scoped(`/api/groups/${encodeURIComponent(state.id)}`, tenant), {signal});
         if (current !== version || signal?.aborted) return false;
         if (!group || typeof group !== 'object' || String(group.id) !== state.id || !Array.isArray(group.alert_pks)) throw new Error('The incident response is incomplete. Try refreshing.');
         state.group = group;

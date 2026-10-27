@@ -3,6 +3,7 @@ import {esc, errorState, loadingRows, emptyState} from '../../ui/primitives.js';
 import {caseHref, TEXT_FIELDS, validateDraft} from './model.js';
 import {createCaseState, createEvidenceState, loadSelectedEvidence} from './state.js';
 import {renderWorkspace, renderEvidence} from './render.js';
+import {scopeParams} from '../../state/scope.js';
 
 export async function mountWorkspace(ctx, route, {events, active}) {
   const {root, signal} = ctx;
@@ -31,7 +32,7 @@ export async function mountWorkspace(ctx, route, {events, active}) {
     text('[data-save-status]', state.pending ? 'Menyimpan perubahan…' : state.error ? 'Perubahan belum tersimpan. Perbaiki masalah lalu coba Simpan lagi.' : state.notice ? 'Insiden tersimpan.' : state.dirty ? 'Perubahan belum disimpan.' : state.id ? 'Tidak ada perubahan.' : 'Draft baru. Simpan untuk membuat insiden.');
     text('[data-refresh-notice]', state.refreshDeferred ? 'Pembaruan ditunda karena ada perubahan belum disimpan atau penyimpanan sedang berlangsung. Simpan atau buang perubahan, lalu Refresh.' : '');
     html('[data-case-error]', state.error ? `<div class="error-region" role="alert"><p>${esc(state.error)}</p></div>` : '');
-    text('[data-membership-count]', `${state.draft.alert_pks.length} alert dipilih${state.tenant !== 'all' ? ' dalam seluruh kasus; bukti di bawah mengikuti tenant aktif' : ''}`);
+    text('[data-membership-count]', `${state.draft.alert_pks.length} alert dipilih${(Array.isArray(state.tenant) || state.tenant !== 'all') ? ' dalam seluruh kasus; bukti di bawah mengikuti tenant aktif' : ''}`);
     const fields = node('[data-editor-fields]');
     if (fields) fields.disabled = busy;
     const save = node('[data-action="save"]');
@@ -199,7 +200,7 @@ export async function mountWorkspace(ctx, route, {events, active}) {
           const aid = Number(r.id);
           const existing = knownRows.get(aid);
           if (existing && !existing.full_log) {
-            json(`/api/alerts/${aid}?${new URLSearchParams({tenant: state.tenant})}`, {signal})
+            json(`/api/alerts/${aid}?${scopeParams({tenant: state.tenant})}`, {signal})
               .then(detail => {
                 if (detail?.raw?.full_log || detail?.full_log) {
                   existing.full_log = detail.full_log || detail.raw?.full_log;
@@ -220,7 +221,7 @@ export async function mountWorkspace(ctx, route, {events, active}) {
         openLogIds.add(aid);
         const existing = knownRows.get(aid);
         if (existing && !existing.full_log) {
-          json(`/api/alerts/${aid}?${new URLSearchParams({tenant: state.tenant})}`, {signal})
+          json(`/api/alerts/${aid}?${scopeParams({tenant: state.tenant})}`, {signal})
             .then(detail => {
               if (detail?.raw?.full_log || detail?.full_log) {
                 existing.full_log = detail.full_log || detail.raw?.full_log;

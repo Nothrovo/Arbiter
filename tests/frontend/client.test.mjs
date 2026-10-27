@@ -11,5 +11,6 @@ test('API client fails closed on HTTP errors and refuses cross-origin requests',
     await assert.rejects(json('/api/groups'), /Synthetic request denied/);
     await assert.rejects(request('https://outside.invalid/data'), /lokal|origin/i);
     assert.equal(apiURL('/api/alerts', {tenant: 'lab', q: 'space value'}), '/api/alerts?tenant=lab&q=space+value');
+    assert.equal(apiURL('/api/alerts', {tenant: ['Beta', 'Alpha'], q: 'space value'}), '/api/alerts?tenant=Beta&tenant=Alpha&q=space+value');
   } finally { globalThis.fetch = original; }
 });

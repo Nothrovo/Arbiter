@@ -38,8 +38,8 @@
       <header class="utility-bar">
         <div class="workspace-switcher">
           <button class="button icon-button mobile-menu" id="open-navigation" aria-label="Buka navigasi" aria-controls="sidebar" aria-expanded="false"></button>
-          <label for="workspace-tenant">Workspace</label>
-          <select id="workspace-tenant" name="tenant" aria-label="Pilih tenant"><option value="all">Semua tenant</option></select>
+          <span id="workspace-tenant-label">Workspace</span>
+          <button class="button" id="workspace-tenant" type="button" aria-labelledby="workspace-tenant-label" aria-haspopup="dialog">Semua tenant</button>
         </div>
         <div class="utility-actions">
           <span class="connection" id="connection-state" data-state="checking" role="status"><span class="status-dot" aria-hidden="true"></span><span class="connection-label">Memeriksa koneksi…</span></span>
@@ -50,6 +50,10 @@
     </div>
   </div>
   <div id="notifications" aria-live="polite" aria-atomic="true"></div>
+  <dialog class="app-dialog" id="tenant-scope-dialog" aria-labelledby="tenant-scope-title">
+    <div class="dialog-header"><h2 id="tenant-scope-title">Pilih tenant</h2><button class="button icon-button" type="button" data-close-tenant-scope aria-label="Tutup pilihan tenant"></button></div>
+    <form id="tenant-scope-form" class="stack"><label class="checkbox-label"><input type="checkbox" name="all" value="all">Semua tenant</label><div id="tenant-scope-options" class="stack" aria-label="Daftar tenant"></div><div class="dialog-actions"><button class="button" type="button" data-close-tenant-scope>Batal</button><button class="button primary" type="submit">Terapkan</button></div></form>
+  </dialog>
   <dialog class="app-dialog" id="help-dialog" aria-labelledby="help-title">
     <div class="dialog-header"><h2 id="help-title">Alur investigasi</h2><button class="button icon-button" data-close-dialog aria-label="Tutup panduan"></button></div>
     <div class="stack">

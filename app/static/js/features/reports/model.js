@@ -40,7 +40,12 @@ export function createReportSession({scope, getJSON, signal, onChange = () => {}
             !data.meta || typeof data.meta !== 'object' || !data.scope || typeof data.scope !== 'object' || data.truncated !== false) {
           throw new Error('Preview tidak lengkap atau terpotong. Persempit scope dan coba lagi; ekspor dinonaktifkan.');
         }
-        const defaults = {tenant: 'all', q: '', review_status: 'all', filter_preset: '', status: 'all', group_id: '', alert_ids: ''};
+        const defaults = {q: '', review_status: 'all', filter_preset: '', status: 'all', group_id: '', alert_ids: ''};
+        const expectedTenants = capturedScope.has('tenant') ? capturedScope.getAll('tenant') : ['all'];
+        const receivedTenants = Array.isArray(data.scope.tenant) ? data.scope.tenant : [String(data.scope.tenant ?? 'all')];
+        if (expectedTenants.length !== receivedTenants.length || expectedTenants.some((value, index) => value !== receivedTenants[index])) {
+          throw new Error('Scope preview berbeda dari permintaan. Ekspor dinonaktifkan; muat ulang atau pilih scope kembali.');
+        }
         for (const [key, fallback] of Object.entries(defaults)) {
           const expected = capturedScope.get(key) || fallback;
           const received = String(data.scope[key] ?? fallback);

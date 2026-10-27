@@ -3,11 +3,17 @@ import {json} from './api/client.js';
 import {createSelection} from './state/selection.js';
 import {probeConnection} from './state/workspace.js';
 import {createNavigationMemory} from './state/navigation.js';
+import {tenantScope, tenantValues} from './state/scope.js';
 import {esc, icon, emptyState, errorState, loadingRows} from './ui/primitives.js';
 
 const main=document.querySelector('#main-content');
 const tenantSelect=document.querySelector('#workspace-tenant');
-const selection=createSelection(new URLSearchParams(location.hash.split('?')[1]||'').get('tenant')||'all');
+const tenantDialog=document.querySelector('#tenant-scope-dialog');
+const tenantForm=document.querySelector('#tenant-scope-form');
+const tenantOptions=document.querySelector('#tenant-scope-options');
+const routeScope=params=>tenantScope(params);
+const scopeParams=scope=>{const params=new URLSearchParams();for(const tenant of tenantValues(scope))params.append('tenant',tenant);return params;};
+const selection=createSelection(routeScope(new URLSearchParams(location.hash.split('?')[1]||'')).key);
 let currentRoute, controller, cleanup, guard=null, notifyTimer, healthPending=false, lastHealth=null, routeVersion=0;
 const scrollPositions=new Map();
 const navigationMemory=createNavigationMemory();
@@ -17,6 +23,7 @@ document.querySelector('#open-navigation').innerHTML=icon('menu');
 document.querySelector('#close-navigation').innerHTML=icon('close');
 document.querySelector('#refresh-workspace').innerHTML=icon('refresh');
 document.querySelector('[data-close-dialog]').innerHTML=icon('close');
+for(const button of document.querySelectorAll('[data-close-tenant-scope]'))button.innerHTML=icon('close');
 
 function notify(message,kind='info'){
   const region=document.querySelector('#notifications');clearTimeout(notifyTimer);
@@ -26,9 +33,9 @@ function notify(message,kind='info'){
 }
 function canLeave(next){
   if(guard&&!guard()&&!confirm('Ada perubahan yang belum disimpan. Tinggalkan halaman dan buang perubahan?'))return false;
-  const nextTenant=next.params.get('tenant')||'all';
-  if(selection.scope()!==nextTenant&&selection.size()&&!confirm(`Ganti tenant dan batalkan ${selection.size()} pilihan alert?`))return false;
-  selection.setScope(nextTenant,true);return true;
+  const nextScope=routeScope(next.params);
+  if(selection.scope()!==nextScope.key&&selection.size()&&!confirm(`Ganti tenant dan batalkan ${selection.size()} pilihan alert?`))return false;
+  selection.setScope(nextScope.key,true);return true;
 }
 const router=createRouter(render,canLeave);
 async function render(route){
@@ -39,19 +46,19 @@ async function render(route){
   controller?.abort();if(typeof cleanup==='function')cleanup();cleanup=null;guard=null;
   controller=new AbortController();currentRoute=route;navigationMemory.remember(route);
   closeNav(false);
-  const tenant=route.params.get('tenant')||'all';
-  if(![...tenantSelect.options].some(o=>o.value===tenant)){const o=new Option(tenant,tenant);tenantSelect.add(o);}
-  tenantSelect.value=tenant;
+  const scope=routeScope(route.params);
+  tenantSelect.textContent=scope.label;
+  tenantSelect.title=scope.all?'Semua tenant':scope.tenants.join(', ');
   for(const link of document.querySelectorAll('.nav-link')){
     const active=link.dataset.page===route.page;
     active?link.setAttribute('aria-current','page'):link.removeAttribute('aria-current');
-    link.href=navigationMemory.destination(link.dataset.page,tenant);
+    link.href=navigationMemory.destination(link.dataset.page,route.params);
   }
-  document.querySelector('.wordmark').href=withParams('/triage',new URLSearchParams({tenant}));
+  document.querySelector('.wordmark').href=withParams('/triage',scopeParams(scope));
   document.title=`${pageTitles[route.page]||'Halaman tidak ditemukan'} — Arbiter`;
   main.innerHTML=loadingRows();
   if(route.page==='not-found'){
-    main.innerHTML=`<div class="page-header"><h1>Halaman tidak ditemukan</h1></div>${emptyState('Tujuan ini tidak tersedia','Kembali ke antrean untuk melanjutkan pekerjaan.',`<a class="button primary" href="${withParams('/triage',new URLSearchParams({tenant}))}">Buka Triage</a>`)}`;return;
+    main.innerHTML=`<div class="page-header"><h1>Halaman tidak ditemukan</h1></div>${emptyState('Tujuan ini tidak tersedia','Kembali ke antrean untuk melanjutkan pekerjaan.',`<a class="button primary" href="${withParams('/triage',scopeParams(scope))}">Buka Triage</a>`)}`;return;
   }
   try{
     const feature=await import(`./features/${route.page}/view.js`);
@@ -77,20 +84,33 @@ async function health(force=false){
   try{const result=await probeConnection(()=>json('/api/health',{timeout:10000}),lastHealth);lastHealth=result.lastSuccess;el.dataset.state=result.state;el.querySelector('.connection-label').textContent=result.label;el.title=lastHealth?`${result.label} · Terakhir diperiksa ${lastHealth.toLocaleTimeString('id-ID')}`:result.label;}
   finally{healthPending=false;}
 }
-async function tenants(){
-  try{
-    const data=await json('/api/tenants',{timeout:10000});
-    const selected=tenantSelect.value;
-    tenantSelect.innerHTML='<option value="all">Semua tenant</option>'+(data.tenants||[]).map(t=>`<option value="${esc(t.tenant)}">${esc(t.tenant)}</option>`).join('');
-    if(![...tenantSelect.options].some(o=>o.value===selected))tenantSelect.add(new Option(selected,selected));tenantSelect.value=selected;
-  }catch{tenantSelect.title='Daftar tenant belum dapat diperbarui. Scope saat ini tetap dipertahankan.';}
+let tenantRows=[];
+function renderTenantOptions(){
+  const scope=routeScope(currentRoute?.params||new URLSearchParams());
+  const known=new Set(tenantRows.map(row=>String(row.tenant)));
+  for(const tenant of scope.tenants)if(!known.has(tenant))tenantRows.push({tenant});
+  tenantOptions.innerHTML=tenantRows.map(row=>{const name=String(row.tenant);return `<label class="checkbox-label"><input type="checkbox" name="tenant" value="${esc(name)}" ${scope.tenants.includes(name)?'checked':''}>${esc(name)}</label>`;}).join('')||'<p class="meta">Belum ada tenant tersedia.</p>';
+  const all=tenantForm.elements.all;all.checked=scope.all;
+  for(const input of tenantOptions.querySelectorAll('input[name="tenant"]'))input.disabled=all.checked;
 }
-tenantSelect.addEventListener('change',()=>{
-  const p=new URLSearchParams(currentRoute.params);p.set('tenant',tenantSelect.value);p.delete('offset');p.delete('alert');p.delete('alert_ids');p.delete('group_id');
-  const target=currentRoute.path.startsWith('/incidents/')?'/incidents':currentRoute.path;
-  router.navigate(withParams(target,p));
-  setTimeout(()=>{tenantSelect.value=currentRoute.params.get('tenant')||'all';},0);
+async function tenants(){
+  try{const data=await json('/api/tenants',{timeout:10000});tenantRows=(data.tenants||[]);renderTenantOptions();}
+  catch{tenantSelect.title='Daftar tenant belum dapat diperbarui. Scope saat ini tetap dipertahankan.';}
+}
+tenantSelect.addEventListener('click',()=>{renderTenantOptions();tenantDialog.showModal();});
+tenantForm.addEventListener('change',event=>{
+  if(event.target.name==='all')for(const input of tenantOptions.querySelectorAll('input[name="tenant"]'))input.disabled=event.target.checked;
+  else if(event.target.name==='tenant'&&event.target.checked)tenantForm.elements.all.checked=false;
 });
+tenantForm.addEventListener('submit',event=>{
+  event.preventDefault();const all=tenantForm.elements.all.checked;
+  const selected=[...tenantOptions.querySelectorAll('input[name="tenant"]:checked')].map(input=>input.value);
+  if(!all&&!selected.length){notify('Pilih setidaknya satu tenant atau Semua tenant.','error');return;}
+  const p=new URLSearchParams(currentRoute.params);p.delete('tenant');for(const tenant of all?['all']:selected.sort())p.append('tenant',tenant);p.delete('offset');p.delete('alert');p.delete('alert_ids');
+  const target=currentRoute.path.startsWith('/incidents/')?'/incidents':currentRoute.path;
+  tenantDialog.close();router.navigate(withParams(target,p));
+});
+tenantDialog.querySelectorAll('[data-close-tenant-scope]').forEach(button=>button.addEventListener('click',()=>tenantDialog.close()));
 document.querySelector('#refresh-workspace').addEventListener('click',async e=>{
   const button=e.currentTarget;button.disabled=true;await Promise.all([health(),tenants()]);main.dispatchEvent(new CustomEvent('arbiter:refresh'));button.disabled=false;
 });

@@ -1,4 +1,5 @@
 import {esc, icon} from '../../ui/primitives.js';
+import {tenantValues} from '../../state/scope.js';
 
 export function importPage() {
   return `<header class="page-header"><div><h1 class="page-heading">Impor alert</h1><p class="page-description">Tambahkan ekspor Wazuh dari file atau teks.</p></div></header>
@@ -21,10 +22,13 @@ export function importPage() {
     <section id="import-result" class="panel stack" aria-live="polite" tabindex="-1" hidden></section>`;
 }
 
-export function importResult(result, tenant = 'all') {
+export function importResult(result, scope = 'all') {
+  const triageScope = new URLSearchParams();
+  for (const tenant of tenantValues(scope)) triageScope.append('tenant', tenant);
+  triageScope.set('review_status', 'all');
   return `<h2 class="section-heading">Hasil impor sesi ini</h2><dl class="metric-strip">
     <div><dt>Dibaca</dt><dd>${esc(result.parsed)}</dd></div><div><dt>Ditambahkan</dt><dd>${esc(result.inserted)}</dd></div><div><dt>Digabung sebagai duplikat</dt><dd>${esc(result.deduplicated)}</dd></div>
     </dl>${result.warnings.length ? `<h3 class="section-heading">Peringatan parser</h3><ul>${result.warnings.map(warning => `<li>${esc(warning)}</li>`).join('')}</ul>` : '<p>Tidak ada peringatan dari parser.</p>'}
     <p class="muted">Triage menampilkan semua alert dalam scope tenant yang dipilih, bukan hanya hasil impor ini. Backend tidak menyediakan filter batch impor.</p>
-    <div class="page-actions"><a class="button primary" href="#/triage?tenant=${esc(encodeURIComponent(tenant))}&amp;review_status=all">Buka Triage</a><button class="button" type="button" data-action="again">Impor lagi</button></div>`;
+    <div class="page-actions"><a class="button primary" href="#/triage?${esc(triageScope)}">Buka Triage</a><button class="button" type="button" data-action="again">Impor lagi</button></div>`;
 }

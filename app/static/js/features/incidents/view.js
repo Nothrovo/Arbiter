@@ -3,6 +3,7 @@ import {errorState} from '../../ui/primitives.js';
 import {mountWorkspace} from './workspace.js';
 import {incidentRoute, caseHref} from './model.js';
 import {renderList} from './render.js';
+import {scopeParams} from '../../state/scope.js';
 
 export async function mount(ctx) {
   const {root, signal} = ctx;
@@ -31,7 +32,7 @@ export async function mount(ctx) {
     const current = ++version;
     list.loading = true; list.error = ''; render();
     try {
-      const groups = await json(`/api/groups?${new URLSearchParams({tenant: route.tenant})}`, {signal});
+      const groups = await json(`/api/groups?${scopeParams({tenant: route.tenant})}`, {signal});
       if (current !== version || !active()) return;
       if (!Array.isArray(groups) || groups.some(group => !group?.id)) throw new Error('Respons daftar insiden tidak valid. Coba lagi.');
       list.groups = groups;

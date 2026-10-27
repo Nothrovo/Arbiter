@@ -44,7 +44,9 @@ export function mount(ctx) {
   }
   async function loadGroups() {
     try {
-      const data = await json(apiURL('/api/groups', {tenant: scope.get('tenant')}), {signal});
+      const tenants = new URLSearchParams();
+      for (const tenant of scope.getAll('tenant')) tenants.append('tenant', tenant);
+      const data = await json(apiURL('/api/groups', tenants), {signal});
       if (disposed || signal.aborted) return;
       if (!Array.isArray(data) || !data.every(group => group && typeof group.id === 'string')) throw new Error('Daftar insiden tidak valid.');
       groupSelect.innerHTML = groupOptions(data, scope.get('group_id') || '');

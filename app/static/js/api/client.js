@@ -2,7 +2,15 @@ export class ApiError extends Error {
   constructor(message, status = 0) { super(message); this.name = 'ApiError'; this.status = status; }
 }
 export function apiURL(path, params = {}) {
-  const query = params instanceof URLSearchParams ? new URLSearchParams(params) : new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  const query = params instanceof URLSearchParams ? new URLSearchParams(params) : new URLSearchParams();
+  if (!(params instanceof URLSearchParams)) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === '') continue;
+      if (Array.isArray(value)) {
+        for (const item of value) if (item !== undefined && item !== null && item !== '') query.append(key, String(item));
+      } else query.append(key, String(value));
+    }
+  }
   return path + (query.size ? `?${query}` : '');
 }
 export async function request(path, {timeout = 30000, ...options} = {}) {

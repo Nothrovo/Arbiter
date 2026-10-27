@@ -118,6 +118,7 @@ class SyntheticDB:
     def execute(self, sql, params=()):
         self.calls.append((sql, list(params)))
         translated = re.sub(r"\bILIKE\b", "LIKE", sql)
+        translated = translated.replace("now()", "CURRENT_TIMESTAMP")
         translated = re.sub(r"::(?:text|uuid|jsonb)", "", translated)
         translated = translated.replace("json_agg(", "json_group_array(").replace("json_build_object(", "json_object(")
         translated = translated.replace("array_agg(", "json_group_array(").replace("'{}'", "'[]'")
@@ -176,6 +177,37 @@ class UIAPIContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual([item["id"] for item in response.json()["items"]], [1])
         self.assertEqual(response.json()["total"], 1)
+
+    def test_repeated_tenants_list_and_export_only_the_exact_named_set(self):
+        self.db.add_alert(4, "Gamma", description="Synthetic curl bot")
+        params = [("tenant", "Beta"), ("tenant", "Alpha"), ("tenant", "Beta")]
+        listed = self.client.get("/api/alerts", params=params)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual({item["tenant"] for item in listed.json()["items"]}, {"Alpha", "Beta"})
+        self.assertEqual(listed.json()["total"], 3)
+        exported = self.client.get("/api/export.csv", params=params)
+        self.assertEqual(exported.status_code, 200, exported.text)
+        self.assertIn("synthetic-1", exported.text)
+        self.assertIn("synthetic-2", exported.text)
+        self.assertIn("synthetic-3", exported.text)
+        self.assertNotIn("synthetic-4", exported.text)
+
+    def test_invalid_repeated_tenant_scope_is_rejected_before_sql(self):
+        for params in ([('tenant', 'all'), ('tenant', 'Alpha')], [('tenant', ' ')], [('tenant', '')]):
+            with self.subTest(params=params):
+                response = self.client.get("/api/alerts", params=params)
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertEqual(self.db.calls, [])
+
+    def test_batch_review_does_not_escape_the_exact_tenant_set(self):
+        self.db.add_alert(4, "Gamma")
+        params = [("tenant", "Alpha"), ("tenant", "Beta")]
+        response = self.client.post("/api/alerts/batch-review", params=params, json={"alert_ids": [1, 2], "is_reviewed": True})
+        self.assertEqual(response.status_code, 200, response.text)
+        blocked = self.client.post("/api/alerts/batch-review", params=params, json={"alert_ids": [1, 4], "is_reviewed": True})
+        self.assertEqual(blocked.status_code, 400, blocked.text)
+        rows = self.db.connection.execute("SELECT id, is_reviewed FROM wazuh.alerts ORDER BY id").fetchall()
+        self.assertEqual([(row["id"], row["is_reviewed"]) for row in rows], [(1, 1), (2, 1), (3, 1), (4, 0)])
 
     def test_alert_detail_is_scoped_and_contains_evidence(self):
         response = self.client.get("/api/alerts/1", params={"tenant": "Alpha"})
@@ -318,6 +350,19 @@ class UIAPIContractTests(unittest.TestCase):
         response = self.client.post(f"/api/groups/{GROUP}/members?tenant=Alpha", json={"alert_pks": [3]})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(self.client.get(f"/api/groups/{GROUP}?tenant=Alpha").json()["alert_count"], 2)
+
+    def test_member_add_requires_group_in_the_exact_tenant_set(self):
+        self.db.connection.execute(
+            "INSERT INTO wazuh.analysis_groups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (OTHER_GROUP, "Beta-only incident", "Test", "", "", "", "open", "high", "human", "2026-01-01", "2026-01-01"),
+        )
+        self.db.connection.execute("INSERT INTO wazuh.alert_group_members VALUES (?, ?)", (2, OTHER_GROUP))
+        response = self.client.post(f"/api/groups/{OTHER_GROUP}/members?tenant=Alpha", json={"alert_pks": [1]})
+        self.assertEqual(response.status_code, 404, response.text)
+        members = self.db.connection.execute(
+            "SELECT alert_pk FROM wazuh.alert_group_members WHERE group_id = ? ORDER BY alert_pk", (OTHER_GROUP,)
+        ).fetchall()
+        self.assertEqual([row["alert_pk"] for row in members], [2])
 
     def test_group_create_validates_tenant_before_any_insert(self):
         response = self.client.post("/api/groups?tenant=Alpha", json={"title": "Synthetic new", "alert_pks": [1, 2]})

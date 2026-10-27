@@ -9,7 +9,7 @@ class Control extends EventTarget {
   closest() {return this;}
   contains() {return true;}
 }
-function fixture() {
+function fixture(params = 'tenant=example') {
   const elements = new Map();
   const root = new Control();
   root.ownerDocument = {defaultView: new EventTarget()};
@@ -18,7 +18,7 @@ function fixture() {
   const panels = ['file', 'paste'].map(panel => Object.assign(new Control(), {dataset: {panel}}));
   root.querySelectorAll = selector => selector === '[data-mode]' ? modes : selector === '[data-panel]' ? panels : [];
   const abort = new AbortController(); let guard;
-  return {root, elements, modes, panels, abort, ctx: {root, signal: abort.signal, route: {params: new URLSearchParams('tenant=example')}, setGuard: fn => {guard = fn;}, notify() {}, navigate() {}}, guard: () => guard};
+  return {root, elements, modes, panels, abort, ctx: {root, signal: abort.signal, route: {params: new URLSearchParams(params)}, setGuard: fn => {guard = fn;}, notify() {}, navigate() {}}, guard: () => guard};
 }
 function click(root, dataset) {
   const event = new Event('click');
@@ -47,5 +47,23 @@ test('Import mount guards nonempty drafts, keeps failed input, resets intentiona
     assert.equal(input.value, ''); assert.equal(f.guard()(), true);
     f.abort.abort(); cleanup(); assert.equal(f.guard(), null);
     form.dispatchEvent(new Event('submit', {cancelable: true})); await tick(); assert.equal(calls, 1);
+  } finally {globalThis.fetch = original;}
+});
+
+test('Import result triage link retains every repeated tenant in the current scope', async () => {
+  const {mount} = await import('../../app/static/js/features/imports/view.js');
+  const f = fixture('tenant=Beta&tenant=Alpha'); const original = globalThis.fetch;
+  globalThis.fetch = async path => {
+    assert.equal(path, '/api/import-text');
+    return new Response(JSON.stringify({parsed: 2, inserted: 2, deduplicated: 0, warnings: []}));
+  };
+  try {
+    const cleanup = mount(f.ctx);
+    click(f.root, {mode: 'paste'});
+    const input = f.root.querySelector('#import-content'); input.value = '{"synthetic":true}'; input.dispatchEvent(new Event('input'));
+    f.root.querySelector('#import-form').dispatchEvent(new Event('submit', {cancelable: true}));
+    await tick(); await tick();
+    assert.match(f.root.querySelector('#import-result').innerHTML, /href="#\/triage\?tenant=Alpha&amp;tenant=Beta&amp;review_status=all"/);
+    f.abort.abort(); cleanup();
   } finally {globalThis.fetch = original;}
 });
