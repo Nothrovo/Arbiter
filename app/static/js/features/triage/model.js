@@ -1,4 +1,97 @@
 import {esc, icon, severity, formatTime} from '../../ui/primitives.js';
+import {tenantValues} from '../../state/scope.js';
+import {withParams} from '../../router.js';
+
+export function summaryRequestParams(query) {
+  const p = new URLSearchParams();
+  for (const t of tenantValues(query)) p.append('tenant', t);
+  if (query.q) p.set('q', query.q);
+  if (query.filter_preset) p.set('filter_preset', query.filter_preset);
+  if (query.status && query.status !== 'all') p.set('status', query.status);
+  if (query.group_id) p.set('group_id', query.group_id);
+  if (query.review_status && query.review_status !== 'all') p.set('review_status', query.review_status);
+  if (query.time_from) p.set('time_from', query.time_from);
+  if (query.time_to) p.set('time_to', query.time_to);
+  if (query.facet && query.facet_value) {
+    p.set('facet', query.facet);
+    p.set('facet_value', query.facet_value);
+  }
+  return p;
+}
+
+export function renderTriageSummary(data, query, {collapsed = false} = {}) {
+  if (!data) return '';
+  const statsParams = summaryRequestParams(query);
+  const statsUrl = withParams('/stats', statsParams);
+
+  if (collapsed) {
+    return `
+      <section class="triage-summary-strip is-collapsed" aria-label="Ringkasan antrean triage">
+        <div class="summary-collapsed-bar" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 12px; font-size:12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-control); margin-bottom:12px;">
+          <span><strong>${data.alerts.toLocaleString('id-ID')}</strong> alert (${data.events.toLocaleString('id-ID')} hits) dalam filter aktif</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <a class="text-button" href="${statsUrl}">Lihat statistik lengkap →</a>
+            <button class="button icon-button" type="button" data-action="toggle-summary" aria-label="Buka ringkasan">${icon('down')}</button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  const sev = data.severity || {critical: 0, high: 0, medium: 0, low: 0};
+  const topRule = data.top_rule;
+  const timeEarliest = data.time_range?.earliest ? formatTime(data.time_range.earliest) : '—';
+  const timeLatest = data.time_range?.latest ? formatTime(data.time_range.latest) : 'kini';
+
+  return `
+    <section class="triage-summary-strip" aria-label="Ringkasan hasil filter antrean">
+      <div class="summary-strip-inner" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-control); margin-bottom:12px; font-size:12px;">
+        <div class="summary-metrics" style="display:flex; flex-wrap:wrap; align-items:center; gap:16px;">
+          <div class="summary-item">
+            <span class="meta">Alert:</span> <strong class="num">${data.alerts.toLocaleString('id-ID')}</strong>
+            <span class="meta">(${data.events.toLocaleString('id-ID')} hits)</span>
+          </div>
+          <div class="summary-item">
+            <button type="button" class="text-button" data-summary-action="pivot-ip" title="Pivot IP di statistik">
+              <span class="meta">Source IP:</span> <strong class="num">${data.unique_source_ips}</strong>
+            </button>
+          </div>
+          <div class="summary-item">
+            <button type="button" class="text-button" data-summary-action="pivot-agent" title="Pivot Host di statistik">
+              <span class="meta">Host:</span> <strong class="num">${data.unique_agents}</strong>
+            </button>
+          </div>
+          <div class="summary-item severity-mini-group" style="display:flex; align-items:center; gap:6px;">
+            <span class="meta">Severity:</span>
+            <button type="button" class="badge critical text-button" data-summary-action="severity" data-severity="critical" title="Saring Severity Critical">${sev.critical}</button>
+            <button type="button" class="badge high text-button" data-summary-action="severity" data-severity="high" title="Saring Severity High">${sev.high}</button>
+            <button type="button" class="badge medium text-button" data-summary-action="severity" data-severity="medium" title="Saring Severity Medium">${sev.medium}</button>
+            <button type="button" class="badge low text-button" data-summary-action="severity" data-severity="low" title="Saring Severity Low">${sev.low}</button>
+          </div>
+          <div class="summary-item">
+            <button type="button" class="text-button" data-summary-action="grouped" title="Saring alert yang sudah masuk insiden">
+              <span class="meta">Insiden:</span> <strong>${data.incident_cases}</strong> kasus
+            </button>
+          </div>
+          ${topRule ? `
+            <div class="summary-item top-rule-item">
+              <button type="button" class="text-button" data-summary-action="top-rule" data-rule-id="${esc(topRule.rule_id)}" title="Saring Rule ${esc(topRule.rule_id)}">
+                <span class="meta">Top Rule:</span> <strong>${esc(topRule.description)}</strong> (${topRule.count})
+              </button>
+            </div>
+          ` : ''}
+          <div class="summary-item time-range-item meta">
+            <span>Rentang: ${timeEarliest} s/d ${timeLatest}</span>
+          </div>
+        </div>
+        <div class="summary-actions" style="display:flex; align-items:center; gap:10px; margin-left:auto;">
+          <a class="button text-button primary" href="${statsUrl}" style="white-space:nowrap;">Lihat statistik lengkap →</a>
+          <button class="button icon-button" type="button" data-action="toggle-summary" aria-label="Sembunyikan ringkasan">${icon('close')}</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
 export function intelSummary(alert) {
   if (!alert.source_ip) return 'Tanpa source IP';
   if (alert.abuse_score === null || alert.abuse_score === undefined) return 'Belum ada cache';

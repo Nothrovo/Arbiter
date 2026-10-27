@@ -3,7 +3,7 @@ import {esc, icon, severity, formatTime, emptyState, errorState, loadingRows, de
 import {queryFrom, scopeParams} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {createTriageSession} from '../../state/triage.js';
-import {intelSummary, intelBadge, renderQueue} from './model.js';
+import {intelSummary, intelBadge, renderQueue, renderTriageSummary, summaryRequestParams} from './model.js';
 
 const presets = [['','Semua jenis'],['403','403 Forbidden'],['404','404 Probes'],['repeating','Berulang'],['non_http','Non-HTTP'],['bot','Bot traffic'],['curl','Curl requests']];
 export function mount(ctx) {
@@ -14,13 +14,13 @@ export function mount(ctx) {
   const scopedRoute = (path, extra = {}) => {const params=tenantParams();for(const [key,value] of Object.entries(extra))value===undefined||value===null||value===''?params.delete(key):params.set(key,String(value));return withParams(path,params);};
   root.classList.add('triage-page');
   const session = createTriageSession();
-  let items = [], total = 0, pageRequest, detailRequest, generation = 0, currentAlert = null, lastSelected = null, searchTimer;
+  let items = [], total = 0, pageRequest, detailRequest, summaryRequest = null, summaryData = null, isSummaryCollapsed = route.params.get('summary') === 'collapsed', generation = 0, currentAlert = null, lastSelected = null, searchTimer;
   let activeTab = 'detail', activeId = route.params.get('alert'), showIntel = true, wrapLog = true, showAllLogs = false, expandedLogIds = new Set();
   root.innerHTML = `<div class="page-header"><div class="page-heading"><h1>Triage</h1><p class="page-description">Periksa bukti. Tentukan langkah berikutnya.</p></div><div class="page-actions"><a class="button primary" href="${scopedRoute('/imports')}">${icon('upload')}Impor</a></div></div>
     <div class="tabs" aria-label="Antrean review">${[['unreviewed','Belum direview'],['all','Semua'],['reviewed','Direview']].map(([key,label])=>`<button class="tab" data-review="${key}" aria-pressed="${query.review_status===key}">${label}</button>`).join('')}</div>
     <div class="toolbar"><div class="search-field"><label class="sr-only" for="triage-search">Cari alert</label>${icon('search')}<input type="search" id="triage-search" name="q" value="${esc(query.q)}" placeholder="Cari IP, asset, rule…" autocomplete="off" spellcheck="false"></div><button class="button" data-action="filters">${icon('filter')}Filter${query.filter_preset||query.status!=='all'||query.group_id||query.time_preset||query.time_from?' aktif':''}</button><button class="button" data-action="toggle-all-queue-logs" id="btn-toggle-queue-logs" aria-pressed="false" title="Tampilkan atau sembunyikan full log semua alert">${icon('cases')}Semua log</button><label class="sr-only" for="triage-sort">Urutan alert</label><select class="sort-control" id="triage-sort" name="sort"><option value="timestamp:desc">Terbaru</option><option value="timestamp:asc">Kronologis</option><option value="severity:desc">Severity tertinggi</option><option value="hits:desc">Hits terbanyak</option></select><button class="button icon-button" data-action="more" aria-label="Opsi antrean" aria-controls="queue-options" aria-expanded="false">${icon('more')}</button></div>
     <div id="queue-options" class="toolbar" hidden><label class="checkbox-label"><input type="checkbox" id="show-intel" checked>Kolom source / intel</label><button class="button" data-action="correlation">Korelasi</button><button class="button" data-action="report-query">Laporan hasil filter</button></div>
-    <div id="applied-filters" class="applied-filters"></div><div id="correlation-slot"></div>
+    <div id="applied-filters" class="applied-filters"></div><div id="triage-summary-slot"></div><div id="correlation-slot"></div>
     <div class="triage-workspace" id="triage-workspace"><section class="queue-region" aria-label="Antrean kerja"><div id="selection-actions"></div><div id="queue-results">${loadingRows()}</div><div class="pagination" id="queue-pagination"></div></section><aside id="alert-inspector" class="inspector" aria-label="Detail alert" hidden></aside></div>
     <dialog class="filter-dialog" id="triage-filter-dialog" aria-labelledby="filter-title"><div class="dialog-header"><h2 id="filter-title">Filter &amp; urutan</h2><button class="button icon-button" data-close-filter aria-label="Tutup filter">${icon('close')}</button></div><form id="triage-filter-form" class="filter-form"><div class="field"><label for="filter-preset">Jenis event</label><select id="filter-preset" name="filter_preset">${presets.map(([v,l])=>`<option value="${v}" ${v===query.filter_preset?'selected':''}>${l}</option>`).join('')}</select></div><div class="field"><label for="filter-membership">Keanggotaan insiden</label><select id="filter-membership" name="status"><option value="all">Semua</option><option value="ungrouped">Belum masuk insiden</option><option value="grouped">Sudah masuk insiden</option></select></div><div class="field"><label for="filter-time-preset">Rentang waktu telemetri</label><select id="filter-time-preset" name="time_preset"><option value="" ${!query.time_preset?'selected':''}>Semua waktu</option><option value="1h" ${query.time_preset==='1h'?'selected':''}>1 jam terakhir</option><option value="24h" ${query.time_preset==='24h'?'selected':''}>24 jam terakhir</option><option value="7d" ${query.time_preset==='7d'?'selected':''}>7 hari terakhir</option><option value="30d" ${query.time_preset==='30d'?'selected':''}>30 hari terakhir</option><option value="custom" ${query.time_preset==='custom'||(query.time_from&&!query.time_preset)?'selected':''}>Rentang kustom…</option></select></div><div id="filter-custom-time" style="display:${query.time_preset==='custom'||(query.time_from&&!query.time_preset)?'grid':'none'}; grid-template-columns:1fr 1fr; gap:8px;"><div class="field"><label for="filter-time-from">Dari</label><input class="input" type="datetime-local" id="filter-time-from" name="time_from" value="${esc(query.time_from)}"></div><div class="field"><label for="filter-time-to">Sampai</label><input class="input" type="datetime-local" id="filter-time-to" name="time_to" value="${esc(query.time_to)}"></div></div><div class="field"><label for="filter-sort">Urutan</label><select id="filter-sort" name="ordering"><option value="timestamp:desc">Terbaru</option><option value="timestamp:asc">Kronologis</option><option value="severity:desc">Severity tertinggi</option><option value="hits:desc">Hits terbanyak</option></select></div><p class="meta">Tenant mengikuti workspace. Pilihan alert tetap tersimpan saat filter berubah.</p><div class="dialog-actions"><button type="button" class="button" data-action="reset">Reset filter</button><button class="button primary" type="submit">Terapkan</button></div></form></dialog>
     <dialog class="app-dialog" id="batch-add-incident-dialog" aria-labelledby="batch-incident-title"><div class="dialog-header"><h2 id="batch-incident-title">Masukkan Bukti ke Insiden</h2><button class="button icon-button" data-close-batch-incident aria-label="Tutup dialog">${icon('close')}</button></div><form id="batch-add-incident-form" class="stack"><p class="muted"><span id="batch-incident-count">0</span> alert terpilih akan ditautkan ke kasus insiden di bawah ini.</p><div class="field"><label for="batch-incident-select">Pilih Insiden Sasaran</label><select class="select" id="batch-incident-select" name="group_id" required><option value="">Memuat daftar insiden…</option></select></div><div class="dialog-actions" style="margin-top:20px; display:flex; justify-content:flex-end; gap:8px;"><button type="button" class="button" data-close-batch-incident>Batal</button><button class="button primary" type="submit">Tautkan ke Insiden</button></div></form></dialog>`;
@@ -102,7 +102,25 @@ ${rawLog}`;
     root.querySelector('#queue-pagination').innerHTML=`<div class="pagination-info" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;"><span>${total?`${(query.offset+1).toLocaleString('id-ID')}–${Math.min(query.offset+items.length,total).toLocaleString('id-ID')}`:'0'} dari ${total.toLocaleString('id-ID')} alert</span><label class="page-size-label" style="display:inline-flex; align-items:center; gap:6px;"><span class="sr-only">Jumlah per halaman</span><select class="select page-size-select" id="page-size-select" style="padding:2px 8px; min-height:30px; font-size:12px;">${pageSizeOptions}<option value="custom" ${isCustom ? 'selected' : ''}>${isCustom ? `Kustom (${query.limit})` : 'Kustom…'}</option></select></label><div id="custom-limit-wrap" style="display:${isCustom ? 'inline-flex' : 'none'}; gap:4px; align-items:center;"><input type="number" id="custom-limit-input" min="1" max="10000" value="${query.limit}" style="width:75px; min-height:28px; padding:2px 6px; font-size:12px;" class="input mono" placeholder="Jml"><button type="button" class="button" id="btn-apply-custom-limit" style="min-height:28px; padding:2px 8px; font-size:12px;">Terapkan</button></div></div><div class="pagination-actions"><button class="button" data-page="previous" ${query.offset===0?'disabled':''}>Sebelumnya</button><button class="button" data-page="next" ${query.offset+items.length>=total?'disabled':''}>Berikutnya</button></div>`;
     syncSelection();
   }
+  async function loadSummary() {
+    summaryRequest?.abort();
+    summaryRequest = new AbortController();
+    const summarySlot = root.querySelector('#triage-summary-slot');
+    if (!summarySlot) return;
+    try {
+      const sParams = summaryRequestParams(query);
+      const sData = await json(apiURL('/api/triage/summary', sParams), {signal: summaryRequest.signal});
+      if (signal.aborted) return;
+      summaryData = sData;
+      summarySlot.innerHTML = renderTriageSummary(summaryData, query, {collapsed: isSummaryCollapsed});
+    } catch (e) {
+      if (e.name !== 'AbortError' && !signal.aborted) {
+        summarySlot.innerHTML = '';
+      }
+    }
+  }
   async function load() {
+    loadSummary();
     pageRequest?.abort();pageRequest=new AbortController();const version=++generation;
     const abort=()=>pageRequest?.abort();signal.addEventListener('abort',abort,{once:true});
     results.setAttribute('aria-busy','true');
@@ -194,6 +212,21 @@ ${rawLog}`;
   }
   on(root,'click',async e=>{
     const button=e.target.closest('button');if(!button)return;
+    if(button.dataset.summaryAction==='severity'){updateQuery({facet:'severity',facet_value:button.dataset.severity,offset:0});return;}
+    if(button.dataset.summaryAction==='top-rule'){updateQuery({facet:'rule_id',facet_value:button.dataset.ruleId,offset:0});return;}
+    if(button.dataset.summaryAction==='grouped'){updateQuery({status:'grouped',offset:0});return;}
+    if(button.dataset.summaryAction==='pivot-ip'){const p=summaryRequestParams(query);p.set('pivot_by','source_ip');navigate(withParams('/stats',p));return;}
+    if(button.dataset.summaryAction==='pivot-agent'){const p=summaryRequestParams(query);p.set('pivot_by','agent');navigate(withParams('/stats',p));return;}
+    if(button.dataset.action==='toggle-summary'){
+      isSummaryCollapsed=!isSummaryCollapsed;
+      const p=new URLSearchParams(route.params);
+      if(isSummaryCollapsed)p.set('summary','collapsed');else p.delete('summary');
+      history.replaceState(null,'',withParams('/triage',p));
+      const summarySlot=root.querySelector('#triage-summary-slot');
+      if(summarySlot&&summaryData)summarySlot.innerHTML=renderTriageSummary(summaryData,query,{collapsed:isSummaryCollapsed});
+      return;
+    }
+    if(button.dataset.action==='clear-facet'){updateQuery({facet:null,facet_value:null,offset:0});return;}
     if(button.dataset.review){updateQuery({review_status:button.dataset.review});return;}
     if(button.dataset.sort){updateQuery({sort_by:button.dataset.sort,sort:query.sort_by===button.dataset.sort&&query.sort==='desc'?'asc':'desc'});return;}
     if(button.dataset.inspect){activeTab=button.dataset.inspectTab||'detail';await openInspector(button.dataset.inspect);return;}
@@ -334,9 +367,10 @@ ${rawLog}`;
   on(root,'keydown',e=>{if(e.key==='Escape'&&activeId&&!dialog.open){e.preventDefault();closeInspector();}});
   on(root,'arbiter:refresh',()=>load());
   const filters=[];if(query.q)filters.push(`Pencarian: ${esc(query.q)}`);if(query.filter_preset)filters.push(esc(presets.find(([v])=>v===query.filter_preset)?.[1]));if(query.group_id)filters.push('Bukti insiden terpilih');if(query.status!=='all')filters.push(query.status==='grouped'?'Sudah masuk insiden':'Belum masuk insiden');
+  if(query.facet&&query.facet_value)filters.push(`Filter: ${esc(query.facet)} = ${esc(query.facet_value)} <button class="button text-button" data-action="clear-facet" style="cursor:pointer; padding:0 4px;">✕</button>`);
   if(query.time_preset){const labels={'1h':'1 jam terakhir','24h':'24 jam terakhir','7d':'7 hari terakhir','30d':'30 hari terakhir'};filters.push(labels[query.time_preset]||`Waktu: ${esc(query.time_preset)}`);}
   else if(query.time_from||query.time_to)filters.push(`Waktu: ${query.time_from?esc(formatTime(query.time_from)):'—'} s/d ${query.time_to?esc(formatTime(query.time_to)):'kini'}`);
   root.querySelector('#applied-filters').innerHTML=filters.length?`${filters.map(f=>`<span>${f}</span>`).join('')}<button class="button" data-action="reset">Reset</button>`:'';
   load();
-  return ()=>{session.dispose();root.classList.remove('triage-page');clearTimeout(searchTimer);pageRequest?.abort();detailRequest?.abort();dialog.close();root.querySelector('#batch-add-incident-dialog')?.close();};
+  return ()=>{session.dispose();root.classList.remove('triage-page');clearTimeout(searchTimer);pageRequest?.abort();summaryRequest?.abort();detailRequest?.abort();dialog.close();root.querySelector('#batch-add-incident-dialog')?.close();};
 }

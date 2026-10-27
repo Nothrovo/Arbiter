@@ -264,15 +264,15 @@
     "semantic_hash": ""
   },
   "app/static/js/features/triage/model.js": {
-    "mtime": 1792738376.666438,
-    "seen": 1792738380.0714703,
-    "ast_hash": "4b5a596271cd5e7116e2c9006335c952",
+    "mtime": 1793076234.8665037,
+    "seen": 1793076384.9691212,
+    "ast_hash": "9192562e0b50d936c903176270c6ddf6",
     "semantic_hash": ""
   },
   "app/static/js/features/triage/view.js": {
-    "mtime": 1793072577.169029,
-    "seen": 1793073273.5648477,
-    "ast_hash": "492f1501a301a512ebb077e9cbd86916",
+    "mtime": 1793076344.053007,
+    "seen": 1793076384.9691257,
+    "ast_hash": "d28ed1e3d963da7f07154dfbcda9ba3f",
     "semantic_hash": ""
   },
   "app/static/js/router.js": {
@@ -645,6 +645,12 @@
     "mtime": 1793075883.6076841,
     "seen": 1793076172.4146855,
     "ast_hash": "90883a7b2c10765d47d8013568b2008a",
+    "semantic_hash": ""
+  },
+  "tests/frontend/triage-summary.test.mjs": {
+    "mtime": 1793076199.7436907,
+    "seen": 1793076384.9695325,
+    "ast_hash": "88df59ab6d7800bc315aab536a8cdaf9",
     "semantic_hash": ""
   }
 }
