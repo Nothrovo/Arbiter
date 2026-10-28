@@ -463,6 +463,37 @@ class StatsEndpointContractTests(unittest.TestCase):
         self.assertEqual(wp_item["count"], 2)
         self.assertEqual(wp_item["percentage"], 50.0)
 
+    def test_stats_primary_facet_computes_percentage_of_workspace_total(self):
+        # When primary facet is applied alone, backend must compute its percentage of workspace total
+        self.db.add_alert(
+            301, "Alpha",
+            alert_id="syn-301", timestamp="2026-01-01T12:01:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            parsed_details='{"path": "/a", "log_type": "http"}',
+        )
+        self.db.add_alert(
+            302, "Alpha",
+            alert_id="syn-302", timestamp="2026-01-01T12:02:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            parsed_details='{"path": "/b", "log_type": "http"}',
+        )
+
+        res = self.client.get("/api/stats", params={
+            "tenant": "Alpha",
+            "pivot_by": "rule_description",
+            "facet": "rule_description",
+            "facet_value": "Web server 400 error code.",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertIn("primary_percentage_of_total", data)
+        self.assertIn("workspace_total", data)
+        self.assertGreater(data["workspace_total"], 0)
+        expected_pct = round((data["parent_total"] / data["workspace_total"] * 100.0), 2)
+        self.assertEqual(data["primary_percentage_of_total"], expected_pct)
+
 
 if __name__ == "__main__":
     unittest.main()

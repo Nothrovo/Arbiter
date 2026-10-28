@@ -668,6 +668,7 @@ def get_stats(
 
         parent_total = None
         workspace_total = None
+        primary_percentage_of_total = None
         secondary_percentage_of_parent = None
         secondary_percentage_of_total = None
 
@@ -687,6 +688,11 @@ def get_stats(
                 workspace_base_params,
             ).fetchone()
             workspace_total = int(w_row["total_alerts"] or 0) if metric == "alerts" else int(w_row["total_events"] or 0)
+
+            if workspace_total > 0:
+                primary_percentage_of_total = round((parent_total / workspace_total * 100.0), 2)
+            else:
+                primary_percentage_of_total = 0.0
 
             if secondary_facet and secondary_facet_value:
                 if parent_total > 0:
@@ -836,6 +842,8 @@ def get_stats(
         res_data["parent_total"] = parent_total
     if workspace_total is not None:
         res_data["workspace_total"] = workspace_total
+    if primary_percentage_of_total is not None:
+        res_data["primary_percentage_of_total"] = primary_percentage_of_total
     if secondary_percentage_of_parent is not None:
         res_data["secondary_percentage_of_parent"] = secondary_percentage_of_parent
     if secondary_percentage_of_total is not None:

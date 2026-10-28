@@ -8,6 +8,7 @@ export function renderAppliedFilters(query, data = null) {
   }
   const metricLabel = data?.metric === 'events' ? 'event' : 'alert';
   const parentTotal = data?.parent_total;
+  const primPct = data?.primary_percentage_of_total;
   const secPct = data?.secondary_percentage_of_parent;
   const totPct = data?.secondary_percentage_of_total;
   const filteredCount = data?.total;
@@ -16,7 +17,11 @@ export function renderAppliedFilters(query, data = null) {
     ${query.facet && query.facet_value ? `
       <span class="badge neutral" style="display:inline-flex; align-items:center; gap:6px;">
         Pivot Utama: <strong>${esc(query.facet)} = ${esc(query.facet_value)}</strong>
-        ${parentTotal ? `<span class="meta font-medium">(${parentTotal.toLocaleString('id-ID')} ${metricLabel} total)</span>` : ''}
+        ${primPct !== undefined && primPct !== null ? `
+          <span class="font-medium" style="background:rgba(255,255,255,0.08); padding:1px 6px; border-radius:4px;">
+            ${(parentTotal || filteredCount || 0).toLocaleString('id-ID')} ${metricLabel} · ${primPct}% dari workspace
+          </span>
+        ` : (parentTotal ? `<span class="meta font-medium">(${parentTotal.toLocaleString('id-ID')} ${metricLabel} total)</span>` : '')}
         <button type="button" class="text-button" id="btn-clear-drilldown" title="Hapus filter drill-down utama" style="cursor:pointer;">${icon('close')}</button>
       </span>
     ` : ''}
@@ -215,7 +220,12 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
           ${subBreakdown}
         </td>
         <td class="numeric">${item.count.toLocaleString('id-ID')}</td>
-        <td class="numeric">${item.displayPercentage}%</td>
+        <td class="numeric">
+          ${item.displayPercentage}%
+          ${query.facet && query.facet_value && data.primary_percentage_of_total !== undefined ? `
+            <div class="meta font-medium" style="font-size:11px; color:var(--primary, #3b82f6);">(${data.primary_percentage_of_total}% workspace)</div>
+          ` : ''}
+        </td>
         <td class="actions-col" style="text-align:right;">
           <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik dan tampilkan bukti alert">Drill-down</button>
           <a class="button text-button" href="${triageUrl}" title="Lihat di antrean Triage">Triage</a>
@@ -277,6 +287,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
             <span class="meta">
               ${data.secondary_breakdown.length} sub-kategori ditemukan
               ${data.parent_total ? ` · Basis: ${data.parent_total.toLocaleString('id-ID')} ${metricLabel}` : ''}
+              ${data.primary_percentage_of_total !== undefined ? ` (<strong>${data.primary_percentage_of_total}%</strong> dari workspace)` : ''}
               ${query.secondary_facet_value && data.secondary_percentage_of_parent !== undefined && data.secondary_percentage_of_parent !== null ? ` · Filter aktif: <strong style="color:var(--primary, #3b82f6);">${data.secondary_percentage_of_parent}%</strong> (${(data.total || 0).toLocaleString('id-ID')} ${metricLabel})` : ''}
             </span>
           </div>
@@ -439,7 +450,12 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
     <div class="metric-strip" style="margin-bottom:16px;">
       <div>
         <dt>Total ${metricLabel}</dt>
-        <dd>${total.toLocaleString('id-ID')}</dd>
+        <dd>
+          ${total.toLocaleString('id-ID')}
+          ${data.workspace_total && data.workspace_total !== total ? `
+            <span class="meta" style="font-size:13px; font-weight:normal;"> (${data.primary_percentage_of_total !== undefined ? `${data.primary_percentage_of_total}% dari ` : ''}${data.workspace_total.toLocaleString('id-ID')} total)</span>
+          ` : ''}
+        </dd>
       </div>
       <div>
         <dt>Total Kategori Unik</dt>
@@ -449,6 +465,12 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <dt>Kategori Terbanyak</dt>
         <dd>${items[0] ? esc(items[0].key) : '—'} <span class="meta" style="font-size:14px;">(${items[0]?.count?.toLocaleString('id-ID') || 0} ${metricLabel})</span></dd>
       </div>
+      ${query.facet && query.facet_value && data.primary_percentage_of_total !== undefined && data.primary_percentage_of_total !== null && !query.secondary_facet_value ? `
+        <div>
+          <dt>Proporsi Pivot Utama</dt>
+          <dd style="color:var(--primary, #3b82f6);">${data.primary_percentage_of_total}% <span class="meta" style="font-size:14px;">(${total.toLocaleString('id-ID')} dari ${data.workspace_total?.toLocaleString('id-ID') || 0} ${metricLabel})</span></dd>
+        </div>
+      ` : ''}
       ${query.secondary_facet_value && data.secondary_percentage_of_parent !== undefined && data.secondary_percentage_of_parent !== null ? `
         <div>
           <dt>Proporsi Pivot Kedua</dt>
@@ -466,7 +488,10 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
     <section class="panel table-container">
       <div class="section-heading">
         <h2>Tabel Distribusi Pivot</h2>
-        <span class="meta">${items.length} baris ditampilkan</span>
+        <span class="meta">
+          ${items.length} baris ditampilkan
+          ${query.facet && query.facet_value && data.primary_percentage_of_total !== undefined ? ` · <strong>${data.primary_percentage_of_total}%</strong> dari total workspace (${data.workspace_total?.toLocaleString('id-ID')} ${metricLabel})` : ''}
+        </span>
       </div>
       <div class="table-region">
         <table class="data-table">

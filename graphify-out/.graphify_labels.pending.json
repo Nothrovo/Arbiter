@@ -15,8 +15,8 @@
   "13": "⚡ Key Capabilities",
   "14": "UIAPIContractTests",
   "15": "AGENTS.md — Arbiter Project Context for AI Agents",
-  "16": "_get_alerts_for_export",
-  "17": "incidents/render.js",
+  "16": "Arbiter SOC Desk Upgrades Implementation Plan",
+  "17": "reports/view.js",
   "18": "stats/view.js",
   "19": "scope.js",
   "20": "SafetyTests",
@@ -32,11 +32,13 @@
   "30": "6. SOC Log Reader — bagian demi bagian",
   "31": "MANUAL — Menjalankan IP Intel Web",
   "32": "app.js",
-  "33": "Any",
+  "33": "get_db",
   "34": "4. Menjalankan aplikasi",
   "35": "7. Alur data",
   "36": "9. Database",
+  "37": "query.py",
   "38": "esc",
   "39": "StatsEndpointContractTests",
-  "40": "Struktur Proyek `ipintel/`"
+  "40": "Struktur Proyek `ipintel/`",
+  "41": "8. Daftar route"
 }

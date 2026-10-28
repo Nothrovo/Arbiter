@@ -265,13 +265,14 @@ test('renderAppliedFilters displays relative secondary percentage and parent tot
     total: 75,
     parent_total: 703,
     workspace_total: 1203,
+    primary_percentage_of_total: 58.44,
     secondary_percentage_of_parent: 10.7,
     secondary_percentage_of_total: 6.2,
   };
 
   const html = renderAppliedFilters(query, data);
   assert.match(html, /Pivot Utama: <strong>rule_description = Web server 400 error code\.<\/strong>/);
-  assert.match(html, /703 alert total/);
+  assert.match(html, /703 alert · 58\.44% dari workspace/);
   assert.match(html, /Pivot Kedua: <strong>url_path = \/wp-content\/styles\.css<\/strong>/);
   assert.match(html, /75 alert · 10\.7% dari Web server 400 error code\./);
   assert.match(html, /6\.2% total/);
