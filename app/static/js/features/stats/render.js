@@ -2,6 +2,39 @@ import {esc, icon, severity} from '../../ui/primitives.js';
 import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {renderBarChart, renderDonutChart, renderLineChart} from '../../ui/charts.js';
 
+export function renderAppliedFilters(query, data = null) {
+  if (!((query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value))) {
+    return '';
+  }
+  const metricLabel = data?.metric === 'events' ? 'event' : 'alert';
+  const parentTotal = data?.parent_total;
+  const secPct = data?.secondary_percentage_of_parent;
+  const totPct = data?.secondary_percentage_of_total;
+  const filteredCount = data?.total;
+
+  return `
+    ${query.facet && query.facet_value ? `
+      <span class="badge neutral" style="display:inline-flex; align-items:center; gap:6px;">
+        Pivot Utama: <strong>${esc(query.facet)} = ${esc(query.facet_value)}</strong>
+        ${parentTotal ? `<span class="meta font-medium">(${parentTotal.toLocaleString('id-ID')} ${metricLabel} total)</span>` : ''}
+        <button type="button" class="text-button" id="btn-clear-drilldown" title="Hapus filter drill-down utama" style="cursor:pointer;">${icon('close')}</button>
+      </span>
+    ` : ''}
+    ${query.secondary_facet && query.secondary_facet_value ? `
+      <span class="badge primary" style="display:inline-flex; align-items:center; gap:6px;">
+        Pivot Kedua: <strong>${esc(query.secondary_facet)} = ${esc(query.secondary_facet_value)}</strong>
+        ${secPct !== undefined && secPct !== null ? `
+          <span style="background:rgba(255,255,255,0.18); padding:1px 6px; border-radius:4px; font-weight:600;">
+            ${(filteredCount || 0).toLocaleString('id-ID')} ${metricLabel} · ${secPct}% dari ${esc(query.facet_value || 'utama')}
+            ${totPct ? `(${totPct}% total)` : ''}
+          </span>
+        ` : ''}
+        <button type="button" class="text-button" id="btn-clear-secondary-drilldown" title="Hapus filter drill-down kedua" style="cursor:pointer;">${icon('close')}</button>
+      </span>
+    ` : ''}
+  `;
+}
+
 export function statsPage(query) {
   const pivotOpts = PIVOT_OPTIONS.map(([val, label]) => `<option value="${val}" ${query.pivot_by === val ? 'selected' : ''}>${esc(label)}</option>`).join('');
   const secPivotOpts = [
@@ -108,22 +141,9 @@ export function statsPage(query) {
         </div>
       </div>
 
-      ${(query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value) ? `
-        <div class="applied-filters" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          ${query.facet && query.facet_value ? `
-            <span class="badge neutral" style="display:inline-flex; align-items:center; gap:6px;">
-              Pivot Utama: <strong>${esc(query.facet)} = ${esc(query.facet_value)}</strong>
-              <button type="button" class="text-button" id="btn-clear-drilldown" title="Hapus filter drill-down utama" style="cursor:pointer;">${icon('close')}</button>
-            </span>
-          ` : ''}
-          ${query.secondary_facet && query.secondary_facet_value ? `
-            <span class="badge primary" style="display:inline-flex; align-items:center; gap:6px;">
-              Pivot Kedua: <strong>${esc(query.secondary_facet)} = ${esc(query.secondary_facet_value)}</strong>
-              <button type="button" class="text-button" id="btn-clear-secondary-drilldown" title="Hapus filter drill-down kedua" style="cursor:pointer;">${icon('close')}</button>
-            </span>
-          ` : ''}
-        </div>
-      ` : ''}
+      <div id="stats-applied-filters" class="applied-filters" style="margin-top:12px; display:${(query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value) ? 'flex' : 'none'}; gap:8px; flex-wrap:wrap; align-items:center;">
+        ${renderAppliedFilters(query, null)}
+      </div>
     </section>
 
     <div id="stats-workspace" class="stack">
@@ -254,7 +274,11 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <div class="section-heading" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
           <div>
             <h3>Rincian ${esc(secLabel)} (dalam "${esc(query.facet_value)}")</h3>
-            <span class="meta">${data.secondary_breakdown.length} sub-kategori ditemukan</span>
+            <span class="meta">
+              ${data.secondary_breakdown.length} sub-kategori ditemukan
+              ${data.parent_total ? ` · Basis: ${data.parent_total.toLocaleString('id-ID')} ${metricLabel}` : ''}
+              ${query.secondary_facet_value && data.secondary_percentage_of_parent !== undefined && data.secondary_percentage_of_parent !== null ? ` · Filter aktif: <strong style="color:var(--primary, #3b82f6);">${data.secondary_percentage_of_parent}%</strong> (${(data.total || 0).toLocaleString('id-ID')} ${metricLabel})` : ''}
+            </span>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button type="button" class="button" id="btn-malicious-spotter" title="Pilih otomatis semua sub-kategori yang mengandung pola mencurigakan (.env, credential, xmlrpc, config, git, admin, dll)">
@@ -358,7 +382,13 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <div class="section-heading" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
           <div>
             <h2>Bukti Alert Hasil Drill-down</h2>
-            <span class="meta">${drilldownAlerts.length} alert ditampilkan (${esc(query.facet)} = "${esc(query.facet_value)}"${query.secondary_facet_value ? ` · ${esc(query.secondary_facet)} = "${esc(query.secondary_facet_value)}"` : ''})</span>
+            <span class="meta">
+              ${drilldownAlerts.length} alert ditampilkan (${esc(query.facet)} = "${esc(query.facet_value)}"${query.secondary_facet_value ? ` · ${esc(query.secondary_facet)} = "${esc(query.secondary_facet_value)}"` : ''})
+              ${data && data.secondary_percentage_of_parent !== undefined && data.secondary_percentage_of_parent !== null ? `
+                — <strong style="color:var(--primary, #3b82f6);">${data.secondary_percentage_of_parent}%</strong> dari "${esc(query.facet_value)}"
+                ${data.secondary_percentage_of_total ? `(<strong>${data.secondary_percentage_of_total}%</strong> total workspace)` : ''}
+              ` : ''}
+            </span>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button type="button" class="button" id="btn-evidence-malicious-spotter" title="Pilih otomatis semua alert individual yang terindikasi berbahaya">
@@ -419,6 +449,12 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <dt>Kategori Terbanyak</dt>
         <dd>${items[0] ? esc(items[0].key) : '—'} <span class="meta" style="font-size:14px;">(${items[0]?.count?.toLocaleString('id-ID') || 0} ${metricLabel})</span></dd>
       </div>
+      ${query.secondary_facet_value && data.secondary_percentage_of_parent !== undefined && data.secondary_percentage_of_parent !== null ? `
+        <div>
+          <dt>Proporsi Pivot Kedua</dt>
+          <dd style="color:var(--primary, #3b82f6);">${data.secondary_percentage_of_parent}% <span class="meta" style="font-size:14px;">(${total.toLocaleString('id-ID')} dari ${data.parent_total?.toLocaleString('id-ID') || 0} ${metricLabel})</span></dd>
+        </div>
+      ` : ''}
     </div>
 
     ${query.chart !== 'table' ? `

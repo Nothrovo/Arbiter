@@ -241,3 +241,38 @@ test('isMaliciousAlert differentiates individual alerts sharing the same sub-cat
   assert.equal(isMaliciousAlert(injectionAlert), true);
   assert.equal(isMaliciousAlert(scannerAlert), true);
 });
+
+test('isMaliciousPath captures WordPress author enumeration probes', async () => {
+  const {isMaliciousPath} = await import('../../app/static/js/features/stats/model.js');
+  assert.equal(isMaliciousPath('/?author=1'), true);
+  assert.equal(isMaliciousPath('/?author=2'), true);
+  assert.equal(isMaliciousPath('/?author=99'), true);
+  assert.equal(isMaliciousPath('/'), false);
+});
+
+test('renderAppliedFilters displays relative secondary percentage and parent totals', async () => {
+  const {renderAppliedFilters} = await import('../../app/static/js/features/stats/render.js');
+
+  const query = {
+    facet: 'rule_description',
+    facet_value: 'Web server 400 error code.',
+    secondary_facet: 'url_path',
+    secondary_facet_value: '/wp-content/styles.css',
+  };
+
+  const data = {
+    metric: 'alerts',
+    total: 75,
+    parent_total: 703,
+    workspace_total: 1203,
+    secondary_percentage_of_parent: 10.7,
+    secondary_percentage_of_total: 6.2,
+  };
+
+  const html = renderAppliedFilters(query, data);
+  assert.match(html, /Pivot Utama: <strong>rule_description = Web server 400 error code\.<\/strong>/);
+  assert.match(html, /703 alert total/);
+  assert.match(html, /Pivot Kedua: <strong>url_path = \/wp-content\/styles\.css<\/strong>/);
+  assert.match(html, /75 alert · 10\.7% dari Web server 400 error code\./);
+  assert.match(html, /6\.2% total/);
+});

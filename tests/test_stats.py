@@ -408,6 +408,61 @@ class StatsEndpointContractTests(unittest.TestCase):
         self.assertEqual(res_malicious.json()["alert_pks"], [21])
         self.assertNotIn(20, res_malicious.json()["alert_pks"])
 
+    def test_stats_secondary_facet_preserves_parent_scope_and_breakdown(self):
+        self.db.add_alert(
+            201, "Alpha",
+            alert_id="syn-201", timestamp="2026-01-01T12:01:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            parsed_details='{"path": "/wp-content/styles.css", "log_type": "http"}',
+        )
+        self.db.add_alert(
+            202, "Alpha",
+            alert_id="syn-202", timestamp="2026-01-01T12:02:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            parsed_details='{"path": "/wp-content/styles.css", "log_type": "http"}',
+        )
+        self.db.add_alert(
+            203, "Alpha",
+            alert_id="syn-203", timestamp="2026-01-01T12:03:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            parsed_details='{"path": "/login.php", "log_type": "http"}',
+        )
+        self.db.add_alert(
+            204, "Alpha",
+            alert_id="syn-204", timestamp="2026-01-01T12:04:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            parsed_details='{"path": "/admin.php", "log_type": "http"}',
+        )
+
+        res = self.client.get("/api/stats", params={
+            "tenant": "Alpha",
+            "pivot_by": "rule_description",
+            "secondary_pivot": "url_path",
+            "facet": "rule_description",
+            "facet_value": "Web server 400 error code.",
+            "secondary_facet": "url_path",
+            "secondary_facet_value": "/wp-content/styles.css",
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertEqual(data["total"], 2)
+        self.assertIn("parent_total", data)
+        self.assertEqual(data["parent_total"], 4)
+        self.assertIn("secondary_percentage_of_parent", data)
+        self.assertEqual(data["secondary_percentage_of_parent"], 50.0)
+        breakdown_keys = [it["key"] for it in data["secondary_breakdown"]]
+        self.assertIn("/login.php", breakdown_keys)
+        self.assertIn("/admin.php", breakdown_keys)
+        self.assertIn("/wp-content/styles.css", breakdown_keys)
+        # Check percentage in breakdown table items
+        wp_item = next(it for it in data["secondary_breakdown"] if it["key"] == "/wp-content/styles.css")
+        self.assertEqual(wp_item["count"], 2)
+        self.assertEqual(wp_item["percentage"], 50.0)
+
 
 if __name__ == "__main__":
     unittest.main()

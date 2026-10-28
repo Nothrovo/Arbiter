@@ -4,7 +4,7 @@ import {tenantValues} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {createStatsSession} from '../../state/stats.js';
 import {normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary, isMaliciousPath, isMaliciousAlert} from './model.js';
-import {statsPage, statsResults} from './render.js';
+import {statsPage, statsResults, renderAppliedFilters} from './render.js';
 
 export function mount(ctx) {
   const {root, route, signal, navigate, notify} = ctx;
@@ -37,6 +37,12 @@ export function mount(ctx) {
   }
 
   function renderView() {
+    const appliedContainer = root.querySelector('#stats-applied-filters');
+    if (appliedContainer) {
+      appliedContainer.innerHTML = renderAppliedFilters(query, currentData);
+      appliedContainer.style.display = ((query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value)) ? 'flex' : 'none';
+    }
+
     if (!currentData || currentData.total === 0) {
       resultsContainer.innerHTML = emptyState(
         'Tidak ada data statistik pada scope ini',

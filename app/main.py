@@ -590,6 +590,30 @@ def get_stats(
         secondary_facet=secondary_facet,
         secondary_facet_value=secondary_facet_value,
     )
+    parent_where_sql, parent_base_params = alert_where(
+        q=q,
+        tenant=tenant,
+        status=status,
+        group_id=group_id,
+        filter_preset=filter_preset,
+        review_status=review_status,
+        time_preset=time_preset,
+        time_from=time_from,
+        time_to=time_to,
+        facet=facet,
+        facet_value=facet_value,
+    )
+    workspace_where_sql, workspace_base_params = alert_where(
+        q=q,
+        tenant=tenant,
+        status=status,
+        group_id=group_id,
+        filter_preset=filter_preset,
+        review_status=review_status,
+        time_preset=time_preset,
+        time_from=time_from,
+        time_to=time_to,
+    )
 
     metric_expr = "COUNT(*)" if metric == "alerts" else "COALESCE(SUM(COALESCE(a.hit_count, 1)), 0)"
 
@@ -641,6 +665,40 @@ def get_stats(
 
         secondary_distribution = None
         secondary_breakdown = None
+
+        parent_total = None
+        workspace_total = None
+        secondary_percentage_of_parent = None
+        secondary_percentage_of_total = None
+
+        if facet and facet_value:
+            p_row = conn.execute(
+                f"""SELECT COUNT(*) AS total_alerts,
+                           COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS total_events
+                    FROM wazuh.alerts a {parent_where_sql}""",
+                parent_base_params,
+            ).fetchone()
+            parent_total = int(p_row["total_alerts"] or 0) if metric == "alerts" else int(p_row["total_events"] or 0)
+
+            w_row = conn.execute(
+                f"""SELECT COUNT(*) AS total_alerts,
+                           COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS total_events
+                    FROM wazuh.alerts a {workspace_where_sql}""",
+                workspace_base_params,
+            ).fetchone()
+            workspace_total = int(w_row["total_alerts"] or 0) if metric == "alerts" else int(w_row["total_events"] or 0)
+
+            if secondary_facet and secondary_facet_value:
+                if parent_total > 0:
+                    secondary_percentage_of_parent = round((total / parent_total * 100.0), 2)
+                else:
+                    secondary_percentage_of_parent = 0.0
+
+                if workspace_total > 0:
+                    secondary_percentage_of_total = round((total / workspace_total * 100.0), 2)
+                else:
+                    secondary_percentage_of_total = 0.0
+
         if secondary_pivot:
             sec_dim_sql = PIVOT_DEFINITIONS[secondary_pivot]["sql"]
             sec_sql = f"""
@@ -661,19 +719,21 @@ def get_stats(
             secondary_distribution = sec_dist
 
             # When primary facet is active, secondary_breakdown provides the complete breakdown of secondary dimension
+            # within the parent facet scope (using parent_where_sql so all sub-categories remain visible)
             if facet and facet_value:
                 sec_break_sql = f"""
                     SELECT {sec_dim_sql} AS k, {metric_expr} AS n
-                    FROM wazuh.alerts a {where_sql}
+                    FROM wazuh.alerts a {parent_where_sql}
                     GROUP BY 1
                     ORDER BY 2 DESC, 1 ASC
                     LIMIT 500
                 """
-                sec_break_rows = conn.execute(sec_break_sql, dim_params + base_params).fetchall()
+                sec_break_rows = conn.execute(sec_break_sql, parent_base_params).fetchall()
+                base_calc_total = parent_total if (parent_total and parent_total > 0) else total
                 break_items = []
                 for r in sec_break_rows:
                     cnt = int(r["n"] or 0)
-                    pct = round((cnt / total * 100.0), 2) if total > 0 else 0.0
+                    pct = round((cnt / base_calc_total * 100.0), 2) if base_calc_total > 0 else 0.0
                     break_items.append({
                         "key": str(r["k"] if r["k"] is not None else "Tidak tersedia"),
                         "count": cnt,
@@ -741,7 +801,7 @@ def get_stats(
             for b in time_series:
                 b["above_average"] = bool(b["total"] > threshold and b["total"] > 1)
 
-    return {
+    res_data = {
         "pivot_by": pivot_by,
         "secondary_pivot": secondary_pivot,
         "secondary_distribution": secondary_distribution,
@@ -772,6 +832,15 @@ def get_stats(
             "secondary_facet_value": secondary_facet_value,
         },
     }
+    if parent_total is not None:
+        res_data["parent_total"] = parent_total
+    if workspace_total is not None:
+        res_data["workspace_total"] = workspace_total
+    if secondary_percentage_of_parent is not None:
+        res_data["secondary_percentage_of_parent"] = secondary_percentage_of_parent
+    if secondary_percentage_of_total is not None:
+        res_data["secondary_percentage_of_total"] = secondary_percentage_of_total
+    return res_data
 
 
 @app.post("/api/stats/facet-alert-ids")
