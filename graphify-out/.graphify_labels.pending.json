@@ -15,6 +15,7 @@
   "13": "⚡ Key Capabilities",
   "14": "UIAPIContractTests",
   "15": "AGENTS.md — Arbiter Project Context for AI Agents",
+  "16": "_get_alerts_for_export",
   "17": "incidents/render.js",
   "18": "stats/view.js",
   "19": "scope.js",
@@ -35,7 +36,6 @@
   "34": "4. Menjalankan aplikasi",
   "35": "7. Alur data",
   "36": "9. Database",
-  "37": "_get_alerts_for_export",
   "38": "esc",
   "39": "StatsEndpointContractTests",
   "40": "Struktur Proyek `ipintel/`"

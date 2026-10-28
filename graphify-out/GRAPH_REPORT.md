@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8098dbdf`
+- Built from commit: `2d1937df`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -30,6 +30,7 @@
 - ⚡ Key Capabilities
 - UIAPIContractTests
 - AGENTS.md — Arbiter Project Context for AI Agents
+- _get_alerts_for_export
 - incidents/render.js
 - stats/view.js
 - scope.js
@@ -50,7 +51,6 @@
 - 4. Menjalankan aplikasi
 - 7. Alur data
 - 9. Database
-- _get_alerts_for_export
 - esc
 - StatsEndpointContractTests
 - Struktur Proyek `ipintel/`
@@ -124,6 +124,10 @@ Nodes (23): 10. Official Deliverables (5 Export Paths), 1. Resilient Multi-Forma
 Cohesion: 0.14
 Nodes (13): AGENTS.md — Arbiter Project Context for AI Agents, Architecture (frontend), Design direction: Quiet Evidence Desk, Four destinations (not a monolithic page), Graph, Key policies, Privacy — STRICT, Running production (+5 more)
 
+### Community 16 - "_get_alerts_for_export"
+Cohesion: 0.18
+Nodes (11): generate_gdocs_html_report(), export_gdocs_html(), export_preview(), _get_alerts_for_export(), _tenant_label(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter (+3 more)
+
 ### Community 17 - "incidents/render.js"
 Cohesion: 0.09
 Nodes (50): scopeParams(), caseHref(), cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), filterIncidents(), incidentPayload() (+42 more)
@@ -195,10 +199,6 @@ Nodes (4): 7.1 Enrichment IP, 7.2 Impor SOC, 7.3 MISP / CTI, 7. Alur data
 ### Community 36 - "9. Database"
 Cohesion: 0.50
 Nodes (4): 9.1 Tabel inti, 9.2 Tabel CTI, 9.3 Tabel SOC, 9. Database
-
-### Community 37 - "_get_alerts_for_export"
-Cohesion: 0.18
-Nodes (11): generate_gdocs_html_report(), export_gdocs_html(), export_preview(), _get_alerts_for_export(), _tenant_label(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter (+3 more)
 
 ### Community 38 - "esc"
 Cohesion: 0.10
