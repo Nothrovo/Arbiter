@@ -68,13 +68,24 @@ PIVOT_DEFINITIONS: dict[str, dict[str, str]] = {
     "url_path": {
         "label": "URL / Path",
         "sql": (
-            "COALESCE("
-            "NULLIF(split_part(NULLIF(a.data->>'url', ''), '?', 1), ''), "
-            "NULLIF(split_part(NULLIF(a.data->>'uri', ''), '?', 1), ''), "
-            "NULLIF(split_part(NULLIF(a.parsed_details->>'path', ''), '?', 1), ''), "
-            "NULLIF(split_part(NULLIF(a.parsed_details->>'uri', ''), '?', 1), ''), "
-            "NULLIF(split_part(NULLIF(a.parsed_details->>'url_path', ''), '?', 1), ''), "
-            "'Tidak tersedia')"
+            "CASE "
+            "WHEN COALESCE("
+            "NULLIF(a.data->>'url', ''), "
+            "NULLIF(a.data->>'uri', ''), "
+            "NULLIF(a.parsed_details->>'path', ''), "
+            "NULLIF(a.parsed_details->>'uri', ''), "
+            "NULLIF(a.parsed_details->>'url_path', ''), "
+            "'') = '' THEN 'Tidak tersedia' "
+            "WHEN split_part(COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), ''), '?', 1) IN ('', '/') "
+            "AND COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), '') LIKE '%?%' "
+            "THEN COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), '') "
+            "WHEN split_part(COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), ''), '?', 1) = '/index.php' "
+            "AND COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), '') LIKE '%?%' "
+            "THEN COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), '') "
+            "WHEN COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), '') LIKE '%rest_route=%' "
+            "THEN COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), '') "
+            "ELSE COALESCE(NULLIF(split_part(COALESCE(NULLIF(a.data->>'url', ''), NULLIF(a.data->>'uri', ''), NULLIF(a.parsed_details->>'path', ''), NULLIF(a.parsed_details->>'uri', ''), NULLIF(a.parsed_details->>'url_path', ''), ''), '?', 1), ''), '/') "
+            "END"
         ),
     },
     "user_agent": {
@@ -234,6 +245,7 @@ MALICIOUS_QUERY_RX = re.compile(
     r'(?i)(?:'
     r'%22|%27|%3C|%3E|%7C|[\"\'<>]|\|s\.|'
     r'rest_route=|'
+    r'author=\d+|'
     r'phpinfo=|'
     r'^/index\.php\?(?:lang|id|file|page)=|'
     r'\b1337\b'

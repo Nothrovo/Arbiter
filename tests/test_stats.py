@@ -237,10 +237,43 @@ class StatsEndpointContractTests(unittest.TestCase):
             data='{"url":"/wp-login.php?action=lostpassword","id":"400"}',
             parsed_details='{"log_type":"http"}',
         )
+        self.db.add_alert(
+            101, "Alpha",
+            alert_id="syn-101", timestamp="2026-01-01T12:31:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            data='{"url":"/?author=1","id":"400"}',
+            parsed_details='{"log_type":"http"}',
+        )
+        self.db.add_alert(
+            102, "Alpha",
+            alert_id="syn-102", timestamp="2026-01-01T12:32:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            data='{"url":"/?rest_route=/batch/v1","id":"400"}',
+            parsed_details='{"log_type":"http"}',
+        )
+        self.db.add_alert(
+            103, "Alpha",
+            alert_id="syn-103", timestamp="2026-01-01T12:33:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            data='{"url":"/","id":"400"}',
+            parsed_details='{"log_type":"http"}',
+        )
+        self.db.add_alert(
+            104, "Alpha",
+            alert_id="syn-104", timestamp="2026-01-01T12:34:00Z",
+            rule_id="31101", rule_level=5,
+            description="Web server 400 error code.",
+            data='{"url":"/index.php/sebatik/article/view/100?id=1","id":"400"}',
+            parsed_details='{"log_type":"http"}',
+        )
 
         res = self.client.get("/api/stats", params={
             "tenant": "Alpha",
             "pivot_by": "url_path",
+            "top_n": 50,
         })
         self.assertEqual(res.status_code, 200, res.text)
         data = res.json()
@@ -249,9 +282,13 @@ class StatsEndpointContractTests(unittest.TestCase):
         self.assertIn("/login.php", keys)
         self.assertIn("/admin.php", keys)
         self.assertIn("/index.html", keys)
-        # Ensure query strings are not attached as separate noisy keys
-        for key in keys:
-            self.assertNotIn("?", key)
+        # Root probe query strings are preserved individually
+        self.assertIn("/?author=1", keys)
+        self.assertIn("/?rest_route=/batch/v1", keys)
+        self.assertIn("/", keys)
+        # Deep application endpoints still clean query parameters
+        self.assertIn("/index.php/sebatik/article/view/100", keys)
+        self.assertNotIn("/index.php/sebatik/article/view/100?id=1", keys)
 
     def test_alerts_endpoint_respects_facet_drilldown(self):
         # syn-10 & syn-11 have description 'SQL injection probe'

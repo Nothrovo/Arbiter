@@ -270,6 +270,7 @@ export const BENIGN_WHITELIST_PATTERNS = [
 export const INJECTION_PATTERNS = [
   /%22|%27|%3C|%3E|%7C|[\"'<>|]/,
   /rest_route=/i,
+  /author=\d+/i,
   /phpinfo=/i,
 ];
 

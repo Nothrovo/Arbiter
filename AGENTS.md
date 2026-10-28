@@ -10,6 +10,16 @@ Analysts triage deduplicated alerts, inspect source intelligence, group evidence
 incident cases, author analysis/conclusions/recommendations, and produce scoped
 document deliverables (Google Docs HTML, Word .docx, Excel .xlsx, TSV, Markdown).
 
+## ⚡ Slash Command: /work (Autonomous Deep Engineering Mode)
+
+When user prompt includes `/work`:
+- **Full SOP Compliance:** Strictly follow `docs/AUTONOMOUS_ENGINEERING_SOP.md`.
+- **3–5 Relevant Skills:** Actively load and enforce at least 3 to 5 relevant skills (`writing-plans`, `subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `requesting-code-review`).
+- **Skill Sourcing:** If no matching skill is installed locally, search the catalog/hub or structure a procedural skill via `skill_manage` before executing. Never guess blindly.
+- **Auto todo_list:** Initialize structured task tracking at turn 1.
+- **Trace Every Seam & Negative Testing:** Enforce 8 layers from UI DOM to DB, eliminate decorative stubs, and assert negative exclusion.
+- Without `/work`, effort is proportional to the prompt without multi-agent overhead.
+
 ## Stack — do not migrate
 
 | Layer | Technology | Notes |
