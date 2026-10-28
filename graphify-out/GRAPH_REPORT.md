@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b8719e15`
+- Built from commit: `67a7a135`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -30,7 +30,7 @@
 - ⚡ Key Capabilities
 - UIAPIContractTests
 - AGENTS.md — Arbiter Project Context for AI Agents
-- Arbiter SOC Desk Upgrades Implementation Plan
+- query.py
 - reports/view.js
 - stats/view.js
 - scope.js
@@ -51,7 +51,7 @@
 - 4. Menjalankan aplikasi
 - 7. Alur data
 - 9. Database
-- query.py
+- Arbiter SOC Desk Upgrades Implementation Plan
 - esc
 - StatsEndpointContractTests
 - Struktur Proyek `ipintel/`
@@ -126,9 +126,9 @@ Nodes (23): 10. Official Deliverables (5 Export Paths), 1. Resilient Multi-Forma
 Cohesion: 0.14
 Nodes (13): AGENTS.md — Arbiter Project Context for AI Agents, Architecture (frontend), Design direction: Quiet Evidence Desk, Four destinations (not a monolithic page), Graph, Key policies, Privacy — STRICT, Running production (+5 more)
 
-### Community 16 - "Arbiter SOC Desk Upgrades Implementation Plan"
-Cohesion: 0.29
-Nodes (6): Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders, Task 3: Rich Forensic Correlation Cards, Task 4: Two-Way IP Intel Live Enrichment
+### Community 16 - "query.py"
+Cohesion: 0.22
+Nodes (4): get_alert_detail(), is_malicious_alert_record(), positive_ids(), tenant_clause()
 
 ### Community 17 - "reports/view.js"
 Cohesion: 0.12
@@ -202,9 +202,9 @@ Nodes (4): 7.1 Enrichment IP, 7.2 Impor SOC, 7.3 MISP / CTI, 7. Alur data
 Cohesion: 0.50
 Nodes (4): 9.1 Tabel inti, 9.2 Tabel CTI, 9.3 Tabel SOC, 9. Database
 
-### Community 37 - "query.py"
-Cohesion: 0.22
-Nodes (4): get_alert_detail(), is_malicious_alert_record(), positive_ids(), tenant_clause()
+### Community 37 - "Arbiter SOC Desk Upgrades Implementation Plan"
+Cohesion: 0.29
+Nodes (6): Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders, Task 3: Rich Forensic Correlation Cards, Task 4: Two-Way IP Intel Live Enrichment
 
 ### Community 38 - "esc"
 Cohesion: 0.10
