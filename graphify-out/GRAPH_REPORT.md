@@ -3,7 +3,7 @@
 ## Corpus Check
 - 99 files · ~83,851 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 13 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
+- Unclassified: 11 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
 
 ## Summary
 - 855 nodes · 1933 edges · 42 communities (32 shown, 10 thin omitted)
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bfd3ff48`
+- Built from commit: `4d4833ea`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -19,7 +19,7 @@
 - parser.py
 - normalize_tenants
 - test_ui_api.py
-- Control
+- incidents-view.test.mjs
 - main.py
 - Control
 - ApiIntegrationTests
@@ -30,7 +30,7 @@
 - ⚡ Key Capabilities
 - UIAPIContractTests
 - AGENTS.md — Arbiter Project Context for AI Agents
-- incidents-view.test.mjs
+- Control
 - incidents/render.js
 - stats/view.js
 - ref_node_assert
@@ -93,9 +93,9 @@ Nodes (25): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ol
 Cohesion: 0.27
 Nodes (11): add_group_members(), delete_group(), remove_group_member(), _scoped_groups(), update_alert_review(), update_group(), _validate_membership(), normalize_tenants() (+3 more)
 
-### Community 3 - "Control"
-Cohesion: 0.22
-Nodes (3): click(), Control, fixture()
+### Community 3 - "incidents-view.test.mjs"
+Cohesion: 0.25
+Nodes (3): context(), load(), SyntheticRoot
 
 ### Community 4 - "main.py"
 Cohesion: 0.18
@@ -125,9 +125,9 @@ Nodes (23): 10. Official Deliverables (5 Export Paths), 1. Resilient Multi-Forma
 Cohesion: 0.14
 Nodes (13): AGENTS.md — Arbiter Project Context for AI Agents, Architecture (frontend), Design direction: Quiet Evidence Desk, Four destinations (not a monolithic page), Graph, Key policies, Privacy — STRICT, Running production (+5 more)
 
-### Community 16 - "incidents-view.test.mjs"
-Cohesion: 0.25
-Nodes (3): context(), load(), SyntheticRoot
+### Community 16 - "Control"
+Cohesion: 0.22
+Nodes (3): click(), Control, fixture()
 
 ### Community 17 - "incidents/render.js"
 Cohesion: 0.10
