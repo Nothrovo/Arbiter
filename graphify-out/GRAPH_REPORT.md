@@ -1,17 +1,17 @@
 # Graph Report - Arbiter  (2026-10-28)
 
 ## Corpus Check
-- 99 files · ~84,789 words
+- 99 files · ~85,094 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: .woff2 4, (none) 3, .css 3)
 
 ## Summary
-- 858 nodes · 1946 edges · 42 communities (33 shown, 9 thin omitted)
+- 858 nodes · 1947 edges · 49 communities (40 shown, 9 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 60 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `67a7a135`
+- Built from commit: `1755bace`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -56,6 +56,13 @@
 - StatsEndpointContractTests
 - Struktur Proyek `ipintel/`
 - 8. Daftar route
+- Arbiter UI/UX Redesign — Quiet Evidence Desk
+- DESIGN.md
+- ui-ux-redesign/README.md
+- 8. Roadmap implementasi, tiap tahap bisa diverifikasi
+- 4. Wireframe dan first viewport
+- Layout
+- 5. Information architecture & interaction contracts
 
 ## God Nodes (most connected - your core abstractions)
 1. `esc()` - 50 edges
@@ -84,7 +91,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (42 total, 9 thin omitted)
+## Communities (49 total, 9 thin omitted)
 
 ### Community 0 - "parser.py"
 Cohesion: 0.06
@@ -111,12 +118,12 @@ Cohesion: 0.25
 Nodes (14): idx_wazuh_alerts_agent_name, idx_wazuh_alerts_reviewed, idx_wazuh_alerts_rule_id, idx_wazuh_alerts_rule_level, idx_wazuh_alerts_sig, idx_wazuh_alerts_source_ip, idx_wazuh_alerts_status, idx_wazuh_alerts_tenant (+6 more)
 
 ### Community 11 - "Arbiter — blueprint rombak UI/UX"
-Cohesion: 0.07
-Nodes (30): 10. Open decisions sebelum build, 1. Keputusan desain, 2. Sitemap yang diusulkan, 3. Apa yang boleh muncul di depan, 4. Wireframe dan first viewport, 5. Information architecture & interaction contracts, 6. Arsitektur module yang disarankan, 7. Kesiapan backend: pakai yang ada vs perlu kerja (+22 more)
+Cohesion: 0.17
+Nodes (12): 10. Open decisions sebelum build, 1. Keputusan desain, 2. Sitemap yang diusulkan, 3. Apa yang boleh muncul di depan, 6. Arsitektur module yang disarankan, 7. Kesiapan backend: pakai yang ada vs perlu kerja, 9. Acceptance checklist, Alternatif yang dibandingkan (+4 more)
 
 ### Community 12 - "Arbiter — audit UI/UX dan keputusan redesign"
-Cohesion: 0.04
-Nodes (40): Arbiter — audit UI/UX dan keputusan redesign, Bukti komposisi dan responsive, Detector Impeccable — hasil nyata, bukan daftar bug unik, Hallmark audit — subset yang sesuai operational app, Handoff, Metode dan batas bukti, Nielsen heuristics, Persona dan emotional journey (+32 more)
+Cohesion: 0.15
+Nodes (13): Arbiter — audit UI/UX dan keputusan redesign, Bukti komposisi dan responsive, Detector Impeccable — hasil nyata, bukan daftar bug unik, Hallmark audit — subset yang sesuai operational app, Handoff, Metode dan batas bukti, Nielsen heuristics, Persona dan emotional journey (+5 more)
 
 ### Community 13 - "⚡ Key Capabilities"
 Cohesion: 0.08
@@ -218,6 +225,34 @@ Nodes (6): 1. Tree + ukuran file, 2. Graph dependensi modul (siapa import siapa)
 Cohesion: 0.67
 Nodes (3): 8.1 Halaman, 8.2 API utama, 8. Daftar route
 
+### Community 42 - "Arbiter UI/UX Redesign — Quiet Evidence Desk"
+Cohesion: 0.18
+Nodes (11): Arbiter UI/UX Redesign — Quiet Evidence Desk, Arsitektur yang Terpasang, Audit (sebelum), Batas dan Catatan, Deliverable Desain, Evidence, Implementasi (sesudah), Keputusan Arsitektur Kunci (+3 more)
+
+### Community 43 - "DESIGN.md"
+Cohesion: 0.25
+Nodes (7): Colors, Components, Do's and Don'ts, Elevation & Depth, Overview, Shapes, Typography
+
+### Community 44 - "ui-ux-redesign/README.md"
+Cohesion: 0.29
+Nodes (3): Approved implementation contract — Arbiter, Direction contract, Integration boundary
+
+### Community 45 - "8. Roadmap implementasi, tiap tahap bisa diverifikasi"
+Cohesion: 0.29
+Nodes (7): 8. Roadmap implementasi, tiap tahap bisa diverifikasi, Phase 0 — safety & baseline, Phase 1 — modular foundation + shell, Phase 2 — triage-first experience, Phase 3 — insiden workspace, Phase 4 — impor dan laporan, Phase 5 — hardening & rollout
+
+### Community 46 - "4. Wireframe dan first viewport"
+Cohesion: 0.33
+Nodes (6): 4. Wireframe dan first viewport, A. Triage desktop, B. Insiden index dan case workspace, C. Impor, D. Laporan, E. Mobile
+
+### Community 47 - "Layout"
+Cohesion: 0.33
+Nodes (6): Global shell, Impor dan Laporan, Insiden, Layout, Responsive, Triage
+
+### Community 48 - "5. Information architecture & interaction contracts"
+Cohesion: 0.40
+Nodes (5): 5. Information architecture & interaction contracts, Accessibility, Editing dan destructive actions, Refresh, Scope
+
 ## Knowledge Gaps
 - **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -234,7 +269,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.171) - this node is a cross-community bridge._
 - **Should `test_ui_api.py` be split into smaller, more focused modules?**
   _Cohesion score 0.1076923076923077 - nodes in this community are weakly interconnected._
-- **Why does `selectedIds()` connect `scope.js` to `Arbiter — audit UI/UX dan keputusan redesign`?**
+- **Why does `selectedIds()` connect `scope.js` to `Arbiter UI/UX Redesign — Quiet Evidence Desk`?**
   _High betweenness centrality (0.142) - this node is a cross-community bridge._
 - **Should `main.py` be split into smaller, more focused modules?**
   _Cohesion score 0.14285714285714285 - nodes in this community are weakly interconnected._

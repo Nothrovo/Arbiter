@@ -91,6 +91,12 @@ export function mount(ctx) {
       }
 
       renderView();
+      if (query.secondary_facet && query.secondary_facet_value) {
+        setTimeout(() => {
+          const evidenceEl = root.querySelector('.drilldown-evidence-section');
+          evidenceEl?.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        }, 50);
+      }
     } catch (err) {
       if (err.name !== 'AbortError' && !signal?.aborted && session.isCurrent(version)) {
         let msg = err.message || 'Gagal memuat data statistik.';

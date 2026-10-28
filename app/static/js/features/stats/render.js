@@ -237,16 +237,30 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
   let secondaryBreakdownSection = '';
   if (data.secondary_breakdown && data.secondary_breakdown.length) {
     const secLabel = data.secondary_pivot ? (PIVOT_OPTIONS.find(([k]) => k === data.secondary_pivot)?.[1] || data.secondary_pivot) : 'Pivot Kedua';
+    const activeSubCat = query.secondary_facet_value;
+
+    let visibleBreakdown = activeSubCat
+      ? data.secondary_breakdown.filter(sb => sb.key === activeSubCat)
+      : data.secondary_breakdown;
+
+    if (activeSubCat && visibleBreakdown.length === 0) {
+      visibleBreakdown = [{
+        key: activeSubCat,
+        count: data.total || 0,
+        percentage: data.secondary_percentage_of_parent || 0,
+      }];
+    }
+
     const selectedSecSet = new Set(selectedSecondaryKeys);
-    const allSecSelected = data.secondary_breakdown.length > 0 && selectedSecondaryKeys.length === data.secondary_breakdown.length;
+    const allSecSelected = visibleBreakdown.length > 0 && selectedSecondaryKeys.length === visibleBreakdown.length;
     const primaryCategoryTotal = data.secondary_breakdown.reduce((acc, sb) => acc + (sb.count || 0), 0) || total || 1;
-    const totalSelectedAlerts = data.secondary_breakdown
+    const totalSelectedAlerts = visibleBreakdown
       .filter(sb => selectedSecSet.has(sb.key))
       .reduce((acc, sb) => acc + (sb.count || 0), 0);
     const selectedPercentage = Math.round((totalSelectedAlerts / primaryCategoryTotal) * 1000) / 10;
 
-    const secRows = data.secondary_breakdown.map(sb => {
-      const isFiltered = query.secondary_facet_value === sb.key;
+    const secRows = visibleBreakdown.map(sb => {
+      const isFiltered = activeSubCat === sb.key;
       const isChecked = selectedSecSet.has(sb.key);
       const isMalicious = isMaliciousPath(sb.key);
       const keyEsc = esc(sb.key);
@@ -285,22 +299,30 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
           <div>
             <h3>Rincian ${esc(secLabel)} (dalam "${esc(query.facet_value)}")</h3>
             <span class="meta">
-              ${data.secondary_breakdown.length} sub-kategori ditemukan
-              ${data.parent_total ? ` · Basis: ${data.parent_total.toLocaleString('id-ID')} ${metricLabel}` : ''}
-              ${data.primary_percentage_of_total !== undefined ? ` (<strong>${data.primary_percentage_of_total}%</strong> dari workspace)` : ''}
-              ${query.secondary_facet_value && data.secondary_percentage_of_parent !== undefined && data.secondary_percentage_of_parent !== null ? ` · Filter aktif: <strong style="color:var(--primary, #3b82f6);">${data.secondary_percentage_of_parent}%</strong> (${(data.total || 0).toLocaleString('id-ID')} ${metricLabel})` : ''}
+              ${activeSubCat ? `
+                Menyaring 1 sub-kategori (dari total ${data.secondary_breakdown.length} dalam "${esc(query.facet_value)}")
+                ${data.parent_total ? ` · Basis: ${data.parent_total.toLocaleString('id-ID')} ${metricLabel}` : ''}
+                ${data.secondary_percentage_of_parent !== undefined && data.secondary_percentage_of_parent !== null ? ` · Proporsi: <strong style="color:var(--primary, #3b82f6);">${data.secondary_percentage_of_parent}%</strong> (${(data.total || 0).toLocaleString('id-ID')} ${metricLabel})` : ''}
+              ` : `
+                ${data.secondary_breakdown.length} sub-kategori ditemukan
+                ${data.parent_total ? ` · Basis: ${data.parent_total.toLocaleString('id-ID')} ${metricLabel}` : ''}
+                ${data.primary_percentage_of_total !== undefined ? ` (<strong>${data.primary_percentage_of_total}%</strong> dari workspace)` : ''}
+              `}
             </span>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <button type="button" class="button" id="btn-malicious-spotter" title="Pilih otomatis semua sub-kategori yang mengandung pola mencurigakan (.env, credential, xmlrpc, config, git, admin, dll)">
-              ${icon('alert')} Malicious Spotter
-            </button>
-            <button type="button" class="button" id="btn-benign-spotter" title="Pilih otomatis semua sub-kategori yang tidak mengandung pola berbahaya (kebalikan dari Malicious Spotter)">
-              ${icon('check')} Benign Spotter
-            </button>
-            ${query.secondary_facet_value ? `
-              <button type="button" class="button text-button" id="btn-clear-secondary-drilldown">Tampilkan Semua Sub-kategori</button>
-            ` : ''}
+            ${activeSubCat ? `
+              <button type="button" class="button primary" id="btn-clear-secondary-drilldown">
+                ${icon('refresh')} Tampilkan Semua Sub-kategori (${data.secondary_breakdown.length})
+              </button>
+            ` : `
+              <button type="button" class="button" id="btn-malicious-spotter" title="Pilih otomatis semua sub-kategori yang mengandung pola mencurigakan (.env, credential, xmlrpc, config, git, admin, dll)">
+                ${icon('alert')} Malicious Spotter
+              </button>
+              <button type="button" class="button" id="btn-benign-spotter" title="Pilih otomatis semua sub-kategori yang tidak mengandung pola berbahaya (kebalikan dari Malicious Spotter)">
+                ${icon('check')} Benign Spotter
+              </button>
+            `}
           </div>
         </div>
 
@@ -442,6 +464,18 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
             </tbody>
           </table>
         </div>
+      </section>
+    `;
+  } else if (query.facet && query.facet_value) {
+    drilldownSection = `
+      <section class="panel stack drilldown-evidence-section" style="margin-top:24px;">
+        <div class="section-heading">
+          <div>
+            <h2>Bukti Alert Hasil Drill-down</h2>
+            <span class="meta">0 alert ditemukan (${esc(query.facet)} = "${esc(query.facet_value)}"${query.secondary_facet_value ? ` · ${esc(query.secondary_facet)} = "${esc(query.secondary_facet_value)}"` : ''})</span>
+          </div>
+        </div>
+        <p class="muted" style="padding:16px;">Tidak ada alert yang cocok dengan kriteria filter drill-down ini.</p>
       </section>
     `;
   }

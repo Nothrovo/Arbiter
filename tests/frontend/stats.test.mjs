@@ -277,3 +277,49 @@ test('renderAppliedFilters displays relative secondary percentage and parent tot
   assert.match(html, /75 alert · 10\.7% dari Web server 400 error code\./);
   assert.match(html, /6\.2% total/);
 });
+
+test('statsResults focuses breakdown table and shows drilldown alerts when secondary facet is active', async () => {
+  const {statsResults} = await import('../../app/static/js/features/stats/render.js');
+
+  const query = {
+    pivot_by: 'rule_description',
+    secondary_pivot: 'url_path',
+    facet: 'rule_description',
+    facet_value: 'Web server 400 error code.',
+    secondary_facet: 'url_path',
+    secondary_facet_value: '/wp-content/styles.css',
+    chart: 'table',
+  };
+
+  const data = {
+    metric: 'alerts',
+    total: 75,
+    parent_total: 703,
+    workspace_total: 1203,
+    secondary_percentage_of_parent: 10.7,
+    items: [{key: 'Web server 400 error code.', count: 75, displayPercentage: 100.0}],
+    secondary_breakdown: [
+      {key: '/wp-content/styles.css', count: 75, percentage: 10.7},
+      {key: '/wp-content/scripts.js', count: 72, percentage: 10.2},
+      {key: '/id/', count: 56, percentage: 8.0},
+    ],
+  };
+
+  const sampleAlerts = [
+    {id: 101, timestamp: '2026-10-28T12:00:00Z', rule_level: 5, description: 'Web server 400 error code.', rule_id: '31101', source_ip: '192.168.1.1'},
+  ];
+
+  const html = statsResults(data, query, {drilldownAlerts: sampleAlerts});
+
+  // Secondary table must only show the focused active category, NOT the other ones
+  assert.match(html, /\/wp-content\/styles\.css/);
+  assert.doesNotMatch(html, /\/wp-content\/scripts\.js/);
+  assert.doesNotMatch(html, /\/id\//);
+
+  // Must render button to restore all subcategories
+  assert.match(html, /Tampilkan Semua Sub-kategori \(3\)/);
+
+  // Must render drilldown evidence section with alerts
+  assert.match(html, /Bukti Alert Hasil Drill-down/);
+  assert.match(html, /#101/);
+});
