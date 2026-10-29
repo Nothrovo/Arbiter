@@ -5,6 +5,9 @@ import {summarizeTelemetryRange} from './model.js';
 export async function mount(ctx) {
   const {root, route, signal, notify, navigate} = ctx;
   let statusData = null, testResults = {};
+  let uriDraft = '';
+  ctx.setGuard?.(() => !uriDraft.trim());
+  root.addEventListener('input', () => { uriDraft = root.querySelector('#remote-url-input')?.value || ''; }, {signal});
   const currentTenant = route.params.get('tenant') || 'all';
 
   function render() {
@@ -26,7 +29,7 @@ export async function mount(ctx) {
         : '';
 
       const editURLHTML = p.id === 'remote'
-        ? `<div class="field" style="margin-top:12px;"><label for="remote-url-input"><span>Alamat Target PC Intel</span><span class="meta">PostgreSQL URI</span></label><div class="split" style="gap:8px;"><input class="input mono" id="remote-url-input" type="text" value="${esc(p.masked_url)}" placeholder="postgresql://user:pass@192.168.1.x:5432/abuseip"><button class="button" data-action="save-remote-url" type="button">Simpan URI</button></div></div>`
+        ? `<div class="field" style="margin-top:12px;"><label for="remote-url-input"><span>Alamat Target PC Intel</span><span class="meta">URI pengganti lengkap · kosong = tidak diubah</span></label><div class="split" style="gap:8px;"><input class="input mono" id="remote-url-input" type="password" autocomplete="new-password" value="" placeholder="Masukkan URI pengganti lengkap"><button class="button" data-action="save-remote-url" type="button">Simpan URI</button></div></div>`
         : '';
 
       return `
@@ -181,6 +184,8 @@ export async function mount(ctx) {
       </section>
     `;
 
+    const uriInput = root.querySelector('#remote-url-input');
+    if (uriInput) uriInput.value = uriDraft;
     // Bind preset change
     root.querySelector('#purge-alerts-preset')?.addEventListener('change', e => {
       const customDiv = root.querySelector('#purge-custom-time-range');
@@ -192,10 +197,13 @@ export async function mount(ctx) {
     try {
       statusData = await json(apiURL('/api/database/status'), {signal});
       render();
+      return true;
     } catch (err) {
       if (err.name !== 'AbortError') {
         root.innerHTML = errorState(`Gagal memuat status database: ${err.message}`);
+        notify(`Gagal memuat status database: ${err.message}`, 'error');
       }
+      return false;
     }
   }
 
@@ -207,8 +215,7 @@ export async function mount(ctx) {
 
     if (action === 'refresh-status') {
       btn.disabled = true;
-      await loadStatus();
-      notify('Status database diperbarui.', 'info');
+      if (await loadStatus()) notify('Status database diperbarui.', 'info');
       btn.disabled = false;
       return;
     }
@@ -237,6 +244,7 @@ export async function mount(ctx) {
 
     if (action === 'switch-profile') {
       const pid = btn.dataset.profile;
+      if (uriDraft.trim() && !confirm('Ada URI yang belum disimpan. Buang perubahan dan beralih database?')) return;
       if (!confirm(`Beralih koneksi ke database "${pid}"? Data aktif workspace akan menyesuaikan database yang dipilih.`)) return;
       btn.disabled = true;
       try {
@@ -246,6 +254,7 @@ export async function mount(ctx) {
           body: JSON.stringify({profile: pid}),
           signal,
         });
+        uriDraft = '';
         notify(`Berhasil beralih ke database ${pid}.`, 'success');
         await loadStatus();
       } catch (err) {
@@ -268,6 +277,7 @@ export async function mount(ctx) {
           body: JSON.stringify({profile: 'remote', url: val}),
           signal,
         });
+        uriDraft = '';
         notify('URI Remote PC Intel disimpan.', 'success');
         await loadStatus();
       } catch (err) {
@@ -372,7 +382,7 @@ export async function mount(ctx) {
       }
       return;
     }
-  });
+  }, {signal});
 
   await loadStatus();
   return () => {};

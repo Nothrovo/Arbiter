@@ -462,6 +462,28 @@ class UIAPIContractTests(unittest.TestCase):
         response = self.client.post("/api/intel/enrich", json={"ips": ["invalid-ip", "not_an_ip"]})
         self.assertEqual(response.status_code, 400)
 
+    def test_list_alerts_joins_ip_intel_cache_zero_abuse_score(self):
+        # Insert a synthetic IP with abuse_score = 0 in public.ip_intel_cache
+        self.db.connection.execute(
+            "INSERT INTO public.ip_intel_cache (ip, abuse_score, vt_malicious, country_code, isp, attack_types) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("198.51.100.77", 0, 0, "ID", "Synthetic ISP", "{}"),
+        )
+        self.db.add_alert(
+            999, "Alpha",
+            alert_id="syn-zero-intel",
+            source_ip="198.51.100.77",
+            description="Probe with clean intel",
+        )
+        res = self.client.get("/api/alerts", params={"tenant": "Alpha", "q": "syn-zero-intel"})
+        self.assertEqual(res.status_code, 200)
+        items = res.json()["items"]
+        self.assertEqual(len(items), 1)
+        alert = items[0]
+        self.assertEqual(alert["source_ip"], "198.51.100.77")
+        self.assertEqual(alert["abuse_score"], 0)
+        self.assertEqual(alert["vt_malicious"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

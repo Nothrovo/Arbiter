@@ -4,10 +4,14 @@ import {existsSync} from 'node:fs';
 const url = new URL('../../app/static/js/features/triage/model.js', import.meta.url);
 test('triage list keeps unknown intel distinct from zero detections and renders selected state safely', async () => {
   assert.ok(existsSync(url), 'triage view model exists');
-  const {intelSummary, renderQueue} = await import(url);
+  const {intelSummary, intelBadge, renderQueue} = await import(url);
   assert.match(intelSummary({source_ip:'192.0.2.10',abuse_score:null}), /Belum ada cache/);
-  assert.match(intelSummary({source_ip:'192.0.2.10',abuse_score:0,vt_malicious:0}), /Tidak ada deteksi/);
+  assert.match(intelSummary({source_ip:'192.0.2.10',abuse_score:0,vt_malicious:0}), /0% Low risk/);
   assert.doesNotMatch(intelSummary({abuse_score:0}), /Clean|Aman/);
+  assert.match(intelBadge({source_ip:'192.0.2.10',abuse_score:null}), /Belum ada cache/);
+  assert.match(intelBadge({source_ip:'192.0.2.10',abuse_score:0,vt_malicious:0}), /0% Low risk/);
+  assert.match(intelBadge({source_ip:'192.0.2.10',abuse_score:4,vt_malicious:0}), /Abuse 4%/);
+  assert.match(intelBadge({source_ip:'192.0.2.10',abuse_score:100,vt_malicious:0}), /Abuse 100%/);
   const row={id:1, description:'<script>synthetic</script>', tenant:'lab', agent_name:'Synthetic host', rule_level:10,hit_count:8};
   const html=renderQueue([row],{selectedIds:[1],activeId:1,query:{tenant:'all',sort_by:'timestamp',sort:'desc'}});
   assert.match(html,/&lt;script&gt;/);

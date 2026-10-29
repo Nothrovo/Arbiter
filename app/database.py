@@ -97,7 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_status ON wazuh.alerts((parsed_detai
 
 
 import time
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse, unquote
 
 _active_profile = ACTIVE_DB_PROFILE
 _db_profiles: dict[str, dict[str, Any]] = {
@@ -161,12 +161,16 @@ def update_profile_url(profile_id: str, new_url: str) -> dict[str, Any]:
     new_url = str(new_url).strip()
     if not (new_url.startswith("postgresql://") or new_url.startswith("postgres://")):
         raise HTTPException(status_code=400, detail="Connection URL must start with postgresql://")
+    if unquote(urlparse(new_url).password or "") == "***":
+        raise HTTPException(status_code=400, detail="Masked URI is display-only. Enter a complete replacement URI.")
     _db_profiles[profile_id]["url"] = new_url
     return get_active_profile()
 
 
-def test_db_connection(url: str | None = None) -> dict[str, Any]:
-    target_url = url or _db_profiles.get(_active_profile, _db_profiles["local"])["url"]
+def test_db_connection(url: str | None = None, *, profile_id: str | None = None) -> dict[str, Any]:
+    if profile_id is not None and profile_id not in _db_profiles:
+        raise HTTPException(status_code=400, detail="Unknown database profile.")
+    target_url = url or _db_profiles[profile_id or _active_profile]["url"]
     start_t = time.perf_counter()
     try:
         with psycopg.connect(target_url, connect_timeout=4, row_factory=dict_row) as conn:

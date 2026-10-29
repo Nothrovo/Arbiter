@@ -10,6 +10,11 @@ export function summaryRequestParams(query) {
   if (query.status && query.status !== 'all') p.set('status', query.status);
   if (query.group_id) p.set('group_id', query.group_id);
   if (query.review_status && query.review_status !== 'all') p.set('review_status', query.review_status);
+  if (query.time_preset) p.set('time_preset', query.time_preset);
+  if (query.secondary_facet && query.secondary_facet_value) {
+    p.set('secondary_facet', query.secondary_facet);
+    p.set('secondary_facet_value', query.secondary_facet_value);
+  }
   if (query.time_from) p.set('time_from', query.time_from);
   if (query.time_to) p.set('time_to', query.time_to);
   if (query.facet && query.facet_value) {
@@ -95,7 +100,7 @@ export function renderTriageSummary(data, query, {collapsed = false} = {}) {
 export function intelSummary(alert) {
   if (!alert.source_ip) return 'Tanpa source IP';
   if (alert.abuse_score === null || alert.abuse_score === undefined) return 'Belum ada cache';
-  if (Number(alert.abuse_score) === 0 && !Number(alert.vt_malicious)) return 'Tidak ada deteksi di cache';
+  if (Number(alert.abuse_score) === 0 && !Number(alert.vt_malicious)) return '0% Low risk';
   return `Abuse ${Number(alert.abuse_score)}%${Number(alert.vt_malicious) ? ` · VT ${Number(alert.vt_malicious)}` : ''}`;
 }
 
@@ -107,7 +112,7 @@ export function intelBadge(alert) {
   const score = Number(alert.abuse_score);
   const vt = Number(alert.vt_malicious) || 0;
   if (score === 0 && vt === 0) {
-    return '<span class="score-badge score-zero">Tidak ada deteksi di cache</span>';
+    return '<span class="score-badge score-zero" title="Skor Abuse 0% (Low risk)">0% Low risk</span>';
   }
   const cls = score >= 75 ? 'score-high' : score >= 25 ? 'score-med' : 'score-low';
   return `<span class="score-badge ${cls}">Abuse ${score}%${vt ? ` · VT ${vt}` : ''}</span>`;

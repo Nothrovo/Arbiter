@@ -71,25 +71,22 @@ export function mount(ctx) {
       const fetchParams = statsScopeParams(query);
       const data = await json(apiURL('/api/stats', fetchParams), {signal: activeRequest.signal});
       if (signal?.aborted || !session.isCurrent(version)) return;
-      currentData = data;
-
-      // If drilldown facet is active, fetch sample alerts for interactive evidence table
+      // If drilldown facet is active, fetch sample alerts for interactive evidence table.
+      // Failures must reach the error handler, never masquerade as empty evidence.
       if (query.facet && query.facet_value) {
-        try {
-          const sampleParams = statsScopeParams(query);
-          sampleParams.set('limit', '50');
-          sampleParams.set('summary', 'false');
-          const sampleData = await json(apiURL('/api/alerts', sampleParams), {signal: activeRequest.signal});
-          drilldownAlerts = sampleData.items || [];
-        } catch {
-          drilldownAlerts = [];
-        }
+        const sampleParams = statsScopeParams(query);
+        sampleParams.set('limit', '50');
+        sampleParams.set('summary', 'false');
+        const sampleData = await json(apiURL('/api/alerts', sampleParams), {signal: activeRequest.signal});
+        if (signal?.aborted || !session.isCurrent(version)) return;
+        drilldownAlerts = sampleData.items || [];
       } else {
         drilldownAlerts = null;
         selectedIds.clear();
         expandedLogIds.clear();
       }
 
+      currentData = data;
       renderView();
       if (query.secondary_facet && query.secondary_facet_value) {
         setTimeout(() => {
@@ -152,8 +149,9 @@ export function mount(ctx) {
       if (!groups.length) {
         selectEl.innerHTML = '<option value="">Belum ada kasus insiden pada scope ini</option>';
         if (hintEl) {
-          const ids = [...selectedIds].join(',');
-          hintEl.innerHTML = `Belum ada insiden aktif. <a href="#/incidents/new?tenant=${esc(query.tenant)}&alert_ids=${ids}" class="text-button" style="text-decoration:underline;">Buat kasus insiden baru sekarang &rarr;</a>`;
+          const params = new URLSearchParams({alert_ids: [...selectedIds].join(',')});
+          for (const tenant of activeTenants) params.append('tenant', tenant);
+          hintEl.innerHTML = `Belum ada insiden aktif. <a href="${esc(withParams('/incidents/new', params))}" class="text-button" style="text-decoration:underline;">Buat kasus insiden baru sekarang &rarr;</a>`;
         }
       } else {
         selectEl.innerHTML = '<option value="">Pilih insiden sasaran…</option>' +
@@ -501,7 +499,8 @@ export function mount(ctx) {
           notify('Tidak ada alert yang sesuai dengan filter spotter untuk kategori terpilih.', 'error');
           return;
         }
-        const p = new URLSearchParams({tenant: query.tenant, alert_ids: pks.join(',')});
+        const p = new URLSearchParams({alert_ids: pks.join(',')});
+        for (const tenant of tenantValues(query)) p.append('tenant', tenant);
         navigate(withParams('/incidents/new', p));
       } finally {
         btn.disabled = false;
@@ -556,7 +555,8 @@ export function mount(ctx) {
         notify('Pilih minimal satu alert terlebih dahulu.', 'error');
         return;
       }
-      const p = new URLSearchParams({tenant: query.tenant, alert_ids: ids.join(',')});
+      const p = new URLSearchParams({alert_ids: ids.join(',')});
+      for (const tenant of tenantValues(query)) p.append('tenant', tenant);
       navigate(withParams('/incidents/new', p));
       return;
     }

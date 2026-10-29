@@ -135,7 +135,11 @@ ${rawLog}`;
     const abort=()=>pageRequest?.abort();signal.addEventListener('abort',abort,{once:true});
     results.setAttribute('aria-busy','true');
     try {
-      const params=new URLSearchParams(route.params);params.set('summary',String(!showAllLogs));
+      const params=new URLSearchParams(route.params);
+      for(const key of new Set(scopeParams(query).keys()))params.delete(key);
+      for(const [key,value] of scopeParams(query))params.append(key,value);
+      params.set('limit',String(query.limit));params.set('offset',String(query.offset));
+      params.set('summary',String(!showAllLogs));
       const data=await json(apiURL('/api/alerts',params),{signal:pageRequest.signal});
       if(signal.aborted||version!==generation)return;
       if(!Array.isArray(data.items)||!Number.isFinite(Number(data.total)))throw new Error('Format antrean tidak valid. Coba lagi.');

@@ -916,6 +916,8 @@ def get_facet_alert_ids(payload: dict[str, Any]):
 @app.get("/api/triage/summary")
 def triage_summary(
     q: str = "",
+    secondary_facet: str = "",
+    secondary_facet_value: str = "",
     tenant: list[str] = Query(default=["all"]),
     status: str = "all",
     group_id: str | None = None,
@@ -939,6 +941,8 @@ def triage_summary(
         time_to=time_to,
         facet=facet,
         facet_value=facet_value,
+        secondary_facet=secondary_facet,
+        secondary_facet_value=secondary_facet_value,
     )
 
     with get_db() as conn:
@@ -1237,6 +1241,8 @@ def api_database_switch(payload: dict[str, Any]):
 def api_database_test(payload: dict[str, Any]):
     url = payload.get("url")
     if hasattr(db_module, "test_db_connection"):
+        if "profile" in payload:
+            return db_module.test_db_connection(url, profile_id=str(payload["profile"]).strip())
         return db_module.test_db_connection(url)
     return {"ok": True, "latency_ms": 1.0, "version": "PostgreSQL Mock"}
 
