@@ -334,6 +334,10 @@ export function mount(ctx) {
       }
       return;
     }
+    if (btn.dataset.excludeKey) {
+      updateRoute({exclude_facet: query.pivot_by, exclude_facet_value: btn.dataset.excludeKey});
+      return;
+    }
     if (btn.dataset.action === 'reset-stats') {
       const p = new URLSearchParams();
       for (const t of query.tenants) p.append('tenant', t);

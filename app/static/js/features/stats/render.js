@@ -249,6 +249,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         </td>
         <td class="actions-col" style="text-align:right;">
           <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik dan tampilkan bukti alert">Drill-down</button>
+          <button type="button" class="button text-button" data-exclude-key="${keyEsc}" title="Exclude kategori ini dari statistik">Exclude</button>
           <a class="button text-button" href="${triageUrl}" title="Lihat di antrean Triage">Triage</a>
         </td>
       </tr>

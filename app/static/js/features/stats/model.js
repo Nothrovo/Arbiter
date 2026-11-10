@@ -48,9 +48,15 @@ export function normalizeStatsQuery(params = new URLSearchParams()) {
   const facet_value = String(get('facet_value') || '').trim();
   const secondary_facet = String(get('secondary_facet') || '').trim();
   const secondary_facet_value = String(get('secondary_facet_value') || '').trim();
+  const secondary_facet = String(get('secondary_facet') || '').trim();
+  const secondary_facet_value = String(get('secondary_facet_value') || '').trim();
+  const exclude_facet = String(get('exclude_facet') || '').trim();
+  const exclude_facet_value = String(get('exclude_facet_value') || '').trim();
 
   return {
     ...base,
+    exclude_facet,
+    exclude_facet_value,
     pivot_by,
     secondary_pivot,
     metric,
@@ -63,6 +69,8 @@ export function normalizeStatsQuery(params = new URLSearchParams()) {
     facet_value,
     secondary_facet,
     secondary_facet_value,
+    exclude_facet,
+    exclude_facet_value,
   };
 }
 
@@ -99,6 +107,8 @@ export function statsScopeParams(query) {
   if (query.facet_value) p.set('facet_value', query.facet_value);
   if (query.secondary_facet) p.set('secondary_facet', query.secondary_facet);
   if (query.secondary_facet_value) p.set('secondary_facet_value', query.secondary_facet_value);
+  if (query.exclude_facet) p.set('exclude_facet', query.exclude_facet);
+  if (query.exclude_facet_value) p.set('exclude_facet_value', query.exclude_facet_value);
   return p;
 }
 

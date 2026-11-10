@@ -154,6 +154,7 @@ def alert_where(
     time_from: str | None = None, time_to: str | None = None,
     facet: str = "", facet_value: str = "",
     secondary_facet: str = "", secondary_facet_value: str = "",
+    exclude_facet: str = "", exclude_facet_value: str = "",
     alert_ids: str | Sequence[int | str] | None = None,
 ) -> tuple[str, list[Any]]:
     group_id = validated_group_id(group_id)
@@ -239,6 +240,11 @@ def alert_where(
         else:
             clauses.append(f"{FACET_COLUMNS[secondary_facet]} = %s")
             params.append(sec_val)
+    if exclude_facet and exclude_facet_value:
+        if exclude_facet in FACET_COLUMNS and str(exclude_facet_value).strip():
+            ex_val = str(exclude_facet_value).strip()
+            clauses.append(f"{FACET_COLUMNS[exclude_facet]} != %s")
+            params.append(ex_val)
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params
 
 

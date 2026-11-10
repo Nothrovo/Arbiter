@@ -674,6 +674,8 @@ def remove_group_member(group_id: str, alert_pk: int, tenant: list[str] = Query(
 def get_stats(
     pivot_by: str = "rule_description",
     secondary_pivot: str | None = None,
+    exclude_facet: str = "",
+    exclude_facet_value: str = "", 
     compare: str = "",
     metric: str = "alerts",
     top_n: int = 8,
@@ -695,6 +697,8 @@ def get_stats(
     facet_value: str = "",
     secondary_facet: str = "",
     secondary_facet_value: str = "",
+    exclude_pivot: str | None = None,
+    hide_reviewed: bool = False,
 ):
     if pivot_by not in PIVOT_DEFINITIONS:
         raise HTTPException(
@@ -736,6 +740,8 @@ def get_stats(
         facet_value=facet_value,
         secondary_facet=secondary_facet,
         secondary_facet_value=secondary_facet_value,
+        exclude_facet=exclude_facet,
+        exclude_facet_value=exclude_facet_value,
     )
     parent_where_sql, parent_base_params = alert_where(
         q=q,
@@ -1626,8 +1632,8 @@ def api_ai_triage(payload: dict[str, Any]):
         min_rule_level = int(7 if raw_min_level is None or str(raw_min_level).strip() == "" else raw_min_level)
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="limit dan min_rule_level harus berupa angka.") from None
-    if not 1 <= limit <= 5000:
-        raise HTTPException(status_code=400, detail="limit harus antara 1 dan 5000.")
+    if not 1 <= limit <= 100000:
+        raise HTTPException(status_code=400, detail="limit harus antara 1 dan 100000.")
     if not 0 <= min_rule_level <= 16:
         raise HTTPException(status_code=400, detail="min_rule_level harus antara 0 dan 16.")
 
