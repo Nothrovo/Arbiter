@@ -593,7 +593,14 @@ def ingest_alert_with_dedup(conn: psycopg.Connection, a: dict[str, Any]) -> tupl
         (alert_id, json.dumps([wazuh_id]), tenant),
     ).fetchone()
     if existing_by_id:
-        return False, False  # Exactly the same alert already in DB, safe ignore
+        existing_pk = existing_by_id["id"]
+        conn.execute(
+            """UPDATE wazuh.alerts 
+               SET hit_count = hit_count + 1, last_seen = %s 
+               WHERE id = %s""",
+            (timestamp, existing_pk),
+        )
+        return False, True
 
     # Safeguard 2: Signature deduplication across identical recurring logs
     instance_meta = {

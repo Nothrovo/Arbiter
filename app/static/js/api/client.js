@@ -52,8 +52,43 @@ export async function download(url, filename = 'Arbiter-report') {
   setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
 }
 export async function copyText(text) {
-  if (!navigator.clipboard?.writeText) throw new ApiError('Clipboard tidak tersedia. Gunakan unduh atau salin manual.');
-  await navigator.clipboard.writeText(text);
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (err) {
+      console.warn('Navigator clipboard failed, falling back to execCommand', err);
+    }
+  }
+  
+  // Fallback for non-secure contexts (HTTP) or unsupported browsers
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  
+  // Ensure the textarea is not visible but part of the DOM
+  textArea.style.position = "fixed";
+  textArea.style.left = "-9999px";
+  textArea.style.top = "0";
+  document.body.appendChild(textArea);
+  
+  textArea.focus();
+  textArea.select();
+  
+  try {
+    const successful = document.execCommand('copy');
+    if (!successful) throw new Error('execCommand copy failed');
+  } catch (err) {
+    // If all else fails, show a prompt for the user to manually copy
+    // Note: prompt() works even without secure context or interaction, but only for text.
+    // For very large logs it might be truncated, but it's better than nothing.
+    if (text.length < 2000) {
+        window.prompt('Sistem tidak dapat mengakses clipboard secara otomatis (karena alasan keamanan browser atau non-HTTPS). Silakan salin teks di bawah (Ctrl+C):', text);
+        return;
+    }
+    throw new Error('Gagal menyalin log: Clipboard tidak tersedia (keamanan browser). Gunakan tombol unduh jika tersedia.');
+  } finally {
+    document.body.removeChild(textArea);
+  }
 }
 export async function copyHTML(html) {
   if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new ApiError('Clipboard berformat tidak tersedia. Unduh atau buka preview untuk menyalin manual.');

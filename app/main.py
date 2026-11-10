@@ -32,6 +32,7 @@ from app.config import HOST, PORT
 from app.ai_triage import (
     AI_TRIAGE_STATE_KEY,
     current_wib_window_key,
+    get_triage_state_key,
     merge_triage_groups,
     safe_alerts,
     test_ollama,
@@ -1488,10 +1489,15 @@ def _sync_triage_groups_with_saved_incidents(
 
 
 @app.get("/api/ai/triage")
-def api_get_ai_triage():
+def api_get_ai_triage(tenant: list[str] = Query(None)):
     """Return the persisted AI triage state, automatically merging any new alerts within the 17:00 WIB window."""
+    norm_tenants = list(normalize_tenants(tenant)) or ["all"]
+    state_key = get_triage_state_key(norm_tenants)
     with get_db() as conn:
-        state = load_document(conn, AI_TRIAGE_STATE_KEY, None)
+        state = load_document(conn, state_key, None)
+        if state is None and state_key != AI_TRIAGE_STATE_KEY:
+             # Fallback to global state if specific tenant state not found
+             state = load_document(conn, AI_TRIAGE_STATE_KEY, None)
         if not isinstance(state, dict) or not isinstance(state.get("options"), dict):
             return {"saved": False, "result": None}
         options = state["options"]
@@ -1588,7 +1594,7 @@ def api_get_ai_triage():
             "alert_ids": list(dict.fromkeys(a["id"] for a in final_alerts)),
             "groups": groups,
         }
-        save_document(conn, AI_TRIAGE_STATE_KEY, updated_state)
+        save_document(conn, get_triage_state_key(norm_tenants), saved_state)
 
     return {
         "saved": True,
@@ -1725,7 +1731,7 @@ def api_ai_triage(payload: dict[str, Any]):
             "alert_ids": [a["id"] for a in alerts],
             "groups": groups,
         }
-        save_document(conn, AI_TRIAGE_STATE_KEY, saved_state)
+        save_document(conn, get_triage_state_key(norm_tenants), saved_state)
 
     return {
         "mode": mode,

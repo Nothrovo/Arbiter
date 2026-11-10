@@ -386,6 +386,28 @@ export async function mount(ctx) {
       state.tenantValue = event.target.value || 'all';
       const label = root.querySelector('#ai-tenant-label');
       if (label) label.textContent = activeTenantLabel();
+      
+      // Reload saved state for the new tenant selection
+      (async () => {
+        const resultsEl = root.querySelector('#ai-results');
+        if (resultsEl) resultsEl.innerHTML = loadingRows(2);
+        try {
+          const savedTriage = await json(`/api/ai/triage?${new URLSearchParams(activeTenants().map(t => ['tenant', t]))}`, {signal, timeout: 15000});
+          if (savedTriage?.saved && savedTriage.result) {
+            result = normalizeTriageResult(savedTriage.result);
+            const savedOpts = triageOptions(savedTriage.options || {});
+            state.severitySelection = savedOpts.severitySelection;
+            state.limit = savedOpts.limit;
+            state.reviewStatus = savedOpts.reviewStatus;
+            state.groupBy = savedOpts.groupBy;
+          } else {
+            result = null;
+          }
+          render();
+        } catch (err) {
+          console.error('Gagal memuat state triage tenant:', err);
+        }
+      })();
     } else if (event.target.name === 'min_rule_level') {
       state.severitySelection = parseSeveritySelection(event.target.value).selection;
     } else if (event.target.name === 'limit') {
@@ -419,7 +441,7 @@ export async function mount(ctx) {
     const [settingsBody, tenantsBody, savedTriage] = await Promise.all([
       json('/api/settings', {signal, timeout: 15000}),
       json('/api/tenants', {signal, timeout: 10000}).catch(() => ({tenants: []})),
-      json('/api/ai/triage', {signal, timeout: 20000}).catch(() => ({saved: false, result: null})),
+      json(`/api/ai/triage?${new URLSearchParams(activeTenants().map(t => ['tenant', t]))}`, {signal, timeout: 20000}).catch(() => ({saved: false, result: null})),
     ]);
     settings = normalizeSettings(settingsBody.settings);
     tenantList = Array.isArray(tenantsBody?.tenants) ? tenantsBody.tenants : [];
