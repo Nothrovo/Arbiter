@@ -26,7 +26,7 @@ services:
     environment:
       POSTGRES_DB: arbiter
       POSTGRES_USER: arbiter
-      POSTGRES_PASSWORD: arbiter_password
+      POSTGRES_PASSWORD: PASSWORD_BARU_KUAT
     ports:
       - "5432:5432"
     volumes:

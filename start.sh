@@ -13,7 +13,7 @@ if [ -f "$DIR/.env" ]; then
 fi
 
 PORT="${PORT:-8000}"
-HOST="${HOST:-127.0.0.1}"
+HOST="${HOST:-0.0.0.0}"
 
 # Use local virtual environment if present
 if [ -f "$DIR/.venv/bin/python" ]; then
