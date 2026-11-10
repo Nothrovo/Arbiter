@@ -1224,9 +1224,10 @@ def api_realtime_count():
 def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
     """Pull alerts in the configured severity range from the Wazuh Indexer and ingest them into the active DB.
 
-    Interval mode pulls on demand; daily mode only pulls once every 24 hours
-    (enforced server-side via ``realtime.last_pull_at``). Never downloads more
-    than ``realtime.max_alerts`` documents per call.
+    A manual pull (``force: true``) always runs, regardless of whether the
+    realtime monitor is enabled and regardless of the daily 24h gate. Scheduled
+    pulls keep the daily gate. Never downloads more than the requested
+    ``max_alerts`` documents per call (maximum 100000).
     """
     now = datetime.now(timezone.utc)
     with get_db() as conn:
@@ -1247,8 +1248,10 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
     custom_time_from = ""
     custom_time_to = ""
     custom_range = False
+    force_pull = False
 
     if isinstance(payload, dict):
+        force_pull = bool(payload.get("force") or payload.get("manual"))
         if "min_rule_level" in payload and payload["min_rule_level"] is not None and str(payload["min_rule_level"]).strip() != "":
             try:
                 min_rule_level = int(payload["min_rule_level"])
@@ -1274,8 +1277,8 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
                 pull_size = int(payload["max_alerts"])
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail="max_alerts harus berupa angka.") from None
-            if not 1 <= pull_size <= 5000:
-                raise HTTPException(status_code=400, detail="max_alerts harus antara 1 dan 5000.")
+            if not 1 <= pull_size <= 100000:
+                raise HTTPException(status_code=400, detail="max_alerts harus antara 1 dan 100000.")
         raw_from = str(payload.get("time_from") or payload.get("since") or "").strip()
         raw_to = str(payload.get("time_to") or payload.get("until") or "").strip()
         if raw_from:
@@ -1301,7 +1304,7 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
 
     mode = str(realtime.get("mode") or "interval")
     last_pull_at = "" if severity_changed else str(realtime.get("last_pull_at") or "").strip()
-    if not custom_range and mode == "daily" and last_pull_at:
+    if not custom_range and not force_pull and mode == "daily" and last_pull_at:
         try:
             last = datetime.fromisoformat(last_pull_at.replace("Z", "+00:00"))
             if last.tzinfo is None:
@@ -1345,7 +1348,9 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
             did_insert, did_dedup = ingest_alert_with_dedup(conn, normalized)
             if did_insert:
                 inserted += 1
-            elif did_dedup:
+            else:
+                # Covers both signature merges and alerts that already exist by
+                # alert_id/wazuh_id; both are "not new" for reporting purposes.
                 deduplicated += 1
         # Persist the pull timestamp and any updated severity selection.
         if not custom_range or not custom_time_to:
@@ -1360,6 +1365,10 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
         "searched": len(docs),
         "inserted": inserted,
         "deduplicated": deduplicated,
+        "max_alerts": pull_size,
+        # True when the indexer returned exactly the requested cap, meaning more
+        # matching alerts may exist beyond this pull.
+        "capped": len(docs) >= pull_size,
         "min_rule_level": min_rule_level,
         "max_rule_level": max_rule_level,
         "time_from": effective_since,
@@ -1604,11 +1613,11 @@ def api_get_ai_triage():
 def api_ai_triage(payload: dict[str, Any]):
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Payload AI triage tidak valid.")
-    raw_limit = payload.get("limit", 40)
-    raw_min_level = payload.get("min_rule_level", 7)
+    raw_limit = payload.get("limit")
+    raw_min_level = payload.get("min_rule_level")
     try:
-        limit = int(40 if raw_limit is None or raw_limit == "" else raw_limit)
-        min_rule_level = int(7 if raw_min_level is None or raw_min_level == "" else raw_min_level)
+        limit = int(40 if raw_limit is None or str(raw_limit).strip() == "" else raw_limit)
+        min_rule_level = int(7 if raw_min_level is None or str(raw_min_level).strip() == "" else raw_min_level)
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="limit dan min_rule_level harus berupa angka.") from None
     if not 1 <= limit <= 5000:

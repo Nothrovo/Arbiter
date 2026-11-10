@@ -231,8 +231,8 @@ export async function mount(ctx) {
             </div>
             <div class="field">
               <label for="realtime-max-alerts">Maksimal alert per pull</label>
-              <input class="input" id="realtime-max-alerts" name="max_alerts" type="number" min="1" max="5000" step="1" value="${esc(realtime.max_alerts)}">
-              <span class="meta">Batas dokumen yang ditarik dari Wazuh Indexer per siklus.</span>
+              <input class="input" id="realtime-max-alerts" name="max_alerts" type="number" min="1" max="100000" step="1" value="${esc(realtime.max_alerts)}">
+              <span class="meta">Batas dokumen yang ditarik dari Wazuh Indexer per siklus (1–100000).</span>
             </div>
             <div class="field">
               <span>Status tombol header</span>

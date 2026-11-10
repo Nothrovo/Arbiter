@@ -114,6 +114,13 @@ export async function mount(ctx) {
               <dd class="meta">Kosongkan "Sampai" untuk menarik hingga waktu saat ini (Now)</dd>
             </div>
             <div class="key-value">
+              <dt><label for="realtime-max-alerts">Maks alert/pull</label></dt>
+              <dd>
+                <input class="input mono" id="realtime-max-alerts" name="max_alerts" type="number" min="1" max="100000" step="1" value="${esc(customMaxAlerts || realtime.max_alerts)}">
+              </dd>
+              <dd class="meta">1–100000 dokumen per pull. Nilai disimpan ke Pengaturan.</dd>
+            </div>
+            <div class="key-value">
               <dt>Pull terakhir</dt>
               <dd>${latest ? esc(formatTime(latest.at)) : '—'}</dd>
               <dd class="meta">${latest?.duration ? `${latest.duration} ms` : 'Belum ada data'}</dd>
@@ -121,7 +128,7 @@ export async function mount(ctx) {
             <div class="key-value">
               <dt>Hasil terakhir</dt>
               <dd>${last}</dd>
-              <dd class="meta">Filter: ${esc(wazuh.index_pattern || 'wazuh-alerts-*')} · ${esc(sevLabel)} · maks ${realtime.max_alerts} alert/pull</dd>
+              <dd class="meta">Filter: ${esc(wazuh.index_pattern || 'wazuh-alerts-*')} · ${esc(sevLabel)} · maks ${(Number(customMaxAlerts) || realtime.max_alerts).toLocaleString('id-ID')} alert/pull</dd>
             </div>
             <div class="key-value">
               <dt>Indexer</dt>
@@ -137,11 +144,12 @@ export async function mount(ctx) {
 
         <section class="form-section realtime-card">
           <h2 class="section-heading">Riwayat sesi</h2>
-          ${history.length ? `<div class="table-region"><table class="data-table"><thead><tr><th>Waktu</th><th>Rentang</th><th>Status</th><th class="numeric">Baru</th><th class="numeric">Dedup</th></tr></thead><tbody>
+          ${history.length ? `<div class="table-region"><table class="data-table"><thead><tr><th>Waktu</th><th>Rentang</th><th>Status</th><th class="numeric">Diperiksa</th><th class="numeric">Baru</th><th class="numeric">Dedup/sudah ada</th></tr></thead><tbody>
             ${history.map(item => `<tr>
               <td class="mono">${esc(formatTime(item.at))}</td>
               <td class="mono" style="font-size:12px;">${esc(item.rangeLabel || 'Semua waktu')}</td>
               <td>${item.status === 'pulled' ? `<span class="inline-status" data-kind="success">Pull OK</span>` : item.status === 'skipped' ? `<span class="inline-status" data-kind="info">Dilewati (harian)</span>` : `<span class="inline-status" data-kind="error">${esc(item.error || 'Gagal')}</span>`}</td>
+              <td class="numeric num">${item.status === 'pulled' ? `${item.capped ? '≥ ' : ''}${item.searched.toLocaleString('id-ID')}` : '—'}</td>
               <td class="numeric num">${item.status === 'pulled' ? item.inserted.toLocaleString('id-ID') : '—'}</td>
               <td class="numeric num">${item.status === 'pulled' ? item.deduplicated.toLocaleString('id-ID') : '—'}</td>
             </tr>`).join('')}
@@ -150,13 +158,16 @@ export async function mount(ctx) {
       </div>`;
   }
 
-  async function pull() {
+  async function pull(manual = false) {
     if (pulling || !settings?.wazuh?.indexer_url) return;
     pulling = true;
     const started = performance.now();
     const payload = {
       min_rule_level: settings.realtime.min_rule_level,
       max_rule_level: settings.realtime.max_rule_level,
+      max_alerts: Number(customMaxAlerts) || settings.realtime.max_alerts,
+      // Manual pulls must run even when the monitor is off or daily-gated.
+      force: manual,
     };
     let rangeLabel = 'Semua waktu';
     const presetMs = {
@@ -191,7 +202,8 @@ export async function mount(ctx) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload),
         signal,
-        timeout: 60000,
+        // Large pulls (up to 100000 alerts) can take minutes; do not abort early.
+        timeout: 1800000,
       });
       history.unshift({
         at: result.pulled_at || new Date().toISOString(),
@@ -200,11 +212,17 @@ export async function mount(ctx) {
         searched: Number(result.searched) || 0,
         inserted: Number(result.inserted) || 0,
         deduplicated: Number(result.deduplicated) || 0,
+        max_alerts: Number(result.max_alerts) || 0,
+        capped: Boolean(result.capped),
         next_pull_at: result.next_pull_at || '',
         duration: Math.round(performance.now() - started),
       });
       if (result.status === 'pulled') {
-        notify(`${result.inserted} alert baru ditarik (${result.searched} diperiksa · ${result.deduplicated} dedup).`, 'success');
+        if (result.capped) {
+          notify(`${result.inserted} alert baru (${result.searched} diperiksa · ${result.deduplicated} dedup). Batas ${Number(result.max_alerts).toLocaleString('id-ID')} alert/pull tercapai — naikkan "Maks alert/pull" untuk menarik sisanya.`, 'warning');
+        } else {
+          notify(`${result.inserted} alert baru ditarik (${result.searched} diperiksa · ${result.deduplicated} dedup).`, 'success');
+        }
       } else if (result.status === 'skipped') {
         notify(result.reason || 'Pull harian dilewati.', 'info');
       }
@@ -250,6 +268,23 @@ export async function mount(ctx) {
       customTimeTo = event.target.value;
       return;
     }
+    if (event.target.name === 'max_alerts') {
+      const value = Number(event.target.value);
+      if (!Number.isFinite(value) || value < 1 || value > 100000) {
+        notify('Maks alert/pull harus antara 1 dan 100000.', 'warning');
+        render();
+        return;
+      }
+      customMaxAlerts = String(Math.trunc(value));
+      try {
+        await saveRealtime({max_alerts: Math.trunc(value)});
+        render();
+        notify(`Maks alert/pull diset ke ${Math.trunc(value).toLocaleString('id-ID')}.`, 'success');
+      } catch (error) {
+        if (error.name !== 'AbortError') notify(error.message, 'error');
+      }
+      return;
+    }
     if (event.target.name === 'realtime_severity') {
       const parsed = parseRealtimeSeverity(event.target.value);
       try {
@@ -272,7 +307,7 @@ export async function mount(ctx) {
 
   root.addEventListener('click', async event => {
     const action = event.target.closest('[data-action]')?.dataset.action;
-    if (action === 'pull') { await pull(); return; }
+    if (action === 'pull') { await pull(true); return; }
     if (action === 'toggle') {
       const button = event.target.closest('[data-action=toggle]');
       button.disabled = true;
@@ -281,7 +316,7 @@ export async function mount(ctx) {
         schedule();
         render();
         notify(settings.realtime.enabled ? 'Monitor realtime diaktifkan.' : 'Monitor realtime dimatikan.', settings.realtime.enabled ? 'success' : 'info');
-        if (settings.realtime.enabled) await pull();
+        if (settings.realtime.enabled) await pull(true);
       } catch (error) {
         if (error.name !== 'AbortError') notify(error.message, 'error');
       } finally {

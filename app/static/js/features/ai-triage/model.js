@@ -74,7 +74,7 @@ export function parseSeveritySelection(value) {
   if (raw === '0-6' || raw === '0') return {selection: '0-6', minRuleLevel: 0, maxRuleLevel: 6};
   if (raw === '7-11' || raw === '7' || raw === '') return {selection: '7-11', minRuleLevel: 7, maxRuleLevel: 11};
   if (raw === '12-14' || raw === '12') return {selection: '12-14', minRuleLevel: 12, maxRuleLevel: 14};
-  if (raw === '15+' || raw === '15') return {selection: '15', minRuleLevel: 15, maxRuleLevel: null};
+  if (raw === '15+' || raw === '15' || raw === '15-16') return {selection: '15', minRuleLevel: 15, maxRuleLevel: 16};
   const minRuleLevel = boundedInteger(raw, 7, 0, 16);
   return {selection: String(minRuleLevel), minRuleLevel, maxRuleLevel: null};
 }

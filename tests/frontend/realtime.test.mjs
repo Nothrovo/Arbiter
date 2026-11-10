@@ -15,7 +15,10 @@ test('realtime settings normalize daily mode and max_alerts bounds', async () =>
   assert.equal(merged.realtime.max_alerts, 1);
   assert.equal(merged.realtime.last_pull_at, '2026-01-01T00:00:00+00:00');
 
-  const bad = normalizeSettings({realtime: {mode: 'bogus', max_alerts: 999999}});
+  const max = normalizeSettings({realtime: {max_alerts: 100000}});
+  assert.equal(max.realtime.max_alerts, 100000, '100000 is the supported maximum');
+
+  const bad = normalizeSettings({realtime: {mode: 'bogus', max_alerts: 100001}});
   assert.equal(bad.realtime.mode, 'interval', 'unknown mode falls back to interval');
   assert.equal(bad.realtime.max_alerts, 500, 'out-of-range max_alerts falls back to 500');
 

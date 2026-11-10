@@ -227,6 +227,26 @@ docker compose up -d --build
 ```
 Open **`http://localhost:8000`**.
 
+#### Connecting to a Neuropetra `ip_intel` database
+
+Neuropetra keeps its Postgres on an internal Docker network with no published port. To expose it to Arbiter (which uses `network_mode: host`), run the loopback-only socat overlay from the **Neuropetra** repository:
+
+```bash
+docker compose --env-file .runtime/secrets/compose.env \
+  -f docker-compose.yml -f compose.postgres.yml -f compose.operator.yml \
+  -f compose.dblink.yml up -d postgres arbiter-db-link
+```
+
+Then set the read-only endpoint in Arbiter's `.env`:
+
+```bash
+REMOTE_DATABASE_URL=postgresql://ip_intel_read_login:CHANGE_ME@127.0.0.1:5433/ip_intel
+```
+
+Keep `DATABASE_URL` on `127.0.0.1:5432` (Arbiter's own `arbiter-db`) and do **not** change Neuropetra's internal Postgres port. Full runbook: `Neuropetra-IP/docs/ARBITER-NEUROPETRA-INTEGRATION.md`.
+
+If Arbiter also runs as a systemd service (`Arbiter.service`), disable it before starting the container — both bind port `8000`.
+
 ---
 
 ### Method C: Local Python Setup (Without Docker)

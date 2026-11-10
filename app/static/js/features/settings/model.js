@@ -95,7 +95,7 @@ export function normalizeSettings(value) {
   if (!['interval', 'daily'].includes(base.realtime.mode)) base.realtime.mode = 'interval';
   base.realtime.last_pull_at = String(base.realtime.last_pull_at || '');
   const maxAlerts = Number(base.realtime.max_alerts);
-  base.realtime.max_alerts = Number.isFinite(maxAlerts) && maxAlerts >= 1 && maxAlerts <= 5000 ? maxAlerts : 500;
+  base.realtime.max_alerts = Number.isFinite(maxAlerts) && maxAlerts >= 1 && maxAlerts <= 100000 ? Math.trunc(maxAlerts) : 500;
   const minLevel = Number(base.realtime.min_rule_level);
   base.realtime.min_rule_level = Number.isFinite(minLevel) && minLevel >= 0 && minLevel <= 16 ? Math.trunc(minLevel) : 7;
   const maxLevelRaw = base.realtime.max_rule_level;

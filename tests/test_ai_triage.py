@@ -268,7 +268,7 @@ class AITriageAPITests(unittest.TestCase):
         for payload, field in [
             ({"realtime": {"mode": "hourly"}}, "mode"),
             ({"realtime": {"max_alerts": 0}}, "max_alerts"),
-            ({"realtime": {"max_alerts": 99999}}, "max_alerts"),
+            ({"realtime": {"max_alerts": 100001}}, "max_alerts"),
         ]:
             response = self.client.put("/api/settings", json=payload)
             self.assertEqual(response.status_code, 400, response.text)
@@ -345,6 +345,20 @@ class AITriageAPITests(unittest.TestCase):
         self.assertEqual(call_kwargs["since"], "2026-11-08T17:00:00+0700")
         self.assertEqual(call_kwargs["until"], "2026-11-09T09:30:00+0700")
         self.assertEqual(call_kwargs["size"], 1000)
+
+    def test_manual_pull_bypasses_daily_gate_and_accepts_100000(self):
+        from datetime import datetime, timedelta, timezone
+        recent = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        self.client.put("/api/settings", json={
+            "wazuh": {"indexer_url": "https://wazuh.lab:9200", "username": "analyst", "password": "stored"},
+            "realtime": {"mode": "daily", "last_pull_at": recent},
+        })
+        with patch.object(self.api, "wazuh_search", return_value=[]) as mocked:
+            response = self.client.post("/api/realtime/pull", json={"force": True, "max_alerts": 100000})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "pulled")
+        mocked.assert_called_once()
+        self.assertEqual(mocked.call_args.kwargs["size"], 100000)
 
     def test_ai_triage_save_persists_verdict_groups(self):
         self.db.add_alert(4, "Alpha", rule_level=10, description="brute force", source_ip="1.2.3.4")

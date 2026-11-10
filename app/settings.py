@@ -179,8 +179,8 @@ def validate_settings(payload: dict[str, Any], current: dict[str, Any] | None = 
         max_alerts = int(realtime.get("max_alerts", 500))
     except (TypeError, ValueError):
         raise ValueError("realtime.max_alerts harus berupa angka.") from None
-    if not 1 <= max_alerts <= 5000:
-        raise ValueError("realtime.max_alerts harus antara 1 dan 5000.")
+    if not 1 <= max_alerts <= 100000:
+        raise ValueError("realtime.max_alerts harus antara 1 dan 100000.")
     realtime["max_alerts"] = max_alerts
 
     raw_min_level = realtime.get("min_rule_level", MIN_RULE_LEVEL)
@@ -585,6 +585,12 @@ def _http_error_reason(error: urllib.error.HTTPError) -> str:
     return ""
 
 
+MAX_WAZUH_SEARCH_SIZE = 100000
+# OpenSearch/Elasticsearch default max_result_window is 10,000, so pages must
+# stay well below it. search_after is used to walk beyond that window.
+_WAZUH_SEARCH_PAGE = 2000
+
+
 def wazuh_search(
     *,
     indexer_url: str,
@@ -597,12 +603,14 @@ def wazuh_search(
     until: str = "",
     min_rule_level: int = MIN_RULE_LEVEL,
     max_rule_level: int | None = None,
-    timeout: float = 10.0,
+    timeout: float = 60.0,
 ) -> list[dict[str, Any]]:
     """Pull alert documents from the Wazuh Indexer within the configured severity range.
 
     Returns a list of raw ``_source`` documents (newest first). ``since`` and ``until``
-    are optional timestamp bounds on the alert ``timestamp`` field.
+    are optional timestamp bounds on the alert ``timestamp`` field. Up to
+    ``MAX_WAZUH_SEARCH_SIZE`` documents are fetched with ``search_after`` paging so
+    the result window limit does not cap the pull.
     """
     base = str(indexer_url or "").strip().rstrip("/")
     if not base or not _URL.match(base):
@@ -610,8 +618,10 @@ def wazuh_search(
     pattern = str(index_pattern or "wazuh-alerts-*").strip()
     if not _INDEX_PATTERN.match(pattern):
         raise ValueError("Pola indeks tidak valid.")
-    if not 1 <= int(size) <= 5000:
-        raise ValueError("Ukuran pencarian Wazuh harus antara 1 dan 5000.")
+    if not 1 <= int(size) <= MAX_WAZUH_SEARCH_SIZE:
+        raise ValueError(
+            f"Ukuran pencarian Wazuh harus antara 1 dan {MAX_WAZUH_SEARCH_SIZE}."
+        )
 
     level_range: dict[str, int] = {"gte": int(min_rule_level)}
     if max_rule_level is not None:
@@ -631,31 +641,65 @@ def wazuh_search(
     query_obj: dict[str, Any] = (
         must_clauses[0] if len(must_clauses) == 1 else {"bool": {"must": must_clauses}}
     )
-    payload = {
-        "size": int(size),
-        "query": query_obj,
-        "sort": [{"timestamp": {"order": "desc"}}],
-    }
+
     target = f"{base}/{urllib.parse.quote(pattern, safe='*-._,')}/_search"
-    request = urllib.request.Request(
-        target,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
-    )
-    if username:
-        token = base64.b64encode(f"{username}:{password}".encode()).decode()
-        request.add_header("Authorization", f"Basic {token}")
     opener = _wazuh_opener(base, username, password, verify_tls)
-    status, raw = _wazuh_request(opener, request, timeout)
-    try:
-        parsed = json.loads(raw.decode("utf-8") or "{}")
-    except ValueError:
-        raise ValueError("Respons Wazuh Indexer bukan JSON yang valid.") from None
-    hits = parsed.get("hits", {}) if isinstance(parsed, dict) else {}
-    outer = hits.get("hits", []) if isinstance(hits, dict) else []
+    auth_header = ""
+    if username:
+        auth_header = "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()
+
+    # `_id` is used as a tiebreaker so equal timestamps cannot be skipped or
+    # repeated between pages. Fall back to timestamp-only if the index rejects it.
+    sort_options: list[list[dict[str, Any]]] = [
+        [{"timestamp": {"order": "desc"}}, {"_id": {"order": "desc"}}],
+        [{"timestamp": {"order": "desc"}}],
+    ]
+    sort_spec: list[dict[str, Any]] | None = None
+
+    remaining = int(size)
+    search_after: list[Any] | None = None
     docs: list[dict[str, Any]] = []
-    for hit in outer:
-        if isinstance(hit, dict) and isinstance(hit.get("_source"), dict):
-            docs.append(hit["_source"])
+    while remaining > 0:
+        batch_size = min(remaining, _WAZUH_SEARCH_PAGE)
+        last_error: ValueError | None = None
+        outer: list[dict[str, Any]] = []
+        for candidate in (sort_options if sort_spec is None else [sort_spec]):
+            payload: dict[str, Any] = {
+                "size": batch_size,
+                "query": query_obj,
+                "sort": candidate,
+                "track_total_hits": False,
+            }
+            if search_after:
+                payload["search_after"] = search_after
+            request = urllib.request.Request(
+                target,
+                data=json.dumps(payload).encode("utf-8"),
+                method="POST",
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
+            if auth_header:
+                request.add_header("Authorization", auth_header)
+            try:
+                status, raw = _wazuh_request(opener, request, timeout)
+                parsed = json.loads(raw.decode("utf-8") or "{}")
+            except ValueError as error:
+                last_error = error
+                continue
+            hits = parsed.get("hits", {}) if isinstance(parsed, dict) else {}
+            outer = hits.get("hits", []) if isinstance(hits, dict) else []
+            sort_spec = candidate
+            last_error = None
+            break
+        if last_error is not None and not outer:
+            raise last_error
+        if not outer:
+            break
+        for hit in outer:
+            if isinstance(hit, dict) and isinstance(hit.get("_source"), dict):
+                docs.append(hit["_source"])
+        remaining -= len(outer)
+        search_after = outer[-1].get("sort") if isinstance(outer[-1], dict) else None
+        if not search_after or len(outer) < batch_size:
+            break
     return docs
