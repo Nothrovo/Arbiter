@@ -95,13 +95,23 @@ def _resolve_remote_db_url() -> str:
     return str(REMOTE_DATABASE_URL or "").strip()
 
 
+def _remote_profile_read_only() -> bool:
+    """Whether the active Remote profile is read-only (fail closed on unknown state)."""
+    try:
+        import app.database as _db_mod
+        prof = getattr(_db_mod, "_db_profiles", {}).get("remote", {})
+        return str(prof.get("mode") or "read_only") == "read_only"
+    except Exception:
+        return True
+
+
 def _safe_remote_cache_error(exc: Exception) -> str:
     """Translate database failures without leaking a DSN, host credentials, or raw SQL."""
     text = str(exc).lower()
     if "password authentication failed" in text or "authentication failed" in text:
         return "Autentikasi database IP Intel (Remote) gagal. Periksa URI profil PC Intel di menu Database."
     if "could not translate host name" in text or "name or service not known" in text:
-        return "Host database IP Intel (Remote) tidak dapat ditemukan."
+        return "Host database IP Intel (Remote) tidak dapat ditemukan. Gunakan alamat yang bisa diakses dari container Arbiter (mis. 127.0.0.1:5433 untuk jembatan socat)."
     if any(hint in text for hint in ("connection refused", "could not connect", "timeout", "timed out", "connection failed")):
         return "Database IP Intel (Remote) tidak dapat dihubungi. Pastikan sidecar/jembatan database berjalan."
     if "permission denied" in text:
@@ -343,9 +353,12 @@ def upsert_ip_cache(conn: Any, enriched: dict[str, Any]) -> None:
 
 
 def sync_remote_cache(enriched_list: list[dict[str, Any]], remote_url: str | None = None) -> None:
-    """Attempts best-effort mirror to remote IP Intel database if reachable."""
+    """Best-effort mirror to the Remote IP Intel database, honoring its read-only mode."""
     target_url = str(remote_url or _resolve_remote_db_url()).strip()
     if not target_url or not enriched_list:
+        return
+    if _remote_profile_read_only():
+        logger.debug("Remote cache sync skipped: profile is read-only")
         return
     try:
         import psycopg  # type: ignore

@@ -14,6 +14,8 @@ test('settings Intel panel exposes a read-only Neuropetra cache probe', () => {
   assert.match(settingsView, /\/api\/intel\/cache\/test/);
   assert.match(settingsView, /Tes cache Neuropetra/);
   assert.match(settingsView, /tidak memanggil AbuseIPDB/);
+  assert.match(settingsView, /tetap <strong>read-only<\/strong>/);
+  assert.match(settingsView, /127\.0\.0\.1:5433/);
   assert.match(settingsView, /#\/database/);
   assert.match(settingsView, /renderIntelStatus\(`Ditemukan di \$\{result\.source_table/);
 });

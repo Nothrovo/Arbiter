@@ -1,0 +1,90 @@
+/* Arbiter themes — override design tokens via html[data-theme].
+   Default (dark) lives in tokens.css :root. Each theme swaps the full
+   neutral + semantic palette, so every surface, table, badge and chart
+   re-themes without touching component CSS. */
+
+/* ── Terang ── */
+html[data-theme="light"]{
+  color-scheme:light;
+  --ground:#f4f4f5;--surface:#ffffff;--raised:#ffffff;--hover:#ececec;
+  --text:#18181b;--muted:#52525b;--border:#d4d4d8;--control:#71717a;
+  --inverse:#ffffff;
+  --critical:#dc2626;--critical-bg:#fee2e2;
+  --warning:#b45309;--warning-bg:#fef3c7;
+  --success:#15803d;--success-bg:#dcfce7;
+  --info:#2563eb;--info-bg:#dbeafe;
+  --scrim:rgb(0 0 0 / .4);--float-shadow:0 12px 32px rgb(0 0 0 / .18);
+}
+
+/* ── Midnight (biru dingin) ── */
+html[data-theme="midnight"]{
+  color-scheme:dark;
+  --ground:#0b1020;--surface:#121a2f;--raised:#1b2740;--hover:#223049;
+  --text:#eaf0ff;--muted:#9aa7c7;--border:#2b3a5c;--control:#6b7ba0;
+  --inverse:#0b1020;
+  --critical:#ff9d9d;--critical-bg:#3a1d27;
+  --warning:#eac56f;--warning-bg:#33290f;
+  --success:#8fe0b0;--success-bg:#12291d;
+  --info:#7cc7ff;--info-bg:#10263a;
+  --scrim:rgb(0 0 0 / .7);--float-shadow:0 12px 32px rgb(0 0 0 / .5);
+}
+
+/* ── Ember (amber hangat) ── */
+html[data-theme="ember"]{
+  color-scheme:dark;
+  --ground:#17120b;--surface:#201910;--raised:#2a2114;--hover:#332819;
+  --text:#f7ead5;--muted:#bfa98a;--border:#403424;--control:#8a7454;
+  --inverse:#17120b;
+  --critical:#ff9d8f;--critical-bg:#3a2018;
+  --warning:#f0c46a;--warning-bg:#33270f;
+  --success:#a7dca0;--success-bg:#1c2b17;
+  --info:#f0b96a;--info-bg:#332a13;
+  --scrim:rgb(0 0 0 / .65);--float-shadow:0 12px 32px rgb(0 0 0 / .4);
+}
+
+/* ── Hutan (hijau terminal lembut) ── */
+html[data-theme="forest"]{
+  color-scheme:dark;
+  --ground:#0d1410;--surface:#131c15;--raised:#1b271d;--hover:#223022;
+  --text:#e6f2e6;--muted:#9db49d;--border:#2c3a2e;--control:#6b826e;
+  --inverse:#0d1410;
+  --critical:#ff9d9d;--critical-bg:#3a1d1d;
+  --warning:#e3c06a;--warning-bg:#332a12;
+  --success:#8ee6a0;--success-bg:#16261a;
+  --info:#a3d9b0;--info-bg:#162a1c;
+  --scrim:rgb(0 0 0 / .65);--float-shadow:0 12px 32px rgb(0 0 0 / .4);
+}
+
+/* ── Violet ── */
+html[data-theme="violet"]{
+  color-scheme:dark;
+  --ground:#140f1e;--surface:#1b1528;--raised:#251d33;--hover:#2e2440;
+  --text:#f0e9fb;--muted:#b3a6cf;--border:#3a2f52;--control:#7d6fa3;
+  --inverse:#140f1e;
+  --critical:#ff9db1;--critical-bg:#3a1c28;
+  --warning:#e6c47a;--warning-bg:#332a14;
+  --success:#9be3b0;--success-bg:#17291d;
+  --info:#c0a8ff;--info-bg:#241c3d;
+  --scrim:rgb(0 0 0 / .7);--float-shadow:0 12px 32px rgb(0 0 0 / .5);
+}
+
+/* ── Kontras tinggi ── */
+html[data-theme="contrast"]{
+  color-scheme:dark;
+  --ground:#000000;--surface:#0a0a0a;--raised:#151515;--hover:#1f1f1f;
+  --text:#ffffff;--muted:#d4d4d4;--border:#ffffff;--control:#cccccc;
+  --inverse:#000000;
+  --critical:#ff6b6b;--critical-bg:#1a0000;
+  --warning:#ffe066;--warning-bg:#1a1400;
+  --success:#6bff9e;--success-bg:#001a08;
+  --info:#6bc5ff;--info-bg:#00121a;
+  --scrim:rgb(0 0 0 / .85);--float-shadow:0 12px 32px rgb(0 0 0 / .7);
+}
+
+/* ── Theme picker UI (settings > Tampilan) ── */
+.theme-picker{display:flex;flex-wrap:wrap;gap:8px}
+.theme-option{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--surface);color:var(--text);cursor:pointer;font-weight:500}
+.theme-option .theme-dot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgb(127 127 127 / .5)}
+.theme-option:hover{background:var(--hover)}
+.theme-option.active{border-color:var(--control);box-shadow:inset 0 0 0 1px var(--control)}
+.theme-option.active::after{content:"✓";font-weight:600}

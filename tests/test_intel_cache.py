@@ -185,6 +185,7 @@ class RemoteSyncTests(unittest.TestCase):
                 return connection
 
         with patch.dict(sys.modules, {"psycopg": FakePsycopg("psycopg")}), \
+                patch.object(intel, "_remote_profile_read_only", return_value=False), \
                 patch.object(intel, "_resolve_remote_db_url", return_value="postgresql://redacted@localhost/db"):
             intel.sync_remote_cache([
                 {"ip": "9.9.9.9", "status": "enriched", "abuse_score": 70, "cache_source": "ip_intel_reputation"},
@@ -192,6 +193,16 @@ class RemoteSyncTests(unittest.TestCase):
             ])
         self.assertEqual(len(connection.cur.executed), 1)
         self.assertIn("9.9.9.10", connection.cur.executed[0][1])
+
+    def test_read_only_remote_profile_never_opens_a_write_connection(self):
+        class ExplodingPsycopg(types.ModuleType):
+            def connect(self, *_args, **_kwargs):
+                raise AssertionError("read-only profile must not attempt a remote write")
+
+        with patch.dict(sys.modules, {"psycopg": ExplodingPsycopg("psycopg")}), \
+                patch.object(intel, "_remote_profile_read_only", return_value=True), \
+                patch.object(intel, "_resolve_remote_db_url", return_value="postgresql://redacted@localhost/db"):
+            intel.sync_remote_cache([{"ip": "9.9.9.10", "status": "enriched", "abuse_score": 10}])
 
 
 class EnrichFallbackTests(unittest.TestCase):

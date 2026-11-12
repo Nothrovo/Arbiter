@@ -1,5 +1,6 @@
 import {json} from '../../api/client.js';
 import {esc, icon, errorState, loadingRows} from '../../ui/primitives.js';
+import {THEMES, getTheme, applyTheme} from '../../ui/theme.js';
 import {
   REALTIME_SEVERITY_OPTIONS,
   normalizeOllamaBaseUrl,
@@ -316,7 +317,7 @@ export async function mount(ctx) {
           <div class="split">
             <div>
               <h2 class="section-heading">IP Intel &amp; Live Enrich</h2>
-              <p class="meta">Atur alamat web project <strong>IP Intel</strong> untuk tombol <em>Buka IP Intel ↗</em> di Triage, serta kunci API AbuseIPDB untuk tombol <em>Live Enrich</em>. Saat Live Enrich ditekan, hasil reputasi IP disimpan ke database aktif dan otomatis disinkronkan ke database <strong>PC Intel (Remote)</strong> yang diatur di menu <a href="#/database">Database</a>.</p>
+              <p class="meta">Atur alamat web project <strong>IP Intel</strong> untuk tombol <em>Buka IP Intel ↗</em> di Triage, serta kunci API AbuseIPDB untuk tombol <em>Live Enrich</em>. Hasil Live Enrich disimpan ke database aktif Arbiter. Profil <strong>PC Intel (Remote)</strong> di menu <a href="#/database">Database</a> dibaca sebagai sumber cache reputasi dan tetap <strong>read-only</strong> — Arbiter tidak menulis ke Neuropetra.</p>
             </div>
             <span class="badge ${data.intel?.abuseipdb_key_set ? 'success' : 'neutral'}"><span class="status-dot"></span>${data.intel?.abuseipdb_key_set ? 'API Key tersimpan' : 'Sinkron DB IP Intel'}</span>
           </div>
@@ -338,7 +339,7 @@ export async function mount(ctx) {
             <span class="inline-status" id="intel-cache-status" role="status"></span>
           </div>
           <p class="meta">Tes cache hanya membaca database <strong>PC Intel (Remote)</strong> — tidak memanggil AbuseIPDB dan tidak menulis apa pun. Cocok untuk memastikan jalur reputasi IP sudah tersambung.</p>
-          <p class="meta">Untuk mengatur koneksi PostgreSQL ke database project IP Intel, buka menu <a href="#/database">Database</a> lalu ubah URI pada profil <strong>PC Intel (Remote)</strong>.</p>
+          <p class="meta">Untuk mengatur koneksi PostgreSQL ke database project IP Intel, buka menu <a href="#/database">Database</a> lalu ubah URI pada profil <strong>PC Intel (Remote)</strong>. Gunakan alamat yang bisa dijangkau dari container Arbiter — mis. <span class="mono">127.0.0.1:5433</span> bila memakai jembatan socat, bukan nama host internal Docker seperti <span class="mono">postgres</span>.</p>
         </section>
 
         <section class="form-section" data-settings-panel="display" ${activePanel==='display'?'':'hidden'}>
@@ -351,6 +352,13 @@ export async function mount(ctx) {
                 <option value="collapsed" ${data.ui.sidebar_default === 'collapsed' ? 'selected' : ''}>Tertutup</option>
               </select>
               <span class="meta">Berlaku sebagai preferensi awal; tombol di header tetap bisa menutup atau membuka kapan saja.</span>
+            </div>
+            <div class="field" style="grid-column:1/-1">
+              <label>Tema warna</label>
+              <div class="theme-picker" role="radiogroup" aria-label="Pilih tema warna">
+                ${THEMES.map(([key, label, sw]) => `<button type="button" class="theme-option ${getTheme() === key ? 'active' : ''}" data-theme="${key}" aria-pressed="${getTheme() === key}" title="${esc(label)}"><span class="theme-dot" style="background:${sw}"></span>${esc(label)}</button>`).join('')}
+              </div>
+              <span class="meta">Berlaku seketika dan tersimpan di browser ini.</span>
             </div>
           </div>
         </section>
@@ -467,6 +475,18 @@ export async function mount(ctx) {
   }, {signal});
 
   root.addEventListener('click', async event => {
+    const themeBtn = event.target.closest('[data-theme]');
+    if (themeBtn) {
+      const chosen = themeBtn.dataset.theme;
+      applyTheme(chosen);
+      for (const b of root.querySelectorAll('[data-theme]')) {
+        const on = b.dataset.theme === chosen;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', String(on));
+      }
+      notify(`Tema "${THEMES.find(([k]) => k === chosen)?.[1] || chosen}" diterapkan.`, 'success');
+      return;
+    }
     const tab = event.target.closest('[data-settings-tab]');
     if (tab) { showPanel(tab.dataset.settingsTab); return; }
     const connectionButton = event.target.closest('[data-action=test-connection]');
