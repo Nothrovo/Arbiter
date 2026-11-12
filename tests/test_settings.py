@@ -71,16 +71,24 @@ class SettingsAPITests(unittest.TestCase):
 
     def test_enrich_ip_falls_back_to_remote_ip_intel_database(self):
         from app import intel as intel_mod
-        remote_row = {"ip": "9.9.9.9", "status": "enriched", "abuse_score": 77, "reputation_source": "ip_intel_db"}
+        remote_detail = {
+            "configured": True, "found": True, "error": None,
+            "source_table": "ip_intel_reputation",
+            "record": {"ip": "9.9.9.9", "status": "enriched", "abuse_score": 77,
+                       "reputation_source": "neuropetra_cache", "cache_source": "ip_intel_reputation"},
+        }
         with patch.object(intel_mod, "ABUSEIPDB_API_KEY", ""), \
-             patch.object(intel_mod, "lookup_remote_ip_cache", return_value=remote_row) as looked:
+             patch.object(intel_mod, "lookup_remote_ip_cache_detail", return_value=remote_detail) as looked:
             result = intel_mod.enrich_ip("9.9.9.9")
         looked.assert_called_once()
-        self.assertEqual(result["reputation_source"], "ip_intel_db")
+        self.assertEqual(result["reputation_source"], "neuropetra_cache")
         self.assertEqual(result["abuse_score"], 77)
 
         with patch.object(intel_mod, "ABUSEIPDB_API_KEY", ""), \
-             patch.object(intel_mod, "lookup_remote_ip_cache", return_value=None):
+             patch.object(intel_mod, "lookup_remote_ip_cache_detail", return_value={
+                 "configured": True, "found": False, "record": None, "source_table": None,
+                 "error": "IP 9.9.9.10 belum ada di cache IP Intel (Neuropetra).",
+             }):
             missing = intel_mod.enrich_ip("9.9.9.10")
         self.assertEqual(missing["status"], "error")
 

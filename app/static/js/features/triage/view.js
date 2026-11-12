@@ -327,7 +327,12 @@ ${rawLog}`;
       try{
         const res=await json(apiURL('/api/intel/enrich',{tenant}),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ips:[ip]}),signal});
         const item=res.enriched?.[0];
-        notify(`IP ${ip} di-enrich: Skor Abuse ${item?.abuse_score??0}% (${item?.isp||item?.status||'ok'}).`,'success');
+        if(!item){notify(`IP ${ip}: server tidak mengembalikan hasil enrich.`,'error');return;}
+        if(item.status==='error'){notify(`Gagal enrich IP ${ip}: ${item.error||'cache IP Intel dan AbuseIPDB tidak tersedia.'}`,'error');return;}
+        if(item.status==='private'){notify(`IP ${ip} adalah alamat privat/LAN; tidak dikirim ke AbuseIPDB.`,'info');return;}
+        if(item.abuse_score===null||item.abuse_score===undefined){notify(`IP ${ip}: data ditemukan tetapi skor AbuseIPDB belum tersedia.`,'error');return;}
+        const source=item.cache_source?` · cache ${item.cache_source}`:item.reputation_source==='abuseipdb'?' · AbuseIPDB live':'';
+        notify(`IP ${ip} di-enrich: Skor Abuse ${Number(item.abuse_score)}%${item.isp?` · ${item.isp}`:''}${source}.`,'success');
         await load();if(activeId)await openInspector(activeId,false);
       }catch(err){if(err.name!=='AbortError')notify(err.message,'error');}
       finally{if(button.isConnected){button.disabled=false;button.innerHTML=`${icon('refresh')}Live Enrich`;}}
@@ -338,7 +343,11 @@ ${rawLog}`;
       button.disabled=true;button.textContent='Enriching…';
       try{
         const res=await json(apiURL('/api/intel/enrich',{tenant}),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alert_ids:ids}),signal});
-        notify(`${res.count||0} IP unik dari ${ids.length} alert berhasil di-enrich.`,'success');
+        const results=res.enriched||[];
+        const failed=results.filter(item=>item.status==='error');
+        const usable=results.length-failed.length;
+        if(failed.length){notify(`${usable} IP diproses, ${failed.length} gagal. ${failed[0].error||'Cache IP Intel tidak tersedia.'}`,failed.length===results.length?'error':'warning');}
+        else notify(`${res.count||usable} IP unik dari ${ids.length} alert berhasil di-enrich.`,'success');
         await load();if(activeId)await openInspector(activeId,false);
       }catch(err){if(err.name!=='AbortError')notify(err.message,'error');}
       finally{if(button.isConnected){button.disabled=false;button.innerHTML=`${icon('refresh')}Live Enrich IP`;}}

@@ -95,36 +95,152 @@ def _resolve_remote_db_url() -> str:
     return str(REMOTE_DATABASE_URL or "").strip()
 
 
-def lookup_remote_ip_cache(ip: str, remote_url: str | None = None) -> dict[str, Any] | None:
-    """Look up an existing IP record in the remote IP Intel PostgreSQL database."""
+def _safe_remote_cache_error(exc: Exception) -> str:
+    """Translate database failures without leaking a DSN, host credentials, or raw SQL."""
+    text = str(exc).lower()
+    if "password authentication failed" in text or "authentication failed" in text:
+        return "Autentikasi database IP Intel (Remote) gagal. Periksa URI profil PC Intel di menu Database."
+    if "could not translate host name" in text or "name or service not known" in text:
+        return "Host database IP Intel (Remote) tidak dapat ditemukan."
+    if any(hint in text for hint in ("connection refused", "could not connect", "timeout", "timed out", "connection failed")):
+        return "Database IP Intel (Remote) tidak dapat dihubungi. Pastikan sidecar/jembatan database berjalan."
+    if "permission denied" in text:
+        return "Role database IP Intel tidak memiliki izin baca ke cache reputasi."
+    if "does not exist" in text or "undefinedtable" in text:
+        return "Tabel cache IP Intel tidak ditemukan pada database Remote."
+    return "Cache IP Intel tidak dapat dibaca."
+
+
+def _json_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def lookup_remote_ip_cache_detail(ip: str, remote_url: str | None = None) -> dict[str, Any]:
+    """Read one reputation record from Neuropetra/IP Intel without writing anything.
+
+    Supports both schemas used by IP Intel:
+    - ``ip_intel_reputation`` (provider-owned AbuseIPDB reputation, current schema)
+    - ``ip_intel_cache`` (legacy/telemetry cache)
+    """
     target_url = str(remote_url or _resolve_remote_db_url()).strip()
+    result: dict[str, Any] = {
+        "configured": bool(target_url),
+        "found": False,
+        "record": None,
+        "source_table": None,
+        "error": None,
+    }
     if not target_url:
-        return None
+        result["error"] = "URI database PC Intel (Remote) belum diatur. Buka menu Database dan isi profil PC Intel."
+        return result
+
     try:
         import psycopg  # type: ignore
         from psycopg.rows import dict_row  # type: ignore
+    except ImportError:
+        result["error"] = "Driver PostgreSQL tidak tersedia di server Arbiter."
+        return result
+
+    try:
         with psycopg.connect(target_url, connect_timeout=3, row_factory=dict_row) as rconn:
-            row = rconn.execute(
-                "SELECT ip, abuse_score, vt_malicious, country_code, isp FROM public.ip_intel_cache WHERE ip = %s",
-                (ip,),
-            ).fetchone()
-            if row and row.get("abuse_score") is not None:
-                return {
-                    "ip": ip,
-                    "status": "enriched",
-                    "abuse_score": int(row.get("abuse_score") or 0),
-                    "vt_malicious": int(row.get("vt_malicious") or 0),
-                    "country_code": row.get("country_code"),
-                    "isp": row.get("isp") or "Unknown ISP",
-                    "domain": None,
-                    "usage_type": None,
-                    "total_reports": 0,
-                    "reputation_source": "ip_intel_db",
-                    "is_private": False,
-                }
+            tables = rconn.execute(
+                """SELECT to_regclass('public.ip_intel_reputation') AS reputation_table,
+                          to_regclass('public.ip_intel_cache') AS cache_table"""
+            ).fetchone() or {}
+            has_reputation = bool(tables.get("reputation_table"))
+            has_cache = bool(tables.get("cache_table"))
+            if not has_reputation and not has_cache:
+                result["error"] = "Tabel ip_intel_reputation / ip_intel_cache tidak ditemukan pada database Remote."
+                return result
+
+            if has_reputation and has_cache:
+                row = rconn.execute(
+                    """SELECT r.ip,
+                              r.abuse_score,
+                              r.country_code,
+                              r.isp,
+                              r.reputation_json,
+                              r.reputation_checked_at,
+                              c.vt_malicious
+                       FROM public.ip_intel_reputation r
+                       LEFT JOIN public.ip_intel_cache c ON c.ip = r.ip
+                       WHERE r.ip = %s
+                       LIMIT 1""",
+                    (ip,),
+                ).fetchone()
+                source_table = "ip_intel_reputation"
+            elif has_reputation:
+                row = rconn.execute(
+                    """SELECT ip, abuse_score, country_code, isp, reputation_json,
+                              reputation_checked_at, NULL::integer AS vt_malicious
+                       FROM public.ip_intel_reputation
+                       WHERE ip = %s
+                       LIMIT 1""",
+                    (ip,),
+                ).fetchone()
+                source_table = "ip_intel_reputation"
+            else:
+                row = rconn.execute(
+                    """SELECT ip, abuse_score, country_code, isp,
+                              NULL::jsonb AS reputation_json,
+                              NULL::timestamptz AS reputation_checked_at,
+                              vt_malicious
+                       FROM public.ip_intel_cache
+                       WHERE ip = %s
+                       LIMIT 1""",
+                    (ip,),
+                ).fetchone()
+                source_table = "ip_intel_cache"
+
+            if not row:
+                result["error"] = f"IP {ip} belum ada di cache IP Intel (Neuropetra)."
+                return result
+
+            score = row.get("abuse_score")
+            result["source_table"] = source_table
+            if score is None:
+                result["error"] = "IP ditemukan di database IP Intel, tetapi belum memiliki skor AbuseIPDB. Jalankan enrich di Neuropetra terlebih dahulu."
+                return result
+
+            reputation = _json_object(row.get("reputation_json"))
+            result["found"] = True
+            result["record"] = {
+                "ip": ip,
+                "status": "enriched",
+                "abuse_score": int(score),
+                "vt_malicious": int(row.get("vt_malicious") or 0),
+                "country_code": row.get("country_code"),
+                "isp": row.get("isp") or "Unknown ISP",
+                "domain": reputation.get("domain"),
+                "usage_type": reputation.get("usageType"),
+                "total_reports": int(reputation.get("totalReports") or 0),
+                "last_reported_at": reputation.get("lastReportedAt"),
+                "is_tor": bool(reputation.get("isTor")),
+                "is_whitelisted": bool(reputation.get("isWhitelisted")),
+                "reputation_checked_at": str(row.get("reputation_checked_at") or ""),
+                "reputation_source": "neuropetra_cache",
+                "cache_source": source_table,
+                "is_private": False,
+            }
+            return result
     except Exception as exc:
         logger.debug("Remote IP Intel DB lookup skipped: %s", exc)
-    return None
+        result["error"] = _safe_remote_cache_error(exc)
+        return result
+
+
+def lookup_remote_ip_cache(ip: str, remote_url: str | None = None) -> dict[str, Any] | None:
+    """Look up an existing IP record in the remote IP Intel PostgreSQL database."""
+    detail = lookup_remote_ip_cache_detail(ip, remote_url)
+    return detail.get("record") if detail.get("found") else None
 
 
 def enrich_ip(ip: str, api_key: str | None = None, remote_url: str | None = None) -> dict[str, Any]:
@@ -169,29 +285,31 @@ def enrich_ip(ip: str, api_key: str | None = None, remote_url: str | None = None
                 "domain": data.get("domain"),
                 "usage_type": data.get("usageType"),
                 "total_reports": int(data.get("totalReports") or 0),
+                "is_tor": bool(data.get("isTor")),
+                "is_whitelisted": bool(data.get("isWhitelisted")),
                 "reputation_source": "abuseipdb",
                 "is_private": False,
             }
         except Exception as exc:
-            remote_cached = lookup_remote_ip_cache(clean_ip, remote_url)
-            if remote_cached:
-                return remote_cached
+            remote = lookup_remote_ip_cache_detail(clean_ip, remote_url)
+            if remote.get("found"):
+                return remote["record"]
             return {
                 "ip": clean_ip,
                 "status": "error",
-                "error": str(exc),
+                "error": f"Live AbuseIPDB gagal: {exc}. {remote.get('error') or 'Cache IP Intel tidak tersedia.'}",
                 "abuse_score": None,
             }
 
     # If no AbuseIPDB API key is configured, pull directly from the remote IP Intel database cache
-    remote_cached = lookup_remote_ip_cache(clean_ip, remote_url)
-    if remote_cached:
-        return remote_cached
+    remote = lookup_remote_ip_cache_detail(clean_ip, remote_url)
+    if remote.get("found"):
+        return remote["record"]
 
     return {
         "ip": clean_ip,
         "status": "error",
-        "error": "AbuseIPDB API key belum diatur di Pengaturan dan IP belum ditemukan di database PC Intel (Remote).",
+        "error": f"AbuseIPDB API key belum diatur di Pengaturan dan cache IP Intel tidak tersedia. {remote.get('error') or ''}".strip(),
         "abuse_score": None,
     }
 
@@ -234,6 +352,10 @@ def sync_remote_cache(enriched_list: list[dict[str, Any]], remote_url: str | Non
         with psycopg.connect(target_url, connect_timeout=3) as rconn:
             with rconn.cursor() as cur:
                 for item in enriched_list:
+                    # Records already read from the remote cache need no mirror write,
+                    # and the Arbiter integration must keep the IP Intel database read-only.
+                    if item.get("cache_source"):
+                        continue
                     if item.get("status") not in ("invalid", "error"):
                         upsert_ip_cache(cur, item)
             rconn.commit()

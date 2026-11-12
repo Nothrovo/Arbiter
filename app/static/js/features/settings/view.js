@@ -93,6 +93,41 @@ export async function mount(ctx) {
     else delete slot.dataset.kind;
   };
 
+  const renderIntelStatus = (message, kind = '') => {
+    const slot = root.querySelector('#intel-cache-status');
+    if (!slot) return;
+    slot.textContent = message;
+    if (kind) slot.dataset.kind = kind;
+    else delete slot.dataset.kind;
+  };
+
+  async function testIntelCache(button) {
+    const input = root.querySelector('#intel-cache-ip');
+    const ip = (input?.value || '').trim();
+    if (!ip) { renderIntelStatus('Isi alamat IP yang ingin diuji.', 'error'); return; }
+    button.disabled = true;
+    renderIntelStatus('Membaca cache IP Intel (Neuropetra)…');
+    try {
+      const result = await json('/api/intel/cache/test', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ip}), signal,
+      });
+      if (!result.configured) {
+        renderIntelStatus(result.error || 'URI database PC Intel (Remote) belum diatur di menu Database.', 'error');
+      } else if (result.ok) {
+        const checked = result.reputation_checked_at ? ` · diperiksa ${result.reputation_checked_at}` : '';
+        const isp = result.isp ? ` · ${result.isp}` : '';
+        renderIntelStatus(`Ditemukan di ${result.source_table || 'cache'}: skor AbuseIPDB ${Number(result.abuse_score)}%${isp}${checked}.`, 'success');
+      } else {
+        renderIntelStatus(result.error || `IP ${ip} tidak ditemukan di cache IP Intel.`, 'error');
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') renderIntelStatus(error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function testConnection(button) {
     const draft = collect();
     if (!draft) return;
@@ -297,6 +332,12 @@ export async function mount(ctx) {
               ${data.intel?.abuseipdb_key_set ? '<label class="checkbox-label meta"><input type="checkbox" name="clear_abuseipdb_key"> Hapus API Key tersimpan</label>' : '<span class="meta">Jika dikosongkan, Live Enrich akan memakai <span class="mono">ABUSEIPDB_API_KEY</span> di <span class="mono">.env</span> atau menarik cache langsung dari database PC Intel (Remote).</span>'}
             </div>
           </div>
+          <div class="settings-actions">
+            <input class="input mono" id="intel-cache-ip" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="8.8.8.8" aria-label="IP untuk menguji cache IP Intel" style="width:180px">
+            <button class="button" type="button" data-action="test-intel-cache">${icon('search')} Tes cache Neuropetra</button>
+            <span class="inline-status" id="intel-cache-status" role="status"></span>
+          </div>
+          <p class="meta">Tes cache hanya membaca database <strong>PC Intel (Remote)</strong> — tidak memanggil AbuseIPDB dan tidak menulis apa pun. Cocok untuk memastikan jalur reputasi IP sudah tersambung.</p>
           <p class="meta">Untuk mengatur koneksi PostgreSQL ke database project IP Intel, buka menu <a href="#/database">Database</a> lalu ubah URI pada profil <strong>PC Intel (Remote)</strong>.</p>
         </section>
 
@@ -432,6 +473,8 @@ export async function mount(ctx) {
     if (connectionButton) { await testConnection(connectionButton); return; }
     const modelButton = event.target.closest('[data-action=test-model]');
     if (modelButton) { await testModel(modelButton); return; }
+    const intelCacheButton = event.target.closest('[data-action=test-intel-cache]');
+    if (intelCacheButton) { await testIntelCache(intelCacheButton); return; }
     const updateBtn = event.target.closest('[data-action=update-user]');
     if (updateBtn) {
       const uname = updateBtn.dataset.username;

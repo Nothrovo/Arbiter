@@ -40,7 +40,7 @@ from app.ai_triage import (
     wib_window_key,
 )
 from app.core import normalize_alert, suggestions_with_fallback
-from app.intel import enrich_ip, is_valid_ip, sync_remote_cache, upsert_ip_cache
+from app.intel import enrich_ip, is_valid_ip, lookup_remote_ip_cache_detail, sync_remote_cache, upsert_ip_cache
 import app.database as db_module
 from app.database import get_db, init_database, ingest_alert_with_dedup
 from app.exports import (
@@ -435,6 +435,27 @@ def bulk_full_logs(payload: dict[str, Any], tenant: list[str] = Query(default=["
         ).fetchall()
     items = [{**dict(row), "full_log": row["full_log"] or ""} for row in rows]
     return {"items": items, "count": len(items)}
+
+
+@app.post("/api/intel/cache/test")
+def api_intel_cache_test(payload: dict[str, Any]):
+    """Read-only probe of the Neuropetra/IP Intel cache. Never calls AbuseIPDB."""
+    ip = str(payload.get("ip") or "").strip()
+    if not is_valid_ip(ip):
+        raise HTTPException(status_code=400, detail="Masukkan alamat IPv4/IPv6 yang valid untuk diuji.")
+    detail = lookup_remote_ip_cache_detail(ip)
+    record = detail.get("record") or {}
+    return {
+        "ok": bool(detail.get("found")),
+        "configured": bool(detail.get("configured")),
+        "ip": ip,
+        "source_table": detail.get("source_table"),
+        "abuse_score": record.get("abuse_score"),
+        "isp": record.get("isp"),
+        "country_code": record.get("country_code"),
+        "reputation_checked_at": record.get("reputation_checked_at"),
+        "error": detail.get("error"),
+    }
 
 
 @app.post("/api/intel/enrich")
