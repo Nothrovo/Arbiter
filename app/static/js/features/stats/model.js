@@ -48,8 +48,6 @@ export function normalizeStatsQuery(params = new URLSearchParams()) {
   const facet_value = String(get('facet_value') || '').trim();
   const secondary_facet = String(get('secondary_facet') || '').trim();
   const secondary_facet_value = String(get('secondary_facet_value') || '').trim();
-  const secondary_facet = String(get('secondary_facet') || '').trim();
-  const secondary_facet_value = String(get('secondary_facet_value') || '').trim();
   const exclude_facet = String(get('exclude_facet') || '').trim();
   const exclude_facet_value = String(get('exclude_facet_value') || '').trim();
 
@@ -69,8 +67,6 @@ export function normalizeStatsQuery(params = new URLSearchParams()) {
     facet_value,
     secondary_facet,
     secondary_facet_value,
-    exclude_facet,
-    exclude_facet_value,
   };
 }
 
