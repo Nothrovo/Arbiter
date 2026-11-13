@@ -475,11 +475,11 @@ export async function mount(ctx) {
   }, {signal});
 
   root.addEventListener('click', async event => {
-    const themeBtn = event.target.closest('[data-theme]');
+    const themeBtn = event.target.closest('.theme-option[data-theme]');
     if (themeBtn) {
       const chosen = themeBtn.dataset.theme;
       applyTheme(chosen);
-      for (const b of root.querySelectorAll('[data-theme]')) {
+      for (const b of root.querySelectorAll('.theme-option[data-theme]')) {
         const on = b.dataset.theme === chosen;
         b.classList.toggle('active', on);
         b.setAttribute('aria-pressed', String(on));

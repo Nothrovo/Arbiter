@@ -63,6 +63,15 @@ test('settings page exposes Wazuh Indexer credentials, realtime, and sidebar pre
   assert.match(router, /'settings'/);
 });
 
+test('theme picker ignores clicks outside theme buttons even though <html> carries data-theme', () => {
+  const view = readFileSync(new URL('app/static/js/features/settings/view.js', root), 'utf8');
+  const shell = readFileSync(new URL('app/index.html', root), 'utf8');
+  assert.match(shell, /document\.documentElement\.setAttribute\('data-theme',t\)/, 'shell stores the active theme on <html>');
+  assert.doesNotMatch(view, /closest\('\[data-theme\]'\)/, 'bare [data-theme] would match the <html> ancestor on any click');
+  assert.match(view, /closest\('\.theme-option\[data-theme\]'\)/);
+  assert.match(view, /querySelectorAll\('\.theme-option\[data-theme\]'\)/);
+});
+
 test('router resolves the settings, wazuh-queries, and error-codes destinations and rejects unknown pages', async () => {
   const {parseRoute} = await import('../../app/static/js/router.js');
   const {normalizeOllamaBaseUrl} = await import('../../app/static/js/features/settings/model.js');
