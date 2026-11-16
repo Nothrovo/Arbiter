@@ -22,6 +22,8 @@ When investigating high-volume attacks (credential stuffing, SSH brute-force, we
 
 The architecture is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): data contracts, classification policy, correlation rules, storage, failure modes, and dataset-derived calibration.
 
+Dokumentasi lengkap berbahasa Indonesia (ringkasan, workflow, flowchart, keamanan, komponen, dan instalasi) tersedia di [`docs/DOKUMENTASI.md`](docs/DOKUMENTASI.md). Arsitektur web dan tools dijelaskan di [`docs/ARSITEKTUR.md`](docs/ARSITEKTUR.md).
+
 ---
 
 ## ⚡ Key Capabilities

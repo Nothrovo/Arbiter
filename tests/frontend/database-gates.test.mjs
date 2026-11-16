@@ -142,6 +142,30 @@ test('switch readback failure clears stale database display until explicit refre
   assert.match(h.root.innerHTML,/refresh-status/);
 });
 
+test('degraded active database keeps profile controls and disables destructive actions',async()=>{
+  const h=await harness(()=>({status:'degraded',health:{available:false,error:'synthetic offline'},active_profile:profiles[1],profiles,tenants:[],stats:{}}));
+  assert.match(h.root.innerHTML,/Database aktif bermasalah/);
+  assert.match(h.root.innerHTML,/synthetic offline/);
+  assert.match(h.root.innerHTML,/data-action="recover-local"/);
+  assert.match(h.root.innerHTML,/data-action="switch-profile"/);
+  assert.match(h.root.innerHTML,/data-action="execute-purge-alerts"[^>]*disabled/);
+  assert.doesNotMatch(h.root.innerHTML,/local-tenant/);
+});
+
+test('failed status rendering still offers local recovery via the switch endpoint',async()=>{
+  let recovered=false;
+  const h=await harness((url,body)=>{
+    if(url.endsWith('/switch')){assert.equal(body.profile,'local');recovered=true;return {id:'local'};}
+    if(!recovered)throw Error('synthetic offline');
+    return status('local');
+  },{databaseChanged:()=>{}});
+  assert.match(h.root.innerHTML,/data-action="recover-local"/);
+  await h.click('recover-local');
+  assert.equal(h.calls.some(c=>c.url.endsWith('/switch')&&c.body.profile==='local'),true);
+  assert.equal(h.notices.some(([,kind])=>kind==='success'),true);
+  assert.match(h.root.innerHTML,/Ringkasan Kapasitas Telemetri/);
+});
+
 test('switch mismatch or failed readback never announces success',async()=>{
   for(const failure of ['wrong-profile','wrong-target','offline']){
     let switched=false;

@@ -239,6 +239,46 @@ class DatabaseTrustTests(unittest.TestCase):
         # Newest tokens must still be present
         self.assertIn(tokens[-1], self.db._preview_registry)
 
+    def test_status_degrades_instead_of_failing_when_active_database_is_unreachable(self):
+        with patch.object(self.api, 'get_db', side_effect=HTTPException(status_code=503, detail='synthetic offline')):
+            response = self.client.get('/api/database/status')
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data['status'], 'degraded')
+        self.assertFalse(data['health']['available'])
+        self.assertIn('synthetic offline', data['health']['error'])
+        self.assertEqual(data['active_profile']['id'], 'local')
+        self.assertEqual({item['id'] for item in data['profiles']}, {'local', 'remote'})
+
+    def test_status_degrades_when_active_schema_queries_fail(self):
+        fake_conn = MagicMock()
+        with patch.object(self.api, 'get_db', return_value=fake_conn), \
+             patch.object(self.db, 'get_database_status', side_effect=RuntimeError('synthetic missing schema')):
+            response = self.client.get('/api/database/status')
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data['status'], 'degraded')
+        self.assertIn('synthetic missing schema', data['health']['error'])
+        self.assertIsNone(data['stats']['alerts'])
+
+    def test_switch_to_local_is_allowed_without_probing_a_broken_active_database(self):
+        self.db.set_active_profile('remote')
+        self.addCleanup(self.db.set_active_profile, 'local')
+        with patch.object(self.db, 'check_profile_ready') as probe:
+            response = self.client.post('/api/database/switch', json={'profile': 'local'})
+        self.assertEqual(response.status_code, 200, response.text)
+        probe.assert_not_called()
+        self.assertEqual(self.db.get_active_profile_id(), 'local')
+
+    def test_switch_to_unready_remote_is_rejected_without_changing_active_profile(self):
+        self.db.set_active_profile('local')
+        probe = patch.object(self.db, 'check_profile_ready', return_value={'ok': False, 'error': 'Skema Arbiter belum tersedia.'})
+        with probe:
+            response = self.client.post('/api/database/switch', json={'profile': 'remote'})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn('tidak diubah', response.json()['detail'])
+        self.assertEqual(self.db.get_active_profile_id(), 'local')
+
     def test_purge_alerts_rejects_toctou_connection_profile_drift(self):
         # If connection was tagged for 'remote' but active profile became 'local'
         fake_conn = MagicMock()

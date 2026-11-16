@@ -1621,7 +1621,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             "alert_ids": list(dict.fromkeys(a["id"] for a in final_alerts)),
             "groups": groups,
         }
-        save_document(conn, get_triage_state_key(norm_tenants), saved_state)
+        save_document(conn, get_triage_state_key(norm_tenants), updated_state)
 
     return {
         "saved": True,
@@ -2109,8 +2109,16 @@ def api_test_wazuh(payload: dict[str, Any]):
 @app.get("/api/database/status")
 def api_database_status():
     if hasattr(db_module, "get_database_status"):
-        with get_db() as conn:
-            return db_module.get_database_status(conn)
+        try:
+            with get_db() as conn:
+                return db_module.get_database_status(conn)
+        except Exception as exc:
+            # A broken active database must never remove the controls that let
+            # the operator switch back to a working profile.
+            if hasattr(db_module, "get_database_status_unavailable"):
+                detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+                return db_module.get_database_status_unavailable(detail)
+            raise
     with get_db() as conn:
         alerts_n = conn.execute("SELECT count(*) AS n FROM wazuh.alerts").fetchone()["n"]
         groups_n = conn.execute("SELECT count(*) AS n FROM wazuh.analysis_groups").fetchone()["n"]
@@ -2137,6 +2145,16 @@ def api_database_status():
 def api_database_switch(payload: dict[str, Any]):
     profile = str(payload.get("profile") or "").strip()
     if hasattr(db_module, "set_active_profile"):
+        active = db_module.get_active_profile_id() if hasattr(db_module, "get_active_profile_id") else None
+        # Validate a new target before committing the switch. The Local profile is
+        # always allowed so a broken active database can be escaped.
+        if profile != active and profile != "local" and hasattr(db_module, "check_profile_ready"):
+            ready = db_module.check_profile_ready(profile)
+            if not ready.get("ok"):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Tidak dapat beralih ke '{profile}': {ready.get('error') or 'database target tidak siap'} Database aktif tidak diubah.",
+                )
         return db_module.set_active_profile(profile)
     return {"id": profile, "status": "switched"}
 
@@ -2146,7 +2164,14 @@ def api_database_test(payload: dict[str, Any]):
     url = payload.get("url")
     if hasattr(db_module, "test_db_connection"):
         if "profile" in payload:
-            return db_module.test_db_connection(url, profile_id=str(payload["profile"]).strip())
+            profile = str(payload["profile"]).strip()
+            result = db_module.test_db_connection(url, profile_id=profile)
+            if result.get("ok") and hasattr(db_module, "check_profile_ready"):
+                ready = db_module.check_profile_ready(profile)
+                result["ready"] = bool(ready.get("ok"))
+                if not ready.get("ok"):
+                    result["schema_error"] = ready.get("error") or "Skema Arbiter belum tersedia."
+            return result
         return db_module.test_db_connection(url)
     return {"ok": True, "latency_ms": 1.0, "version": "PostgreSQL Mock"}
 

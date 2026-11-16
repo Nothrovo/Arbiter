@@ -243,6 +243,98 @@ def set_active_profile(profile_id: str) -> dict[str, Any]:
         return get_active_profile()
 
 
+def _profiles_payload() -> list[dict[str, Any]]:
+    """Inventory of every selectable profile, safe to render without a connection."""
+    with _profile_lock:
+        active = _active_profile
+        rows = list(_db_profiles.items())
+    return [
+        {
+            "id": pid,
+            "name": pdata["name"],
+            "mode": pdata["mode"],
+            "description": pdata["description"],
+            "masked_url": mask_connection_url(pdata["url"]),
+            "is_active": pid == active,
+        }
+        for pid, pdata in rows
+    ]
+
+
+REQUIRED_RELATIONS = ("wazuh.alerts", "wazuh.analysis_groups")
+
+
+def check_profile_ready(profile_id: str) -> dict[str, Any]:
+    """Probe a target profile for reachability and the tables Arbiter requires.
+
+    Used before switching so an accepted login cannot strand the workspace on a
+    database that lacks the Arbiter schema.
+    """
+    if profile_id not in _db_profiles:
+        raise HTTPException(status_code=400, detail=f"Database profile '{profile_id}' not found.")
+    target_url = _db_profiles[profile_id]["url"]
+    start_t = time.perf_counter()
+    try:
+        with psycopg.connect(target_url, connect_timeout=4, row_factory=dict_row) as conn:
+            missing = []
+            for relation in REQUIRED_RELATIONS:
+                row = conn.execute("SELECT to_regclass(%s) AS oid", (relation,)).fetchone()
+                if not row or row["oid"] is None:
+                    missing.append(relation)
+            if missing:
+                return {
+                    "ok": False,
+                    "latency_ms": round((time.perf_counter() - start_t) * 1000, 1),
+                    "error": f"Skema Arbiter belum tersedia: tabel {', '.join(missing)} tidak ditemukan.",
+                }
+            # Run the same shapes of query the status/workspace endpoints need so
+            # an accepted login cannot hide a missing column or permission.
+            conn.execute(
+                "SELECT count(*) AS n, min(timestamp) AS earliest, max(timestamp) AS latest FROM wazuh.alerts"
+            ).fetchone()
+            conn.execute(
+                "SELECT tenant, count(*) AS count FROM wazuh.alerts GROUP BY tenant LIMIT 1"
+            ).fetchall()
+            conn.execute("SELECT count(*) AS n FROM wazuh.analysis_groups").fetchone()
+            return {
+                "ok": True,
+                "latency_ms": round((time.perf_counter() - start_t) * 1000, 1),
+                "error": "",
+            }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "latency_ms": round((time.perf_counter() - start_t) * 1000, 1),
+            "error": str(exc),
+        }
+
+
+def get_database_status_unavailable(error: str = "") -> dict[str, Any]:
+    """Degraded status payload that keeps the switch/recovery UI usable.
+
+    The profile inventory and active identity do not require a database, so a
+    failed active connection must not hide the controls needed to go back.
+    """
+    return {
+        "status": "degraded",
+        "health": {
+            "available": False,
+            "error": str(error).strip() or "Database aktif tidak dapat dihubungi.",
+        },
+        "active_profile": get_active_profile(),
+        "profiles": _profiles_payload(),
+        "stats": {
+            "alerts": None,
+            "groups": None,
+            "ip_intel_records": None,
+            "earliest_telemetry": None,
+            "latest_telemetry": None,
+        },
+        "tenants": [],
+        "table_sizes": {},
+    }
+
+
 def _persist_profile_overrides() -> bool:
     """Store the Remote profile URL encrypted in the local workspace database."""
     try:
@@ -382,21 +474,11 @@ def get_database_status(conn: psycopg.Connection | Any | None = None) -> dict[st
         except Exception:
             table_sizes = {"wazuh.alerts": "N/A (Local SQLite/Memory)", "wazuh.analysis_groups": "N/A"}
 
-        profiles_info = []
-        for pid, pdata in _db_profiles.items():
-            profiles_info.append({
-                "id": pid,
-                "name": pdata["name"],
-                "mode": pdata["mode"],
-                "description": pdata["description"],
-                "masked_url": mask_connection_url(pdata["url"]),
-                "is_active": pid == _active_profile,
-            })
-
         return {
             "status": "ok",
+            "health": {"available": True, "error": ""},
             "active_profile": get_active_profile(),
-            "profiles": profiles_info,
+            "profiles": _profiles_payload(),
             "stats": {
                 "alerts": alerts_n,
                 "groups": groups_n,

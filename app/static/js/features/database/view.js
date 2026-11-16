@@ -23,15 +23,22 @@ export async function mount(ctx) {
 
     const {active_profile, profiles = [], stats = {}, tenants = [], table_sizes = {}} = statusData;
     const isReadOnly = active_profile?.mode === 'read_only';
+    const health = statusData.health || {};
+    const degraded = statusData.status === 'degraded' || health.available === false;
+    const activeBroken = degraded && active_profile?.id !== 'local';
 
     const profilesHTML = profiles.map(p => {
       const isCurrent = p.is_active;
       const test = testResults[p.id];
       const testStatusHTML = test
-        ? test.ok
+        ? test.ok && test.ready === false
+          ? `<span class="inline-status error">${icon('close')} Login diterima, tetapi skema belum siap: ${esc(test.schema_error || 'tabel Arbiter tidak ditemukan')}</span>`
+          : test.ok
           ? `<span class="inline-status success">${icon('check')} Terhubung (${test.latency_ms} ms · ${esc(test.version || 'PostgreSQL')})</span>`
           : `<span class="inline-status error">${icon('close')} Gagal: ${esc(test.error || 'Timeout')}</span>`
-        : '';
+        : isCurrent && degraded
+          ? `<span class="inline-status error">${icon('close')} Gagal: ${esc(health.error || 'Database aktif tidak dapat dihubungi.')}</span>`
+          : '';
 
       const editURLHTML = p.id === 'remote'
         ? `<div class="field" style="margin-top:12px;"><label for="remote-url-input"><span>Alamat Target PC Intel</span><span class="meta">URI pengganti lengkap · kosong = tidak diubah</span></label><div class="split" style="gap:8px;"><input class="input mono" id="remote-url-input" type="password" autocomplete="new-password" value="" placeholder="Masukkan URI pengganti lengkap"><button class="button" data-action="save-remote-url" type="button">Simpan URI</button></div></div>`
@@ -80,7 +87,16 @@ export async function mount(ctx) {
         </div>
       </header>
 
-      ${isReadOnly ? `<div class="notice" data-kind="warning"><p><strong>Mode Read-Only Aktif</strong>: Saat ini terhubung ke database <strong>${esc(active_profile.name)}</strong>. Operasi tulis (impor alert baru, pembuatan/penyuntingan kasus insiden, dan pembersihan data) dinonaktifkan untuk menjaga integritas data PC Intel.</p></div>` : ''}
+      ${degraded ? `<div class="notice" data-kind="warning" role="alert">
+        <p><strong>Database aktif bermasalah</strong>: ${esc(health.error || 'Koneksi ke database aktif gagal.')}</p>
+        <p class="meta">Profil lain tetap dapat dipilih. Kembali ke database lokal untuk memulihkan workspace, atau perbaiki URI profil Remote lalu tes koneksi.</p>
+        <div class="card-actions" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="button primary" data-action="recover-local" type="button"${active_profile?.id === 'local' ? ' disabled' : ''}>${icon('database')} Kembali ke Database Lokal</button>
+          <button class="button" data-action="refresh-status" type="button">${icon('refresh')} Coba Hubungi Ulang</button>
+        </div>
+      </div>` : ''}
+
+      ${isReadOnly && !degraded ? `<div class="notice" data-kind="warning"><p><strong>Mode Read-Only Aktif</strong>: Saat ini terhubung ke database <strong>${esc(active_profile.name)}</strong>. Operasi tulis (impor alert baru, pembuatan/penyuntingan kasus insiden, dan pembersihan data) dinonaktifkan untuk menjaga integritas data PC Intel.</p></div>` : ''}
 
       <section class="form-section">
         <h2 class="section-heading">Profil Database &amp; Sumber Data</h2>
@@ -93,7 +109,7 @@ export async function mount(ctx) {
       <section class="form-section" style="margin-top:24px;">
         <h2 class="section-heading">Ringkasan Kapasitas Telemetri</h2>
         <p class="muted">Statistik telemetri pada database yang sedang aktif (<strong>${esc(active_profile?.name || 'Lokal')}</strong>).</p>
-        <div class="detail-grid" style="margin-top:16px;">
+        ${degraded ? `<p class="inline-status error" style="margin-top:8px;">${icon('close')} Statistik tidak tersedia karena database aktif tidak dapat dihubungi.</p>` : `<div class="detail-grid" style="margin-top:16px;">
           <div class="key-value">
             <dt>Total Alert Wazuh</dt>
             <dd class="num" style="font-size:24px; font-weight:600;">${Number(stats.alerts || 0).toLocaleString('id-ID')}</dd>
@@ -114,7 +130,7 @@ export async function mount(ctx) {
             <dd style="font-size:15px; font-weight:500;">${esc(summarizeTelemetryRange(stats.earliest_telemetry, stats.latest_telemetry))}</dd>
             <dd class="meta">Berdasarkan timestamp bukti alert</dd>
           </div>
-        </div>
+        </div>`}
       </section>
 
       ${tenants.length ? `
@@ -163,8 +179,8 @@ export async function mount(ctx) {
               </select>
             </label>
             <div style="display:flex; gap:8px; margin-top:8px;">
-              <button class="button" type="button" data-action="dry-run-alerts">Pratinjau Dampak</button>
-              <button class="button danger" type="button" data-action="execute-purge-alerts"${isReadOnly ? ' disabled' : ''}>Hapus Alert</button>
+              <button class="button" type="button" data-action="dry-run-alerts"${degraded ? ' disabled' : ''}>Pratinjau Dampak</button>
+              <button class="button danger" type="button" data-action="execute-purge-alerts"${isReadOnly || degraded ? ' disabled' : ''}>Hapus Alert</button>
             </div>
             <div id="purge-alerts-result" class="inline-status" style="margin-top:8px;" aria-live="polite"></div>
           </form>
@@ -180,8 +196,8 @@ export async function mount(ctx) {
               </select>
             </label>
             <div style="display:flex; gap:8px; margin-top:16px;">
-              <button class="button" type="button" data-action="dry-run-incidents">Pratinjau Dampak</button>
-              <button class="button danger" type="button" data-action="execute-purge-incidents"${isReadOnly ? ' disabled' : ''}>Hapus Insiden</button>
+              <button class="button" type="button" data-action="dry-run-incidents"${degraded ? ' disabled' : ''}>Pratinjau Dampak</button>
+              <button class="button danger" type="button" data-action="execute-purge-incidents"${isReadOnly || degraded ? ' disabled' : ''}>Hapus Insiden</button>
             </div>
             <div id="purge-incidents-result" class="inline-status" style="margin-top:8px;" aria-live="polite"></div>
           </form>
@@ -210,10 +226,57 @@ export async function mount(ctx) {
       return true;
     } catch (err) {
       if (err.name !== 'AbortError') {
-        root.innerHTML = errorState(`Gagal memuat status database: ${err.message}`);
+        root.innerHTML = `${errorState(`Gagal memuat status database: ${err.message}`)}
+          <div class="card-actions" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="button primary" data-action="recover-local" type="button">${icon('database')} Kembali ke Database Lokal</button>
+            <button class="button" data-action="refresh-status" type="button">${icon('refresh')} Coba Lagi</button>
+          </div>`;
         notify(`Gagal memuat status database: ${err.message}`, 'error');
       }
       return false;
+    }
+  }
+
+  async function switchTo(pid, btn, {requireKnownIdentity = true} = {}) {
+    const expected = databaseIdentity(statusData?.profiles?.find(p => p.id === pid));
+    if (requireKnownIdentity && !expected) { notify('Identitas target belum tersedia. Perbarui status terlebih dahulu.', 'error'); return false; }
+    if (uriDraft.trim() && !confirm('Ada URI yang belum disimpan. Buang perubahan dan beralih database?')) return false;
+    if (!confirm(`Beralih koneksi ke database "${pid}"? Data aktif workspace akan menyesuaikan database yang dipilih.`)) return false;
+    btn.disabled = true;
+    try {
+      invalidatePreviews();
+      switchUnverified = true;
+      await ctx.databaseChanged?.(null);
+      await json(apiURL('/api/database/switch'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({profile: pid}),
+        signal,
+      });
+      uriDraft = '';
+      const verified = await json(apiURL('/api/database/status'), {signal});
+      if (verified?.active_profile?.id !== pid) throw new Error('Target database tidak cocok dengan readback. Status pergantian belum terverifikasi.');
+      if (expected && databaseIdentity(verified.active_profile) !== expected) throw new Error('Target database tidak cocok dengan readback. Status pergantian belum terverifikasi.');
+      statusData = verified;
+      await ctx.databaseChanged?.(verified);
+      switchUnverified = false;
+      render();
+      const unhealthy = verified.health?.available === false;
+      notify(unhealthy ? `Beralih ke ${pid}, tetapi database belum dapat dihubungi.` : `Berhasil beralih ke database ${pid}.`, unhealthy ? 'warning' : 'success');
+      return true;
+    } catch (err) {
+      statusData = null;
+      if (err.name !== 'AbortError') {
+        root.innerHTML = `${errorState('Pergantian database belum terverifikasi. Perbarui status untuk memeriksa database aktif.')}
+          <div class="card-actions" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="button primary" data-action="recover-local" type="button">${icon('database')} Kembali ke Database Lokal</button>
+            <button class="button" data-action="refresh-status" type="button">Perbarui Status</button>
+          </div>`;
+        notify(`Gagal beralih database: ${err.message}`, 'error');
+      }
+      return false;
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -243,7 +306,12 @@ export async function mount(ctx) {
         });
         testResults[pid] = res;
         render();
-        notify(res.ok ? `Koneksi ${pid} sukses (${res.latency_ms} ms)` : `Koneksi gagal: ${res.error}`, res.ok ? 'success' : 'error');
+        const ready = res.ok && res.ready !== false;
+        notify(ready
+          ? `Koneksi ${pid} sukses (${res.latency_ms} ms)`
+          : res.ok
+            ? `Login ${pid} diterima, tetapi skema belum siap: ${res.schema_error || 'tabel Arbiter tidak ditemukan'}`
+            : `Koneksi gagal: ${res.error}`, ready ? 'success' : 'error');
       } catch (err) {
         if (err.name !== 'AbortError') notify(`Gagal tes koneksi: ${err.message}`, 'error');
       } finally {
@@ -253,39 +321,14 @@ export async function mount(ctx) {
     }
 
     if (action === 'switch-profile') {
-      const pid = btn.dataset.profile;
-      const expected = databaseIdentity(statusData?.profiles?.find(p => p.id === pid));
-      if (!expected) { notify('Identitas target belum tersedia. Perbarui status terlebih dahulu.', 'error'); return; }
-      if (uriDraft.trim() && !confirm('Ada URI yang belum disimpan. Buang perubahan dan beralih database?')) return;
-      if (!confirm(`Beralih koneksi ke database "${pid}"? Data aktif workspace akan menyesuaikan database yang dipilih.`)) return;
-      btn.disabled = true;
-      try {
-        invalidatePreviews();
-        switchUnverified = true;
-        await ctx.databaseChanged?.(null);
-        await json(apiURL('/api/database/switch'), {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({profile: pid}),
-          signal,
-        });
-        uriDraft = '';
-        const verified = await json(apiURL('/api/database/status'), {signal});
-        if (databaseIdentity(verified.active_profile) !== expected) throw new Error('Target database tidak cocok dengan readback. Status pergantian belum terverifikasi.');
-        statusData = verified;
-        await ctx.databaseChanged?.(verified);
-        switchUnverified = false;
-        render();
-        notify(`Berhasil beralih ke database ${pid}.`, 'success');
-      } catch (err) {
-        statusData = null;
-        if (err.name !== 'AbortError') {
-          root.innerHTML = `${errorState('Pergantian database belum terverifikasi. Perbarui status untuk memeriksa database aktif.')}<button class="button" data-action="refresh-status" type="button">Perbarui Status</button>`;
-          notify(`Gagal beralih database: ${err.message}`, 'error');
-        }
-      } finally {
-        btn.disabled = false;
-      }
+      await switchTo(btn.dataset.profile, btn);
+      return;
+    }
+
+    if (action === 'recover-local') {
+      // Works even when the status endpoint itself failed: switching does not
+      // require the broken active database.
+      await switchTo('local', btn, {requireKnownIdentity: false});
       return;
     }
 
