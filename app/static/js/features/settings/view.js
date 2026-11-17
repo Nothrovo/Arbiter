@@ -3,6 +3,11 @@ import {esc, icon, errorState, loadingRows} from '../../ui/primitives.js';
 import {THEMES, getTheme, applyTheme} from '../../ui/theme.js';
 import {
   REALTIME_SEVERITY_OPTIONS,
+  EXCLUSION_FIELD_OPTIONS,
+  EXCLUSION_MATCH_OPTIONS,
+  exclusionFieldLabel,
+  exclusionMatchLabel,
+  exclusionRuleStats,
   normalizeOllamaBaseUrl,
   normalizeSettings,
   parseRealtimeSeverity,
@@ -22,6 +27,7 @@ export async function mount(ctx) {
   const SETTINGS_PANELS = [
     ['wazuh', 'Wazuh Indexer', 'pulse'],
     ['realtime', 'Monitor realtime', 'refresh'],
+    ['exclusions', 'Pengecualian', 'shield'],
     ['ai', 'AI Triage', 'spark'],
     ['intel', 'IP Intel & Live Enrich', 'search'],
     ['display', 'Tampilan', 'settings'],
@@ -176,11 +182,36 @@ export async function mount(ctx) {
     }
   }
 
+  function renderExclusionRows(data) {
+    const rules = data.exclusions?.rules || [];
+    if (!rules.length) {
+      return '<p class="meta">Belum ada aturan pengecualian. Antrean Triage dan Statistik masih menampilkan semua alert.</p>';
+    }
+    return rules.map(rule => `
+      <div class="split exclusion-rule" data-exclusion-control data-exclusion-id="${esc(rule.id)}" style="padding:var(--space-3);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);align-items:center;gap:var(--space-3);flex-wrap:wrap;${rule.enabled ? '' : 'opacity:.62'}">
+        <div style="min-width:0;flex:1 1 260px">
+          <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap">
+            <span class="badge neutral">${esc(exclusionFieldLabel(rule.field))}</span>
+            <span class="badge neutral">${esc(exclusionMatchLabel(rule.match))}</span>
+            ${rule.label ? `<span class="meta">${esc(rule.label)}</span>` : ''}
+          </div>
+          <div class="mono" style="margin-top:4px;word-break:break-all">${esc(rule.pattern)}</div>
+        </div>
+        <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap">
+          <label class="checkbox-label meta"><input type="checkbox" data-action="toggle-exclusion" data-exclusion-id="${esc(rule.id)}" ${rule.enabled ? 'checked' : ''}> Aktif</label>
+          <button class="button" type="button" data-action="delete-exclusion" data-exclusion-id="${esc(rule.id)}">${icon('delete')} Hapus</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
   function render() {
     const data = settings;
     const wazuh = data.wazuh;
     const realtime = data.realtime;
     const ai = data.ai;
+    const exclusions = data.exclusions || {enabled: true, rules: []};
+    const exStats = exclusionRuleStats(data);
     root.innerHTML = `
       <header class="page-header">
         <div class="page-heading">
@@ -275,6 +306,56 @@ export async function mount(ctx) {
               <label class="checkbox-label"><input type="checkbox" name="realtime_enabled" ${realtime.enabled ? 'checked' : ''}> Tampilkan monitor realtime aktif</label>
               <span class="meta">${esc(realtimeLabel(data))}</span>
             </div>
+          </div>
+        </section>
+
+        <section class="form-section" data-settings-panel="exclusions" ${activePanel==='exclusions'?'':'hidden'}>
+          <div class="split">
+            <div>
+              <h2 class="section-heading">Pengecualian kustom (Exclude)</h2>
+              <p class="meta">Sembunyikan alert yang sudah diketahui dari <strong>Triage</strong>, <strong>Statistik</strong>, ringkasan, dan kandidat AI Triage. Alert tidak dihapus: bukti insiden dan ekspor yang memilih alert/insiden secara eksplisit tetap utuh. Pola memakai <span class="mono">*</span> (banyak karakter) dan <span class="mono">?</span> (satu karakter).</p>
+            </div>
+            <span class="badge ${exStats.active ? 'warning' : 'neutral'}"><span class="status-dot"></span>${exStats.active} aktif${exStats.inert ? ` · ${exStats.inert} nonaktif` : ''}</span>
+          </div>
+
+          <label class="checkbox-label"><input type="checkbox" name="exclusions_enabled" data-action="toggle-exclusions-enabled" ${exclusions.enabled ? 'checked' : ''}> Terapkan semua aturan pengecualian</label>
+
+          <div class="stack" id="exclusion-list" data-exclusion-control style="margin-top:var(--space-3)">
+            ${renderExclusionRows(data)}
+          </div>
+
+          <div class="form-grid" data-exclusion-control style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--border-subtle)">
+            <div class="field">
+              <label for="exclusion-field">Field</label>
+              <select class="select" id="exclusion-field" name="exclusion_field">
+                ${EXCLUSION_FIELD_OPTIONS.map(([val, label]) => `<option value="${esc(val)}">${esc(label)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label for="exclusion-match">Pencocokan</label>
+              <select class="select" id="exclusion-match" name="exclusion_match">
+                ${EXCLUSION_MATCH_OPTIONS.map(([val, label]) => `<option value="${esc(val)}">${esc(label)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field" style="grid-column:1/-1">
+              <label for="exclusion-pattern">Pola</label>
+              <input class="input mono" id="exclusion-pattern" name="exclusion_pattern" type="text" autocomplete="off" spellcheck="false" placeholder="Contoh: */service/mbkm/logbook*">
+              <span class="meta">Contoh: <span class="mono">*/service/mbkm/logbook*</span> untuk semua endpoint logbook MBKM, atau <span class="mono">/service/mbkm/logbook/total-verif</span> dengan mode persis sama.</span>
+            </div>
+          </div>
+          <div class="settings-actions" data-exclusion-control>
+            <button class="button primary" type="button" data-action="add-exclusion">${icon('plus')} Tambah pengecualian</button>
+            <span class="inline-status" id="exclusion-status" role="status"></span>
+          </div>
+
+          <div class="field" data-exclusion-control style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--border-subtle)">
+            <label for="exclusion-wazuh-query">Impor query Wazuh</label>
+            <textarea class="input mono" id="exclusion-wazuh-query" name="exclusion_wazuh_query" rows="3" spellcheck="false" placeholder="not (data.url: (*/mhs/* or */repository/*) or syscheck.path: */var/www/vendor/*)"></textarea>
+            <span class="meta">Tempel query <span class="mono">not (...)</span> dengan format <span class="mono">field: pola</span>. Setiap pola menjadi aturan glob/persis. Field yang didukung: data.url, data.srcip, agent.name, rule.description, data.referer, data.user_agent, data.status, syscheck.path, location, tenant.</span>
+          </div>
+          <div class="settings-actions" data-exclusion-control>
+            <button class="button" type="button" data-action="import-exclusions">${icon('upload')} Impor dari query</button>
+            <span class="inline-status" id="exclusion-import-status" role="status"></span>
           </div>
         </section>
 
@@ -432,6 +513,20 @@ export async function mount(ctx) {
       </div>`;
   }
 
+  async function refreshExclusions(body) {
+    if (body?.settings) settings = normalizeSettings(body.settings);
+    setDirty(false);
+    render();
+    showPanel('exclusions');
+  }
+
+  async function updateExclusion(ruleId, patch) {
+    return json(`/api/settings/exclusions/${encodeURIComponent(ruleId)}`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(patch), signal,
+    });
+  }
+
   async function loadUsers() {
     try {
       const res = await json('/api/auth/users', {signal, timeout: 10000});
@@ -459,9 +554,49 @@ export async function mount(ctx) {
   }
 
   root.addEventListener('input', event => {
+    if (event.target.closest('[data-exclusion-control]')) return;
     if (event.target.closest('#settings-form')) setDirty(true);
   }, {signal});
-  root.addEventListener('change', event => {
+  root.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || !event.target.closest('[data-exclusion-control]') || event.target.matches('textarea')) return;
+    event.preventDefault();
+    if (event.target.id === 'exclusion-pattern') root.querySelector('[data-action=add-exclusion]')?.click();
+  }, {signal});
+
+  root.addEventListener('change', async event => {
+    if (event.target.closest('[data-exclusion-control]')) {
+      if (event.target.matches('[data-action=toggle-exclusion]')) {
+        const ruleId = event.target.dataset.exclusionId;
+        event.target.disabled = true;
+        try {
+          const body = await updateExclusion(ruleId, {enabled: event.target.checked});
+          await refreshExclusions(body);
+        } catch (error) {
+          notify(error.message || 'Gagal memperbarui aturan pengecualian.', 'error');
+          event.target.checked = !event.target.checked;
+        } finally {
+          if (event.target.isConnected) event.target.disabled = false;
+        }
+      } else if (event.target.matches('[data-action=toggle-exclusions-enabled]')) {
+        event.target.disabled = true;
+        try {
+          const body = await json('/api/settings', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({exclusions: {enabled: event.target.checked}}),
+            signal,
+          });
+          await refreshExclusions(body);
+          notify(event.target.checked ? 'Pengecualian global diaktifkan.' : 'Pengecualian global dimatikan.', 'info');
+        } catch (error) {
+          notify(error.message || 'Gagal mengubah status pengecualian.', 'error');
+          event.target.checked = !event.target.checked;
+        } finally {
+          if (event.target.isConnected) event.target.disabled = false;
+        }
+      }
+      return;
+    }
     if (!event.target.closest('#settings-form')) return;
     setDirty(true);
     if (event.target.name === 'realtime_mode') {
@@ -489,6 +624,80 @@ export async function mount(ctx) {
     }
     const tab = event.target.closest('[data-settings-tab]');
     if (tab) { showPanel(tab.dataset.settingsTab); return; }
+    const addExclusionButton = event.target.closest('[data-action=add-exclusion]');
+    if (addExclusionButton) {
+      const field = root.querySelector('#exclusion-field')?.value || 'url';
+      const match = root.querySelector('#exclusion-match')?.value || 'glob';
+      const input = root.querySelector('#exclusion-pattern');
+      const pattern = (input?.value || '').trim();
+      const statusSlot = root.querySelector('#exclusion-status');
+      if (!pattern) {
+        if (statusSlot) { statusSlot.textContent = 'Isi pola pengecualian terlebih dahulu.'; statusSlot.dataset.kind = 'error'; }
+        input?.focus();
+        return;
+      }
+      addExclusionButton.disabled = true;
+      try {
+        const body = await json('/api/settings/exclusions', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({field, match, pattern}), signal,
+        });
+        await refreshExclusions(body);
+        notify(body.added === false ? 'Pola tersebut sudah ada di daftar pengecualian.' : 'Aturan pengecualian ditambahkan.', body.added === false ? 'info' : 'success');
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          if (statusSlot) { statusSlot.textContent = error.message; statusSlot.dataset.kind = 'error'; }
+          else notify(error.message, 'error');
+        }
+      } finally {
+        if (addExclusionButton.isConnected) addExclusionButton.disabled = false;
+      }
+      return;
+    }
+    const importExclusionsButton = event.target.closest('[data-action=import-exclusions]');
+    if (importExclusionsButton) {
+      const textarea = root.querySelector('#exclusion-wazuh-query');
+      const query = (textarea?.value || '').trim();
+      const statusSlot = root.querySelector('#exclusion-import-status');
+      if (!query) {
+        if (statusSlot) { statusSlot.textContent = 'Tempel query Wazuh terlebih dahulu.'; statusSlot.dataset.kind = 'error'; }
+        textarea?.focus();
+        return;
+      }
+      importExclusionsButton.disabled = true;
+      try {
+        const body = await json('/api/settings/exclusions/import', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({query}), signal,
+        });
+        await refreshExclusions(body);
+        notify(`${body.added_count || 0} aturan pengecualian diimpor.`, body.added_count ? 'success' : 'info');
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          if (statusSlot) { statusSlot.textContent = error.message; statusSlot.dataset.kind = 'error'; }
+          else notify(error.message, 'error');
+        }
+      } finally {
+        if (importExclusionsButton.isConnected) importExclusionsButton.disabled = false;
+      }
+      return;
+    }
+    const deleteExclusionButton = event.target.closest('[data-action=delete-exclusion]');
+    if (deleteExclusionButton) {
+      const ruleId = deleteExclusionButton.dataset.exclusionId;
+      if (!confirm('Hapus aturan pengecualian ini? Alert yang sebelumnya disembunyikan akan muncul lagi.')) return;
+      deleteExclusionButton.disabled = true;
+      try {
+        const body = await json(`/api/settings/exclusions/${encodeURIComponent(ruleId)}`, {method: 'DELETE', signal});
+        await refreshExclusions(body);
+        notify('Aturan pengecualian dihapus.', 'info');
+      } catch (error) {
+        if (error.name !== 'AbortError') notify(error.message || 'Gagal menghapus aturan pengecualian.', 'error');
+      } finally {
+        if (deleteExclusionButton.isConnected) deleteExclusionButton.disabled = false;
+      }
+      return;
+    }
     const connectionButton = event.target.closest('[data-action=test-connection]');
     if (connectionButton) { await testConnection(connectionButton); return; }
     const modelButton = event.target.closest('[data-action=test-model]');

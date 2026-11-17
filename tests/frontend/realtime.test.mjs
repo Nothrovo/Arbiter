@@ -35,6 +35,9 @@ test('realtime page pulls and ingests instead of only counting', () => {
   assert.match(view, /deduplicated/);
   assert.match(view, /status === 'skipped'/);
   assert.match(view, /mode === 'daily'/);
+  assert.match(view, /has_more/);
+  assert.match(view, /isRangePull/);
+  assert.match(view, /range_key/);
 });
 
 test('incidents render AI verdicts and source', () => {

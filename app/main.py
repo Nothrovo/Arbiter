@@ -40,6 +40,12 @@ from app.ai_triage import (
     wib_window_key,
 )
 from app.core import normalize_alert, suggestions_with_fallback
+from app.exclusions import (
+    MAX_EXCLUSION_RULES,
+    normalize_exclusion_rule,
+    parse_wazuh_exclusion,
+    with_exclusions,
+)
 from app.intel import enrich_ip, is_valid_ip, lookup_remote_ip_cache_detail, sync_remote_cache, upsert_ip_cache
 import app.database as db_module
 from app.database import get_db, init_database, ingest_alert_with_dedup
@@ -262,6 +268,14 @@ def import_text(payload: dict[str, Any]):
     return {**stats, "warnings": warnings}
 
 
+def _exclusion_document(conn) -> dict[str, Any]:
+    """Load workspace exclusions for discovery views; never block on a bad row."""
+    try:
+        return load_settings(conn).get("exclusions") or {}
+    except Exception:
+        return {}
+
+
 @app.get("/api/alerts")
 def list_alerts(
     q: str = "",
@@ -313,33 +327,37 @@ def list_alerts(
         a.parsed_details, a.reviewer_notes,
         COALESCE(a.raw->>'full_log', '') AS full_log,
         COALESCE(a.raw->>'previous_output', '') AS previous_output"""
-    sql = f"""
-    SELECT {projection},
-        ipc.abuse_score,
-        ipc.vt_malicious,
-        ipc.country_code,
-        ipc.isp,
-        ipc.attack_types,
-        COALESCE(
-            json_agg(json_build_object('id', g.id, 'title', g.title, 'category', g.category))
-            FILTER (WHERE g.id IS NOT NULL),
-            '[]'
-        ) AS groups
-    FROM wazuh.alerts a
-    LEFT JOIN public.ip_intel_cache ipc ON a.source_ip = ipc.ip
-    LEFT JOIN wazuh.alert_group_members m ON m.alert_pk = a.id
-    LEFT JOIN wazuh.analysis_groups g ON g.id = m.group_id
-    {where_sql}
-    GROUP BY 
-        a.id, ipc.abuse_score, ipc.vt_malicious, ipc.country_code, ipc.isp, ipc.attack_types
-    ORDER BY {order_col}
-    LIMIT %s OFFSET %s
-    """
-    count_sql = f"SELECT count(DISTINCT a.id) AS n FROM wazuh.alerts a {where_sql}"
 
+    explicit_selection = alert_ids is not None and str(alert_ids).strip() != ""
     with get_db() as conn:
-        rows = conn.execute(sql, params + [limit, offset]).fetchall()
-        total = conn.execute(count_sql, params).fetchone()["n"]
+        scoped_sql, scoped_params = where_sql, params
+        if not explicit_selection:
+            scoped_sql, scoped_params = with_exclusions(where_sql, params, _exclusion_document(conn))
+        sql = f"""
+        SELECT {projection},
+            ipc.abuse_score,
+            ipc.vt_malicious,
+            ipc.country_code,
+            ipc.isp,
+            ipc.attack_types,
+            COALESCE(
+                json_agg(json_build_object('id', g.id, 'title', g.title, 'category', g.category))
+                FILTER (WHERE g.id IS NOT NULL),
+                '[]'
+            ) AS groups
+        FROM wazuh.alerts a
+        LEFT JOIN public.ip_intel_cache ipc ON a.source_ip = ipc.ip
+        LEFT JOIN wazuh.alert_group_members m ON m.alert_pk = a.id
+        LEFT JOIN wazuh.analysis_groups g ON g.id = m.group_id
+        {scoped_sql}
+        GROUP BY 
+            a.id, ipc.abuse_score, ipc.vt_malicious, ipc.country_code, ipc.isp, ipc.attack_types
+        ORDER BY {order_col}
+        LIMIT %s OFFSET %s
+        """
+        count_sql = f"SELECT count(DISTINCT a.id) AS n FROM wazuh.alerts a {scoped_sql}"
+        rows = conn.execute(sql, scoped_params + [limit, offset]).fetchall()
+        total = conn.execute(count_sql, scoped_params).fetchone()["n"]
 
     return {"items": rows, "total": total}
 
@@ -803,6 +821,10 @@ def get_stats(
         dim_params = []
 
     with get_db() as conn:
+        exclusion_doc = _exclusion_document(conn)
+        where_sql, base_params = with_exclusions(where_sql, base_params, exclusion_doc)
+        parent_where_sql, parent_base_params = with_exclusions(parent_where_sql, parent_base_params, exclusion_doc)
+        workspace_where_sql, workspace_base_params = with_exclusions(workspace_where_sql, workspace_base_params, exclusion_doc)
         total_row = conn.execute(
             f"""SELECT COUNT(*) AS total_alerts,
                        COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS total_events
@@ -1062,6 +1084,7 @@ def get_facet_alert_ids(payload: dict[str, Any]):
         params.append(secondary_facet_values)
 
     with get_db() as conn:
+        where_sql, params = with_exclusions(where_sql, params, _exclusion_document(conn))
         rows = conn.execute(
             f"SELECT a.id, a.data, a.parsed_details, a.raw FROM wazuh.alerts a {where_sql} ORDER BY a.rule_id ASC NULLS LAST, a.timestamp ASC NULLS LAST, a.id ASC LIMIT 10000",
             params,
@@ -1122,6 +1145,8 @@ def triage_summary(
     )
 
     with get_db() as conn:
+        if not (alert_ids and str(alert_ids).strip()):
+            where_sql, params = with_exclusions(where_sql, params, _exclusion_document(conn))
         counts = conn.execute(
             f"""SELECT COUNT(*) AS alerts,
                        COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS events,
@@ -1208,6 +1233,7 @@ def get_suggestions(
         status=status, group_id=group_id, time_from=time_from, time_to=time_to,
     )
     with get_db() as conn:
+        where, params = with_exclusions(where, params, _exclusion_document(conn))
         rows = conn.execute(
             f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip, a.rule_id, a.rule_level,
                        a.description, a.rule_groups, a.decoder, a.location, a.source_ip, a.mitre_ids, a.cve,
@@ -1276,6 +1302,7 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
     custom_time_from = ""
     custom_time_to = ""
     custom_range = False
+    custom_range_key = ""
     force_pull = False
 
     if isinstance(payload, dict):
@@ -1309,6 +1336,7 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
                 raise HTTPException(status_code=400, detail="max_alerts harus antara 1 dan 100000.")
         raw_from = str(payload.get("time_from") or payload.get("since") or "").strip()
         raw_to = str(payload.get("time_to") or payload.get("until") or "").strip()
+        custom_range_key = str(payload.get("range_key") or "").strip()[:200]
         if raw_from:
             norm_from = _normalize_wazuh_timestamp(raw_from)
             if not _valid_timestamp(norm_from):
@@ -1352,6 +1380,31 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
     effective_since = custom_time_from if custom_range else last_pull_at
     effective_until = custom_time_to if custom_range else ""
 
+    # Range pulls are capped per call. Persist a search_after cursor for the same
+    # range/severity so the next pull continues instead of refetching the newest
+    # subset over and over.
+    range_signature = ""
+    resume_after: list[Any] | None = None
+    stored_cursor = realtime.get("range_cursor")
+    if custom_range:
+        range_signature = custom_range_key and f"{custom_range_key}|{min_rule_level}|{max_rule_level}|{wazuh.get('index_pattern', 'wazuh-alerts-*')}"
+        if not range_signature:
+            range_signature = json.dumps(
+                {
+                    "since": effective_since,
+                    "until": effective_until,
+                    "min": min_rule_level,
+                    "max": max_rule_level,
+                    "pattern": wazuh.get("index_pattern", "wazuh-alerts-*"),
+                },
+                sort_keys=True,
+            )
+        if isinstance(stored_cursor, dict) and stored_cursor.get("signature") == range_signature:
+            candidate_after = stored_cursor.get("search_after")
+            if isinstance(candidate_after, list) and candidate_after:
+                resume_after = candidate_after
+    search_cursor: dict[str, Any] = {}
+
     try:
         docs = wazuh_search(
             indexer_url=wazuh.get("indexer_url", ""),
@@ -1364,9 +1417,14 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
             until=effective_until,
             min_rule_level=min_rule_level,
             max_rule_level=max_rule_level,
+            search_after=resume_after,
+            cursor=search_cursor,
         )
     except ValueError as error:
         raise HTTPException(status_code=502, detail=str(error)) from None
+
+    has_more = bool(search_cursor.get("has_more"))
+    next_after = search_cursor.get("search_after")
 
     inserted = 0
     deduplicated = 0
@@ -1383,6 +1441,16 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
         # Persist the pull timestamp and any updated severity selection.
         if not custom_range or not custom_time_to:
             stored["realtime"]["last_pull_at"] = now.isoformat()
+        if custom_range and has_more and isinstance(next_after, list) and next_after:
+            stored["realtime"]["range_cursor"] = {
+                "signature": range_signature,
+                "search_after": next_after,
+                "saved_at": now.isoformat(),
+            }
+            range_cursor_saved = True
+        else:
+            stored["realtime"].pop("range_cursor", None)
+            range_cursor_saved = False
         stored["realtime"]["min_rule_level"] = min_rule_level
         stored["realtime"]["max_rule_level"] = max_rule_level
         save_settings(conn, stored)
@@ -1397,6 +1465,9 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
         # True when the indexer returned exactly the requested cap, meaning more
         # matching alerts may exist beyond this pull.
         "capped": len(docs) >= pull_size,
+        "has_more": has_more,
+        "resumed": bool(resume_after),
+        "range_cursor_saved": range_cursor_saved,
         "min_rule_level": min_rule_level,
         "max_rule_level": max_rule_level,
         "time_from": effective_since,
@@ -1557,6 +1628,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             ).fetchall()
 
         where, where_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
+        where, where_params = with_exclusions(where, where_params, _exclusion_document(conn))
         candidate_rows = conn.execute(
             f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
                        a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
@@ -1676,8 +1748,9 @@ def api_ai_triage(payload: dict[str, Any]):
     review_status = str(payload.get("review_status") or "unreviewed")
     norm_tenants = list(normalize_tenants(tenant)) or ["all"]
     where, where_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
-    query_params = list(where_params) + [limit]
     with get_db() as conn:
+        where, where_params = with_exclusions(where, where_params, _exclusion_document(conn))
+        query_params = list(where_params) + [limit]
         rows = conn.execute(
             f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
                        a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
@@ -1913,6 +1986,8 @@ def _get_alerts_for_export(
         "severity": "Medium", "status": "Triage", "analysis": "", "conclusion": "", "recommendation": "",
     }
     with get_db() as conn:
+        if not alert_ids and not group_id:
+            where, params = with_exclusions(where, params, _exclusion_document(conn))
         if group_id and not alert_ids:
             groups = _scoped_groups(conn, tenant, group_id)
             if not groups:
@@ -2060,6 +2135,105 @@ def api_put_settings(payload: dict[str, Any]):
             raise HTTPException(status_code=400, detail=str(error)) from None
         save_settings(conn, updated)
     return {"settings": redact_settings(updated)}
+
+
+def _persist_exclusion_rules(conn, current: dict[str, Any], rules: list[dict[str, Any]]) -> dict[str, Any]:
+    """Validate and persist a replacement rule list, preserving the rest of settings."""
+    updated = validate_settings({"exclusions": {"rules": rules}}, current)
+    save_settings(conn, updated)
+    return updated
+
+
+@app.post("/api/settings/exclusions")
+def api_add_exclusion(payload: dict[str, Any]):
+    with get_db() as conn:
+        current = load_settings(conn)
+        existing_rules = list((current.get("exclusions") or {}).get("rules") or [])
+        try:
+            rule = normalize_exclusion_rule(payload)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from None
+        duplicate = next(
+            (item for item in existing_rules
+             if item.get("field") == rule["field"]
+             and item.get("match") == rule["match"]
+             and item.get("pattern") == rule["pattern"]),
+            None,
+        )
+        if duplicate is not None:
+            rule = duplicate
+            updated = current
+            added = False
+        else:
+            if len(existing_rules) >= MAX_EXCLUSION_RULES:
+                raise HTTPException(status_code=400, detail=f"Maksimal {MAX_EXCLUSION_RULES} aturan pengecualian.")
+            try:
+                updated = _persist_exclusion_rules(conn, current, existing_rules + [rule])
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from None
+            added = True
+    return {"settings": redact_settings(updated), "rule": rule, "added": added}
+
+
+@app.put("/api/settings/exclusions/{rule_id}")
+def api_update_exclusion(rule_id: str, payload: dict[str, Any]):
+    with get_db() as conn:
+        current = load_settings(conn)
+        existing_rules = list((current.get("exclusions") or {}).get("rules") or [])
+        index = next((i for i, item in enumerate(existing_rules) if item.get("id") == rule_id), None)
+        if index is None:
+            raise HTTPException(status_code=404, detail="Aturan pengecualian tidak ditemukan.")
+        try:
+            merged = normalize_exclusion_rule({**existing_rules[index], **payload, "id": rule_id})
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from None
+        existing_rules[index] = merged
+        try:
+            updated = _persist_exclusion_rules(conn, current, existing_rules)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from None
+    return {"settings": redact_settings(updated), "rule": merged}
+
+
+@app.delete("/api/settings/exclusions/{rule_id}")
+def api_delete_exclusion(rule_id: str):
+    with get_db() as conn:
+        current = load_settings(conn)
+        existing_rules = list((current.get("exclusions") or {}).get("rules") or [])
+        remaining = [item for item in existing_rules if item.get("id") != rule_id]
+        if len(remaining) == len(existing_rules):
+            raise HTTPException(status_code=404, detail="Aturan pengecualian tidak ditemukan.")
+        try:
+            updated = _persist_exclusion_rules(conn, current, remaining)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from None
+    return {"settings": redact_settings(updated), "deleted": rule_id}
+
+
+@app.post("/api/settings/exclusions/import")
+def api_import_exclusions(payload: dict[str, Any]):
+    try:
+        parsed = parse_wazuh_exclusion(payload.get("query"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from None
+    with get_db() as conn:
+        current = load_settings(conn)
+        existing_rules = list((current.get("exclusions") or {}).get("rules") or [])
+        seen = {(item.get("field"), item.get("match"), item.get("pattern")) for item in existing_rules}
+        added: list[dict[str, Any]] = []
+        for rule in parsed:
+            key = (rule["field"], rule["match"], rule["pattern"])
+            if key in seen:
+                continue
+            seen.add(key)
+            added.append(rule)
+        if len(existing_rules) + len(added) > MAX_EXCLUSION_RULES:
+            raise HTTPException(status_code=400, detail=f"Maksimal {MAX_EXCLUSION_RULES} aturan pengecualian.")
+        try:
+            updated = _persist_exclusion_rules(conn, current, existing_rules + added) if added else current
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from None
+    return {"settings": redact_settings(updated), "added": added, "added_count": len(added)}
 
 
 @app.post("/api/settings/wazuh/test")

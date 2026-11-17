@@ -178,7 +178,9 @@ export async function mount(ctx) {
     }[timePreset];
 
     if (presetMs) {
+      // Freeze the window for the whole pull so resumed pages query the same range.
       payload.time_from = new Date(Date.now() - presetMs).toISOString();
+      payload.range_key = `preset:${timePreset}`;
       rangeLabel = TIME_PRESET_LABELS[timePreset] || timePreset;
     } else if (timePreset === 'custom') {
       const fromInput = root.querySelector('#realtime-time-from');
@@ -194,37 +196,62 @@ export async function mount(ctx) {
       }
       if (fromVal) payload.time_from = fromVal;
       if (toVal) payload.time_to = toVal;
+      payload.range_key = `custom:${fromVal}|${toVal}`;
       rangeLabel = `${fromVal ? fromVal.replace('T', ' ') : 'Awal'} → ${toVal ? toVal.replace('T', ' ') : 'Sekarang'}`;
     }
+
+    const isRangePull = Boolean(payload.time_from);
+    // Manual range pulls walk the whole range page by page. The server caps each
+    // request at "Maks alert/pull" and returns has_more so the next request
+    // resumes from a search_after cursor instead of refetching the newest subset.
+    const maxPages = manual && isRangePull ? 20 : 1;
+    let pages = 0;
+    let searched = 0;
+    let inserted = 0;
+    let deduplicated = 0;
+    let last = null;
+    let hasMore = false;
     try {
-      const result = await json('/api/realtime/pull', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload),
-        signal,
-        // Large pulls (up to 100000 alerts) can take minutes; do not abort early.
-        timeout: 1800000,
-      });
+      do {
+        last = await json('/api/realtime/pull', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+          signal,
+          // Large pulls (up to 100000 alerts) can take minutes; do not abort early.
+          timeout: 1800000,
+        });
+        pages += 1;
+        if (last.status !== 'pulled') break;
+        searched += Number(last.searched) || 0;
+        inserted += Number(last.inserted) || 0;
+        deduplicated += Number(last.deduplicated) || 0;
+        hasMore = Boolean(last.has_more);
+      } while (hasMore && pages < maxPages);
+
+      if (!last) return;
+      const capped = Boolean(hasMore || last.capped);
       history.unshift({
-        at: result.pulled_at || new Date().toISOString(),
-        status: result.status,
+        at: last.pulled_at || new Date().toISOString(),
+        status: last.status,
         rangeLabel,
-        searched: Number(result.searched) || 0,
-        inserted: Number(result.inserted) || 0,
-        deduplicated: Number(result.deduplicated) || 0,
-        max_alerts: Number(result.max_alerts) || 0,
-        capped: Boolean(result.capped),
-        next_pull_at: result.next_pull_at || '',
+        searched,
+        inserted,
+        deduplicated,
+        max_alerts: Number(last.max_alerts) || 0,
+        capped,
+        next_pull_at: last.next_pull_at || '',
         duration: Math.round(performance.now() - started),
       });
-      if (result.status === 'pulled') {
-        if (result.capped) {
-          notify(`${result.inserted} alert baru (${result.searched} diperiksa · ${result.deduplicated} dedup). Batas ${Number(result.max_alerts).toLocaleString('id-ID')} alert/pull tercapai — naikkan "Maks alert/pull" untuk menarik sisanya.`, 'warning');
+      if (last.status === 'pulled') {
+        const pageNote = pages > 1 ? ` · ${pages} halaman` : '';
+        if (capped) {
+          notify(`${inserted} alert baru (${searched} diperiksa${pageNote} · ${deduplicated} dedup). ${hasMore ? `Batas ${maxPages} halaman tercapai — klik "Pull sekarang" lagi untuk melanjutkan dari posisi terakhir.` : `Batas ${Number(last.max_alerts).toLocaleString('id-ID')} alert/pull tercapai — naikkan "Maks alert/pull" untuk menarik sisanya.`}`, 'warning');
         } else {
-          notify(`${result.inserted} alert baru ditarik (${result.searched} diperiksa · ${result.deduplicated} dedup).`, 'success');
+          notify(`${inserted} alert baru ditarik (${searched} diperiksa${pageNote} · ${deduplicated} dedup).`, 'success');
         }
-      } else if (result.status === 'skipped') {
-        notify(result.reason || 'Pull harian dilewati.', 'info');
+      } else if (last.status === 'skipped') {
+        notify(last.reason || 'Pull harian dilewati.', 'info');
       }
     } catch (error) {
       if (error.name === 'AbortError') return;

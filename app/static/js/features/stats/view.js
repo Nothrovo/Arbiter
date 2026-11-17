@@ -6,6 +6,20 @@ import {createStatsSession} from '../../state/stats.js';
 import {drilldownScrollBehavior, normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {statsPage, statsResults, renderAppliedFilters} from './render.js';
 
+const PERSIST_EXCLUDE_FIELDS = {
+  url_path: 'url',
+  rule_description: 'rule_description',
+  rule_id: 'rule_id',
+  source_ip: 'source_ip',
+  agent: 'agent',
+  http_status: 'http_status',
+  http_method: 'http_method',
+  referer: 'referer',
+  user_agent: 'user_agent',
+  tenant: 'tenant',
+};
+
+
 export function mount(ctx) {
   const {root, route, signal, navigate, notify} = ctx;
   const query = normalizeStatsQuery(route.params);
@@ -336,6 +350,32 @@ export function mount(ctx) {
     }
     if (btn.dataset.excludeKey) {
       updateRoute({exclude_facet: query.pivot_by, exclude_facet_value: btn.dataset.excludeKey});
+      return;
+    }
+    if (btn.dataset.globalExcludeKey) {
+      const key = btn.dataset.globalExcludeKey;
+      const field = PERSIST_EXCLUDE_FIELDS[query.pivot_by];
+      if (!field || !key || key === 'Lainnya' || key === 'Tidak tersedia') {
+        notify('Kategori ini belum dapat dijadikan pengecualian permanen.', 'error');
+        return;
+      }
+      const match = field === 'url' ? 'contains' : 'exact';
+      if (!confirm(`Sembunyikan "${key}" secara permanen dari Triage dan Statistik?\n\nAturan dapat dihapus lagi di Pengaturan → Pengecualian.`)) return;
+      btn.disabled = true;
+      try {
+        const body = await json('/api/settings/exclusions', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({field, match, pattern: key, label: `Dari statistik: ${query.pivot_by}`}),
+          signal,
+        });
+        notify(body.added === false ? 'Kategori ini sudah ada di daftar pengecualian.' : `Kategori "${key}" disembunyikan permanen.`, body.added === false ? 'info' : 'success');
+        await loadData();
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message || 'Gagal menambahkan pengecualian.', 'error');
+      } finally {
+        if (btn.isConnected) btn.disabled = false;
+      }
       return;
     }
     if (btn.dataset.action === 'reset-stats') {

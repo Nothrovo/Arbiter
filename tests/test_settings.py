@@ -298,6 +298,60 @@ class SettingsAPITests(unittest.TestCase):
         self.assertFalse(_valid_timestamp(""))
         self.assertFalse(_valid_timestamp("not-a-date"))
 
+    def test_wazuh_search_exposes_resume_cursor_for_capped_range_pulls(self):
+        import json as json_module
+        from app.settings import wazuh_search
+
+        requests = []
+        responses = [
+            {"hits": {"hits": [
+                {"_source": {"id": f"a-{i}"}, "sort": [f"2026-11-06T01:00:0{i}Z", f"a-{i}"]}
+                for i in range(2)
+            ]}},
+            {"hits": {"hits": [
+                {"_source": {"id": "b-0"}, "sort": ["2026-11-05T23:00:00Z", "b-0"]},
+            ]}},
+        ]
+
+        class FakeResponse:
+            status = 200
+            def __init__(self, body):
+                self._body = json_module.dumps(body).encode("utf-8")
+            def read(self, limit):
+                return self._body
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+
+        class FakeOpener:
+            def open(self, request, timeout):
+                requests.append(json_module.loads(request.data.decode("utf-8")))
+                return FakeResponse(responses[len(requests) - 1])
+
+        cursor = {}
+        with patch("app.settings._wazuh_opener", return_value=FakeOpener()):
+            first = wazuh_search(
+                indexer_url="https://wazuh.lab:9200", username="analyst", password="secret",
+                index_pattern="wazuh-alerts-*", verify_tls=True, size=2, since="05/11/2026 00.00.00",
+                cursor=cursor,
+            )
+            self.assertEqual([doc["id"] for doc in first], ["a-0", "a-1"])
+            self.assertTrue(cursor["has_more"])
+            self.assertEqual(cursor["search_after"], ["2026-11-06T01:00:01Z", "a-1"])
+            self.assertNotIn("search_after", requests[0])
+
+            second_cursor = {}
+            second = wazuh_search(
+                indexer_url="https://wazuh.lab:9200", username="analyst", password="secret",
+                index_pattern="wazuh-alerts-*", verify_tls=True, size=2, since="05/11/2026 00.00.00",
+                search_after=cursor["search_after"], cursor=second_cursor,
+            )
+        self.assertEqual([doc["id"] for doc in second], ["b-0"])
+        self.assertFalse(second_cursor["has_more"])
+        self.assertIsNone(second_cursor["search_after"])
+        self.assertEqual(requests[1]["search_after"], ["2026-11-06T01:00:01Z", "a-1"])
+
     def test_wazuh_search_sends_normalized_since_timestamp(self):
         import json as json_module
         from app.settings import wazuh_search

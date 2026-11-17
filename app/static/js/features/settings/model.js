@@ -64,7 +64,46 @@ export const DEFAULT_SETTINGS = {
     abuseipdb_key_set: false,
   },
   ui: {sidebar_default: 'expanded'},
+  exclusions: {enabled: true, rules: []},
 };
+
+export const EXCLUSION_FIELD_OPTIONS = [
+  ['url', 'URL / Path'],
+  ['source_ip', 'Source IP'],
+  ['agent', 'Host / Agent'],
+  ['rule_id', 'Rule ID'],
+  ['rule_description', 'Deskripsi rule'],
+  ['http_method', 'HTTP Method'],
+  ['http_status', 'HTTP status'],
+  ['referer', 'HTTP Referer'],
+  ['user_agent', 'User-Agent'],
+  ['location', 'Location'],
+  ['tenant', 'Tenant'],
+  ['syscheck_path', 'Syscheck path'],
+  ['any', 'Semua teks alert'],
+];
+
+export const EXCLUSION_MATCH_OPTIONS = [
+  ['glob', 'Glob (pakai * dan ?)'],
+  ['contains', 'Mengandung teks'],
+  ['exact', 'Persis sama'],
+  ['regex', 'Regex (PostgreSQL)'],
+];
+
+export function exclusionFieldLabel(field) {
+  return EXCLUSION_FIELD_OPTIONS.find(([key]) => key === field)?.[1] || field;
+}
+
+export function exclusionMatchLabel(match) {
+  return EXCLUSION_MATCH_OPTIONS.find(([key]) => key === match)?.[1] || match;
+}
+
+export function exclusionRuleStats(settings) {
+  const doc = normalizeSettings(settings).exclusions;
+  const total = doc.rules.length;
+  const active = doc.rules.filter(rule => rule.enabled).length;
+  return {total, active, inert: total - active};
+}
 
 export function normalizeOllamaBaseUrl(value) {
   let raw = String(value ?? '').trim();
@@ -83,7 +122,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 export function normalizeSettings(value) {
   const base = clone(DEFAULT_SETTINGS);
   if (!value || typeof value !== 'object') return base;
-  for (const section of ['wazuh', 'realtime', 'ai', 'intel', 'ui']) {
+  for (const section of ['wazuh', 'realtime', 'ai', 'intel', 'ui', 'exclusions']) {
     if (value[section] && typeof value[section] === 'object') Object.assign(base[section], value[section]);
   }
   base.wazuh.enabled = Boolean(base.wazuh.enabled);
@@ -115,6 +154,17 @@ export function normalizeSettings(value) {
   base.intel.web_url = rawWebUrl || 'http://localhost:3001';
   base.intel.abuseipdb_key_set = Boolean(base.intel.abuseipdb_key_set);
   if (!['expanded', 'collapsed'].includes(base.ui.sidebar_default)) base.ui.sidebar_default = 'expanded';
+  base.exclusions.enabled = base.exclusions.enabled !== false;
+  base.exclusions.rules = Array.isArray(base.exclusions.rules)
+    ? base.exclusions.rules.map(rule => ({
+        id: String(rule?.id || ''),
+        field: String(rule?.field || 'url'),
+        match: String(rule?.match || 'glob'),
+        pattern: String(rule?.pattern || ''),
+        label: String(rule?.label || ''),
+        enabled: rule?.enabled !== false,
+      })).filter(rule => rule.pattern)
+    : [];
   return base;
 }
 

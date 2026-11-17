@@ -19,6 +19,7 @@ import urllib.request
 from datetime import datetime
 from typing import Any
 
+from app.exclusions import normalize_exclusions
 from app.secure_store import SecretStoreError, decrypt_text, encrypt_text, is_encrypted
 
 SETTINGS_KEY = "app"
@@ -52,6 +53,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     },
     "ui": {
         "sidebar_default": "expanded",
+    },
+    "exclusions": {
+        "enabled": True,
+        "rules": [],
     },
 }
 
@@ -253,6 +258,11 @@ def validate_settings(payload: dict[str, Any], current: dict[str, Any] | None = 
         raise ValueError("ui.sidebar_default harus expanded atau collapsed.")
     ui["sidebar_default"] = sidebar
 
+    exclusions = settings.get("exclusions")
+    if not isinstance(exclusions, dict):
+        raise ValueError("Bagian exclusions tidak valid.")
+    settings["exclusions"] = normalize_exclusions(exclusions)
+
     return settings
 
 
@@ -269,6 +279,9 @@ def redact_settings(settings: dict[str, Any]) -> dict[str, Any]:
     abuse_key_enc = intel.pop("abuseipdb_key_enc", "") or ""
     intel.pop("abuseipdb_api_key", None)
     intel["abuseipdb_key_set"] = bool(abuse_key_enc)
+    realtime = result.get("realtime")
+    if isinstance(realtime, dict):
+        realtime.pop("range_cursor", None)
     return result
 
 
@@ -604,6 +617,8 @@ def wazuh_search(
     min_rule_level: int = MIN_RULE_LEVEL,
     max_rule_level: int | None = None,
     timeout: float = 60.0,
+    search_after: list[Any] | None = None,
+    cursor: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Pull alert documents from the Wazuh Indexer within the configured severity range.
 
@@ -611,6 +626,10 @@ def wazuh_search(
     are optional timestamp bounds on the alert ``timestamp`` field. Up to
     ``MAX_WAZUH_SEARCH_SIZE`` documents are fetched with ``search_after`` paging so
     the result window limit does not cap the pull.
+
+    Pass a previous ``search_after`` tuple to resume a capped range pull, and an
+    optional ``cursor`` dict to receive ``search_after``/``has_more`` for the next
+    call. Without a cursor the function behaves exactly as before.
     """
     base = str(indexer_url or "").strip().rstrip("/")
     if not base or not _URL.match(base):
@@ -657,7 +676,8 @@ def wazuh_search(
     sort_spec: list[dict[str, Any]] | None = None
 
     remaining = int(size)
-    search_after: list[Any] | None = None
+    page_after: list[Any] | None = search_after if isinstance(search_after, list) and search_after else None
+    exhausted = False
     docs: list[dict[str, Any]] = []
     while remaining > 0:
         batch_size = min(remaining, _WAZUH_SEARCH_PAGE)
@@ -670,8 +690,8 @@ def wazuh_search(
                 "sort": candidate,
                 "track_total_hits": False,
             }
-            if search_after:
-                payload["search_after"] = search_after
+            if page_after:
+                payload["search_after"] = page_after
             request = urllib.request.Request(
                 target,
                 data=json.dumps(payload).encode("utf-8"),
@@ -694,12 +714,22 @@ def wazuh_search(
         if last_error is not None and not outer:
             raise last_error
         if not outer:
+            exhausted = True
+            page_after = None
             break
         for hit in outer:
             if isinstance(hit, dict) and isinstance(hit.get("_source"), dict):
                 docs.append(hit["_source"])
         remaining -= len(outer)
-        search_after = outer[-1].get("sort") if isinstance(outer[-1], dict) else None
-        if not search_after or len(outer) < batch_size:
+        next_after = outer[-1].get("sort") if isinstance(outer[-1], dict) else None
+        if not next_after or len(outer) < batch_size:
+            exhausted = True
+            page_after = None
             break
+        page_after = next_after
+
+    if cursor is not None:
+        cursor["search_after"] = page_after
+        cursor["has_more"] = bool(page_after) and remaining <= 0 and not exhausted
+        cursor["fetched"] = len(docs)
     return docs

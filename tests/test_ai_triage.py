@@ -360,6 +360,60 @@ class AITriageAPITests(unittest.TestCase):
         mocked.assert_called_once()
         self.assertEqual(mocked.call_args.kwargs["size"], 100000)
 
+    def test_realtime_range_pull_resumes_with_cursor_until_range_is_complete(self):
+        self.client.put("/api/settings", json={"wazuh": {"indexer_url": "https://wazuh.lab:9200", "username": "analyst", "password": "stored"}})
+        doc = {
+            "id": "wazuh-range-1", "timestamp": "2026-11-05T12:00:00Z", "agent": {"name": "host-a", "ip": "192.0.2.10"},
+            "rule": {"id": "5710", "level": 10, "description": "SSH brute force", "groups": ["syslog"]},
+            "data": {"srcip": "1.2.3.4"}, "full_log": "Nov 5 12:00:00 host-a sshd[1]: Failed password",
+        }
+        calls = []
+
+        def fake_search(**kwargs):
+            calls.append(kwargs)
+            cursor = kwargs.get("cursor")
+            if kwargs.get("search_after") is None:
+                if cursor is not None:
+                    cursor["has_more"] = True
+                    cursor["search_after"] = ["2026-11-05T12:00:00Z", "wazuh-range-1"]
+                return [doc]
+            if cursor is not None:
+                cursor["has_more"] = False
+                cursor["search_after"] = None
+            return []
+
+        payload = {"force": True, "time_from": "05/11/2026 00.00.00", "time_to": "06/11/2026 00.00.00", "max_alerts": 1, "range_key": "preset:24h"}
+        shifted_payload = {**payload, "time_from": "05/11/2026 00.05.00"}
+        with patch.object(self.api, "wazuh_search", side_effect=fake_search):
+            with patch.object(self.api, "ingest_alert_with_dedup", return_value=(True, False)):
+                first = self.client.post("/api/realtime/pull", json=payload)
+                second = self.client.post("/api/realtime/pull", json=shifted_payload)
+                third = self.client.post("/api/realtime/pull", json=shifted_payload)
+
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertTrue(first.json()["has_more"])
+        self.assertFalse(first.json()["resumed"])
+        self.assertIsNone(calls[0]["search_after"])
+
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertTrue(second.json()["resumed"])
+        self.assertFalse(second.json()["has_more"])
+        self.assertEqual(calls[1]["search_after"], ["2026-11-05T12:00:00Z", "wazuh-range-1"])
+
+        # Cursor is cleared once the range is exhausted, so a fresh range starts over.
+        self.assertFalse(third.json()["resumed"])
+        self.assertIsNone(calls[2]["search_after"])
+        visible = self.client.get("/api/settings").json()["settings"]["realtime"]
+        self.assertNotIn("range_cursor", visible)
+
+    def test_realtime_interval_pull_has_no_range_cursor(self):
+        self.client.put("/api/settings", json={"wazuh": {"indexer_url": "https://wazuh.lab:9200", "username": "analyst", "password": "stored"}})
+        with patch.object(self.api, "wazuh_search", return_value=[]) as mocked:
+            response = self.client.post("/api/realtime/pull")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(response.json()["has_more"])
+        self.assertIsNone(mocked.call_args.kwargs["search_after"])
+
     def test_ai_triage_save_persists_verdict_groups(self):
         self.db.add_alert(4, "Alpha", rule_level=10, description="brute force", source_ip="1.2.3.4")
         self.db.add_alert(5, "Alpha", rule_level=10, description="brute force", source_ip="1.2.3.4")

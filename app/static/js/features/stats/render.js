@@ -2,6 +2,11 @@ import {esc, icon, severity} from '../../ui/primitives.js';
 import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {renderBarChart, renderDonutChart, renderLineChart} from '../../ui/charts.js';
 
+const PERSIST_EXCLUDE_PIVOTS = new Set([
+  'url_path', 'rule_description', 'rule_id', 'source_ip', 'agent',
+  'http_status', 'http_method', 'referer', 'user_agent', 'tenant',
+]);
+
 export function renderAppliedFilters(query, data = null) {
   if (!((query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value))) {
     return '';
@@ -250,6 +255,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <td class="actions-col" style="text-align:right;">
           <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik dan tampilkan bukti alert">Drill-down</button>
           <button type="button" class="button text-button" data-exclude-key="${keyEsc}" title="Exclude kategori ini dari statistik">Exclude</button>
+          ${PERSIST_EXCLUDE_PIVOTS.has(data.pivot_by) ? `<button type="button" class="button text-button" data-global-exclude-key="${keyEsc}" title="Sembunyikan kategori ini secara permanen dari Triage dan Statistik">Sembunyikan</button>` : ''}
           <a class="button text-button" href="${triageUrl}" title="Lihat di antrean Triage">Triage</a>
         </td>
       </tr>

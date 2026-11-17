@@ -72,6 +72,37 @@ test('theme picker ignores clicks outside theme buttons even though <html> carri
   assert.match(view, /querySelectorAll\('\.theme-option\[data-theme\]'\)/);
 });
 
+test('exclusion rules normalize defensively and expose labels for the settings panel', async () => {
+  const {normalizeSettings, exclusionFieldLabel, exclusionMatchLabel, exclusionRuleStats} =
+    await import('../../app/static/js/features/settings/model.js');
+  const defaults = normalizeSettings(null);
+  assert.deepEqual(defaults.exclusions, {enabled: true, rules: []});
+  const merged = normalizeSettings({
+    exclusions: {
+      enabled: false,
+      rules: [
+        {id: 'rule-1', field: 'url', match: 'glob', pattern: '*/service/mbkm/logbook*', enabled: true},
+        {field: 'source_ip', match: 'exact', pattern: '', enabled: true},
+        null,
+      ],
+    },
+  });
+  assert.equal(merged.exclusions.enabled, false);
+  assert.equal(merged.exclusions.rules.length, 1, 'blank patterns are dropped');
+  assert.equal(merged.exclusions.rules[0].pattern, '*/service/mbkm/logbook*');
+  assert.equal(exclusionFieldLabel('syscheck_path'), 'Syscheck path');
+  assert.match(exclusionMatchLabel('glob'), /Glob/);
+  assert.deepEqual(exclusionRuleStats({exclusions: {enabled: true, rules: [
+    {field: 'url', pattern: 'a', enabled: true},
+    {field: 'url', pattern: 'b', enabled: false},
+  ]}}), {total: 2, active: 1, inert: 1});
+  const view = readFileSync(new URL('app/static/js/features/settings/view.js', root), 'utf8');
+  assert.match(view, /data-settings-panel="exclusions"/);
+  assert.match(view, /\/api\/settings\/exclusions\/import/);
+  assert.match(view, /data-action="add-exclusion"/);
+  assert.match(view, /Pengecualian kustom/);
+});
+
 test('router resolves the settings, wazuh-queries, and error-codes destinations and rejects unknown pages', async () => {
   const {parseRoute} = await import('../../app/static/js/router.js');
   const {normalizeOllamaBaseUrl} = await import('../../app/static/js/features/settings/model.js');
