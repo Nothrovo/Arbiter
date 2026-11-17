@@ -527,6 +527,13 @@ export async function mount(ctx) {
     });
   }
 
+  function exclusionErrorMessage(error) {
+    if (error?.status === 404 || error?.status === 405) {
+      return 'Endpoint pengecualian belum tersedia di server. Restart layanan Arbiter (atau build ulang container) agar kode terbaru aktif, lalu coba lagi.';
+    }
+    return error?.message || 'Gagal menyimpan aturan pengecualian.';
+  }
+
   async function loadUsers() {
     try {
       const res = await json('/api/auth/users', {signal, timeout: 10000});
@@ -572,7 +579,7 @@ export async function mount(ctx) {
           const body = await updateExclusion(ruleId, {enabled: event.target.checked});
           await refreshExclusions(body);
         } catch (error) {
-          notify(error.message || 'Gagal memperbarui aturan pengecualian.', 'error');
+          notify(exclusionErrorMessage(error), 'error');
           event.target.checked = !event.target.checked;
         } finally {
           if (event.target.isConnected) event.target.disabled = false;
@@ -589,7 +596,7 @@ export async function mount(ctx) {
           await refreshExclusions(body);
           notify(event.target.checked ? 'Pengecualian global diaktifkan.' : 'Pengecualian global dimatikan.', 'info');
         } catch (error) {
-          notify(error.message || 'Gagal mengubah status pengecualian.', 'error');
+          notify(exclusionErrorMessage(error), 'error');
           event.target.checked = !event.target.checked;
         } finally {
           if (event.target.isConnected) event.target.disabled = false;
@@ -646,8 +653,8 @@ export async function mount(ctx) {
         notify(body.added === false ? 'Pola tersebut sudah ada di daftar pengecualian.' : 'Aturan pengecualian ditambahkan.', body.added === false ? 'info' : 'success');
       } catch (error) {
         if (error.name !== 'AbortError') {
-          if (statusSlot) { statusSlot.textContent = error.message; statusSlot.dataset.kind = 'error'; }
-          else notify(error.message, 'error');
+          if (statusSlot) { statusSlot.textContent = exclusionErrorMessage(error); statusSlot.dataset.kind = 'error'; }
+          else notify(exclusionErrorMessage(error), 'error');
         }
       } finally {
         if (addExclusionButton.isConnected) addExclusionButton.disabled = false;
@@ -674,8 +681,8 @@ export async function mount(ctx) {
         notify(`${body.added_count || 0} aturan pengecualian diimpor.`, body.added_count ? 'success' : 'info');
       } catch (error) {
         if (error.name !== 'AbortError') {
-          if (statusSlot) { statusSlot.textContent = error.message; statusSlot.dataset.kind = 'error'; }
-          else notify(error.message, 'error');
+          if (statusSlot) { statusSlot.textContent = exclusionErrorMessage(error); statusSlot.dataset.kind = 'error'; }
+          else notify(exclusionErrorMessage(error), 'error');
         }
       } finally {
         if (importExclusionsButton.isConnected) importExclusionsButton.disabled = false;
@@ -692,7 +699,7 @@ export async function mount(ctx) {
         await refreshExclusions(body);
         notify('Aturan pengecualian dihapus.', 'info');
       } catch (error) {
-        if (error.name !== 'AbortError') notify(error.message || 'Gagal menghapus aturan pengecualian.', 'error');
+        if (error.name !== 'AbortError') notify(exclusionErrorMessage(error), 'error');
       } finally {
         if (deleteExclusionButton.isConnected) deleteExclusionButton.disabled = false;
       }

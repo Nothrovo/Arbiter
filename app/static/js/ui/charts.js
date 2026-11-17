@@ -91,11 +91,14 @@ export function renderBarChart({
         : sortedSecEntries;
 
       const chips = visibleEntries.map(([k, count], idx) => `
-        <button type="button" class="button text-button legend-chip" data-secondary-legend-key="${esc(k)}" style="display:inline-flex; align-items:center; gap:5px; padding:${isLarge ? '4px 9px' : '3px 7px'}; font-size:${isLarge ? '13px' : '12px'}; border-radius:4px;" title="Saring hanya kategori kedua: ${esc(k)} (${count.toLocaleString('id-ID')} ${metricLabel})">
-          <span style="width:10px; height:10px; border-radius:2px; background:${getColor(k, idx)}; flex:none;" aria-hidden="true"></span>
-          <span class="mono">${esc(k)}</span>
-          <span class="muted font-mono" style="font-size:11px; opacity:0.8;">(${count.toLocaleString('id-ID')})</span>
-        </button>
+        <span class="legend-chip-wrap" style="display:inline-flex; align-items:center; gap:2px;">
+          <button type="button" class="button text-button legend-chip" data-secondary-legend-key="${esc(k)}" style="display:inline-flex; align-items:center; gap:5px; padding:${isLarge ? '4px 9px' : '3px 7px'}; font-size:${isLarge ? '13px' : '12px'}; border-radius:4px;" title="Saring hanya kategori kedua: ${esc(k)} (${count.toLocaleString('id-ID')} ${metricLabel})">
+            <span style="width:10px; height:10px; border-radius:2px; background:${getColor(k, idx)}; flex:none;" aria-hidden="true"></span>
+            <span class="mono">${esc(k)}</span>
+            <span class="muted font-mono" style="font-size:11px; opacity:0.8;">(${count.toLocaleString('id-ID')})</span>
+          </button>
+          <button type="button" class="button icon-button legend-exclude" data-secondary-exclude-key="${esc(k)}" aria-label="Exclude ${esc(k)} secara permanen" title="Exclude ${esc(k)} dari Triage dan Statistik">${icon('shield')}</button>
+        </span>
       `).join('');
 
       const toggleBtn = hasMoreThan10 ? `

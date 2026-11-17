@@ -4,12 +4,36 @@ import {queryFrom, scopeParams} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {createTriageSession} from '../../state/triage.js';
 import {intelSummary, intelBadge, renderQueue, renderTriageSummary, summaryRequestParams} from './model.js';
+import {openExclusionDialog} from '../../ui/exclusion-dialog.js';
 
 const presets = [['','Semua jenis'],['403','403 Forbidden'],['404','404 Probes'],['repeating','Berulang'],['non_http','Non-HTTP'],['bot','Bot traffic'],['curl','Curl requests']];
 const verdictLabels = {tp:'True Positive',fp:'False Positive',needs_review:'Perlu ditinjau'};
 const roleLabels = {indicator:'Indikator',response:'Respons',context:'Konteks',unknown:'Belum diketahui'};
 const priorityLabels = {low:'Rendah',medium:'Sedang',high:'Tinggi',critical:'Kritis'};
 const verdictClass = verdict => verdict==='tp'?'critical':verdict==='fp'?'info':'warning';
+
+function sourceUrlFor(alert) {
+  return String(alert?.data?.url||alert?.data?.uri||alert?.parsed_details?.path||alert?.parsed_details?.uri||alert?.parsed_details?.url_path||'').trim();
+}
+
+function exclusionValuesFor(alert) {
+  const parsed = alert?.parsed_details || {};
+  return {
+    url: sourceUrlFor(alert),
+    source_ip: alert?.source_ip || '',
+    agent: alert?.agent_name || '',
+    rule_id: alert?.rule_id || '',
+    rule_description: alert?.description || '',
+    http_method: parsed.method || '',
+    http_status: parsed.status || parsed.http_status || alert?.data?.status || '',
+    referer: parsed.referer || '',
+    user_agent: parsed.ua || parsed.user_agent || '',
+    location: alert?.location || '',
+    tenant: alert?.tenant || '',
+    syscheck_path: alert?.raw?.syscheck?.path || alert?.data?.syscheck?.path || '',
+    any: alert?.full_log || alert?.raw?.full_log || alert?.description || '',
+  };
+}
 
 function classificationBlock(alert) {
   const intel = alert?.parsed_details?.wazuh_intel;
@@ -194,8 +218,8 @@ ${rawLog}`;
     if(activeTab==='raw')return `<div class="split"><h3>Raw alert JSON</h3><button class="button" data-action="copy-raw">${icon('copy')}Salin raw</button></div><p class="warning-copy">Konten mentah dapat memuat informasi sensitif. Tinjau sebelum dibagikan.</p><pre class="raw-log">${esc(JSON.stringify(a.raw||{},null,2))}</pre>`;
     if(activeTab==='occurrences')return `<div class="split"><h3>Kejadian berulang</h3><span class="meta num">${Number(a.hit_count)||1} hits</span></div><dl class="detail-grid"><div class="key-value"><dt>Pertama</dt><dd>${esc(formatTime(a.first_seen||a.timestamp))}</dd></div><div class="key-value"><dt>Terakhir</dt><dd>${esc(formatTime(a.last_seen||a.timestamp))}</dd></div></dl><ol class="timeline">${(a.duplicate_instances?.length?a.duplicate_instances:[{timestamp:a.timestamp,id:a.alert_id}]).map(inst=>`<li><time>${esc(formatTime(inst.timestamp))}</time><span class="meta mono">${esc(inst.id||'—')}</span>${inst.full_log?`<details><summary>Log kejadian</summary><pre class="raw-log">${esc(inst.full_log)}</pre></details>`:''}</li>`).join('')}</ol>`;
     const log=a.full_log||a.raw?.full_log;
-    const sourceUrl=String(a.data?.url||a.data?.uri||a.parsed_details?.path||a.parsed_details?.uri||a.parsed_details?.url_path||'').trim();
-    return `<dl class="detail-grid"><div class="key-value"><dt>Target asset</dt><dd>${esc(a.agent_name||'—')}</dd></div><div class="key-value"><dt>Tenant</dt><dd>${esc(a.tenant||'Default')}</dd></div><div class="key-value"><dt>Detection rule</dt><dd>${esc(a.rule_id||'—')} · Level ${Number(a.rule_level)||0}</dd></div>${sourceUrl?`<div class="key-value wide"><dt>URL / Path</dt><dd class="mono" style="word-break:break-all">${esc(sourceUrl)}</dd><dd style="margin-top:6px"><button class="button" data-action="exclude-url" data-url="${esc(sourceUrl)}" title="Sembunyikan URL ini secara permanen dari Triage dan Statistik">${icon('shield')}Sembunyikan URL ini</button></dd></div>`:''}<div class="key-value"><dt>Waktu</dt><dd>${esc(formatTime(a.timestamp))}</dd></div><div class="key-value wide"><dt>Source / intel</dt><dd class="mono">${esc(a.source_ip||'—')}</dd><dd class="meta" style="margin-top:2px;">${intelBadge(a)}</dd>${a.source_ip?`<dd style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;"><button class="button" data-action="enrich-single-ip" data-ip="${esc(a.source_ip)}">${icon('refresh')}Live Enrich</button><a class="button" href="http://10.20.100.117:3000/ip/${encodeURIComponent(a.source_ip)}" rel="noopener noreferrer" target="_blank">Buka IP Intel ${icon('external')}</a></dd>`:''}</div>${a.cve?`<div class="key-value"><dt>CVE</dt><dd>${esc(a.cve)}</dd></div>`:''}${a.mitre_ids?.length?`<div class="key-value wide"><dt>MITRE</dt><dd>${esc(a.mitre_ids.join(', '))}</dd></div>`:''}</dl>${classificationBlock(a)}${log?`<section class="stack"><div class="split"><h3>Log utama</h3><button class="button" data-action="copy-redacted">Versi tersamarkan</button></div><pre class="raw-log">${esc(log)}</pre><p class="meta">Redaksi otomatis bukan jaminan aman untuk cloud. Tinjau hasil sebelum membagikan.</p></section>`:''}${a.previous_output?`<details><summary>Previous output</summary><pre class="raw-log">${esc(a.previous_output)}</pre></details>`:''}<section class="stack"><h3>Insiden terkait</h3>${a.groups?.length?a.groups.map(g=>`<div class="split"><a href="${scopedRoute('/incidents/'+encodeURIComponent(g.id))}">${esc(g.title)}</a><button class="button icon-button" data-remove-group="${esc(g.id)}" aria-label="Keluarkan dari insiden ${esc(g.title)}">${icon('close')}</button></div>`).join(''):'<p class="meta">Belum terhubung ke insiden.</p>'}<div class="field"><label for="inspector-group">Tambahkan ke insiden</label><select id="inspector-group" name="group_id"><option value="">Memuat insiden…</option></select></div><button class="button" data-action="add-group">Tambahkan bukti ke insiden</button></section><section class="stack"><h3>Review</h3><div class="split"><span class="meta">${a.is_reviewed?'Sudah ditinjau':'Belum ditinjau'}</span><button class="button" data-action="review-current">${a.is_reviewed?'Kembalikan ke antrean':'Tandai selesai ditinjau'}</button></div></section>`;
+    const sourceUrl=sourceUrlFor(a);
+    return `<dl class="detail-grid"><div class="key-value"><dt>Target asset</dt><dd>${esc(a.agent_name||'—')}</dd></div><div class="key-value"><dt>Tenant</dt><dd>${esc(a.tenant||'Default')}</dd></div><div class="key-value"><dt>Detection rule</dt><dd>${esc(a.rule_id||'—')} · Level ${Number(a.rule_level)||0}</dd></div>${sourceUrl?`<div class="key-value wide"><dt>URL / Path</dt><dd class="mono" style="word-break:break-all">${esc(sourceUrl)}</dd></div>`:''}<div class="key-value wide"><dt>Filter noise</dt><dd><button class="button" data-action="exclude-data" title="Sembunyikan data alert ini dari Triage dan Statistik; pilih field dan pola">${icon('shield')}Pengecualian…</button></dd><dd class="meta" style="margin-top:2px">Pilih URL, source IP, agent, rule, referer, atau field lain sebelum menyimpan.</dd></div><div class="key-value wide"><dt>Source / intel</dt><dd class="mono">${esc(a.source_ip||'—')}</dd><dd class="meta" style="margin-top:2px;">${intelBadge(a)}</dd>${a.source_ip?`<dd style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;"><button class="button" data-action="enrich-single-ip" data-ip="${esc(a.source_ip)}">${icon('refresh')}Live Enrich</button><a class="button" href="http://10.20.100.117:3000/ip/${encodeURIComponent(a.source_ip)}" rel="noopener noreferrer" target="_blank">Buka IP Intel ${icon('external')}</a></dd>`:''}</div><div class="key-value"><dt>Waktu</dt><dd>${esc(formatTime(a.timestamp))}</dd></div>${a.cve?`<div class="key-value"><dt>CVE</dt><dd>${esc(a.cve)}</dd></div>`:''}${a.mitre_ids?.length?`<div class="key-value wide"><dt>MITRE</dt><dd>${esc(a.mitre_ids.join(', '))}</dd></div>`:''}</dl>${classificationBlock(a)}${log?`<section class="stack"><div class="split"><h3>Log utama</h3><button class="button" data-action="copy-redacted">Versi tersamarkan</button></div><pre class="raw-log">${esc(log)}</pre><p class="meta">Redaksi otomatis bukan jaminan aman untuk cloud. Tinjau hasil sebelum membagikan.</p></section>`:''}${a.previous_output?`<details><summary>Previous output</summary><pre class="raw-log">${esc(a.previous_output)}</pre></details>`:''}<section class="stack"><h3>Insiden terkait</h3>${a.groups?.length?a.groups.map(g=>`<div class="split"><a href="${scopedRoute('/incidents/'+encodeURIComponent(g.id))}">${esc(g.title)}</a><button class="button icon-button" data-remove-group="${esc(g.id)}" aria-label="Keluarkan dari insiden ${esc(g.title)}">${icon('close')}</button></div>`).join(''):'<p class="meta">Belum terhubung ke insiden.</p>'}<div class="field"><label for="inspector-group">Tambahkan ke insiden</label><select id="inspector-group" name="group_id"><option value="">Memuat insiden…</option></select></div><button class="button" data-action="add-group">Tambahkan bukti ke insiden</button></section><section class="stack"><h3>Review</h3><div class="split"><span class="meta">${a.is_reviewed?'Sudah ditinjau':'Belum ditinjau'}</span><button class="button" data-action="review-current">${a.is_reviewed?'Kembalikan ke antrean':'Tandai selesai ditinjau'}</button></div></section>`;
   }
   async function renderInspector() {
     const a=currentAlert;if(!a)return;
@@ -322,16 +346,22 @@ ${rawLog}`;
     if(action==='copy-queue-log'||action==='copy-queue-redacted'||action==='copy-queue-defanged'){const aid=Number(button.dataset.alertId);const item=items.find(a=>a.id===aid);let text=item?.full_log||item?.raw?.full_log||'';if(!text){notify('Log tidak tersedia.','error');return;}if(action==='copy-queue-redacted'){try{const d=await json('/api/sanitize-logs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text}),signal});await copyText(d.sanitized);notify('Versi tersamarkan disalin.','info');}catch{notify('Gagal menyalin versi tersamarkan.','error');}}else if(action==='copy-queue-defanged'){await copyText(defangText(text));notify('Versi defanged disalin (aman dibagikan).','info');}else{await copyText(text);notify('Log alert disalin.','info');}return;}
     if(action==='report-query'){report();return;}
     if(action==='report-selected'){report(selection.ids());return;}
-    if(action==='exclude-url'){
-      const url=button.dataset.url;if(!url)return;
-      if(!confirm(`Sembunyikan URL "${url}" secara permanen dari Triage dan Statistik?\n\nAturan dapat diubah menjadi pola (mis. */service/mbkm/logbook*) atau dihapus di Pengaturan → Pengecualian.`))return;
-      button.disabled=true;
-      try{
-        const body=await json('/api/settings/exclusions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({field:'url',match:'contains',pattern:url,label:'Dari inspector Triage'}),signal});
-        notify(body.added===false?'URL ini sudah ada di daftar pengecualian.':`URL "${url}" disembunyikan permanen.`,body.added===false?'info':'success');
-        closeInspector();await load();
-      }catch(err){if(err.name!=='AbortError')notify(err.message||'Gagal menambahkan pengecualian.','error');}
-      finally{if(button.isConnected)button.disabled=false;}
+    if(action==='exclude-data'){
+      const a=currentAlert;if(!a)return;
+      const values=exclusionValuesFor(a);
+      const initialField=values.url?'url':(values.rule_description?'rule_description':'source_ip');
+      openExclusionDialog({
+        signal,
+        notify,
+        values,
+        initial:{
+          field:initialField,
+          match:values.url?'contains':'glob',
+          pattern:values[initialField]||'',
+          label:'Dari inspector Triage',
+        },
+        onSaved:async()=>{closeInspector();await load();},
+      });
       return;
     }
     if(action==='enrich-single-ip'){

@@ -255,7 +255,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
         <td class="actions-col" style="text-align:right;">
           <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik dan tampilkan bukti alert">Drill-down</button>
           <button type="button" class="button text-button" data-exclude-key="${keyEsc}" title="Exclude kategori ini dari statistik">Exclude</button>
-          ${PERSIST_EXCLUDE_PIVOTS.has(data.pivot_by) ? `<button type="button" class="button text-button" data-global-exclude-key="${keyEsc}" title="Sembunyikan kategori ini secara permanen dari Triage dan Statistik">Sembunyikan</button>` : ''}
+          ${PERSIST_EXCLUDE_PIVOTS.has(data.pivot_by) ? `<button type="button" class="button text-button" data-global-exclude-key="${keyEsc}" title="Sembunyikan kategori ini secara permanen dari Triage dan Statistik; pilih field dan pola">Exclude…</button>` : ''}
           <a class="button text-button" href="${triageUrl}" title="Lihat di antrean Triage">Triage</a>
         </td>
       </tr>
@@ -328,6 +328,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
                     title="Langsung masukkan semua ${sb.count} alert pada sub-kategori ini ke insiden">
               ${icon('cases')} + Insiden
             </button>
+            ${PERSIST_EXCLUDE_PIVOTS.has(data.secondary_pivot) ? `<button type="button" class="button text-button" data-global-exclude-secondary="${keyEsc}" title="Sembunyikan sub-kategori ini secara permanen; pilih field dan pola">Exclude…</button>` : ''}
           </td>
         </tr>
       `;

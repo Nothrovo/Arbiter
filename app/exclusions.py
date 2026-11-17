@@ -155,7 +155,8 @@ def normalize_exclusion_rule(raw: Any) -> dict[str, Any]:
         try:
             re.compile(pattern)
         except re.error as exc:
-            raise ValueError(f"Regex pengecualian tidak valid: {exc}") from None
+            hint = " Gunakan mode Glob untuk pola dengan * atau ?." if ("*" in pattern or "?" in pattern) else ""
+            raise ValueError(f"Regex pengecualian tidak valid: {exc}.{hint}") from None
     label = str(raw.get("label") or "").strip()
     if len(label) > MAX_EXCLUSION_LABEL:
         label = label[:MAX_EXCLUSION_LABEL]

@@ -424,3 +424,31 @@
 
 
 
+
+/* Manual Wazuh pull page */
+.pull-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; }
+.pull-card { min-width:0; }
+.pull-card .stack { gap:12px; }
+.pull-progress { display:grid; gap:16px; }
+.pull-progress-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.pull-progress-head .mono { font-size:20px; font-weight:600; }
+.progress-track { position:relative; overflow:hidden; height:10px; border-radius:999px; background:var(--raised); border:1px solid var(--border); }
+.progress-fill { height:100%; width:0; border-radius:999px; background:var(--accent, var(--info)); transition:width 240ms ease; }
+.progress-track[data-indeterminate=true] .progress-fill { animation:pull-indeterminate 1.4s ease-in-out infinite; }
+.pull-progress[data-state=error] .progress-fill { background:var(--critical); }
+.pull-progress[data-state=done] .progress-fill { background:var(--success); }
+.pull-progress-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+@keyframes pull-indeterminate {
+  0% { transform:translateX(-60%); }
+  100% { transform:translateX(320%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill { transition:none; }
+  .progress-track[data-indeterminate=true] .progress-fill { animation:none; width:100%; opacity:.45; }
+}
+/* Exclude affordances next to chart legend chips and secondary rows. */
+.legend-exclude { color:var(--muted); flex:none; }
+.legend-exclude:hover { color:var(--critical); }
+@media(max-width:1099px) {
+  .pull-layout { grid-template-columns:minmax(0,1fr); }
+}

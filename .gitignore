@@ -75,3 +75,4 @@ tmp/
 # Graphify cache
 graphify-out/cache/
 graphify-out/*.pending.json
+contoh_tools_ambil_wazuh/

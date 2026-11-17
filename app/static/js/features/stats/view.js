@@ -5,6 +5,7 @@ import {withParams} from '../../router.js';
 import {createStatsSession} from '../../state/stats.js';
 import {drilldownScrollBehavior, normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {statsPage, statsResults, renderAppliedFilters} from './render.js';
+import {openExclusionDialog} from '../../ui/exclusion-dialog.js';
 
 const PERSIST_EXCLUDE_FIELDS = {
   url_path: 'url',
@@ -18,6 +19,10 @@ const PERSIST_EXCLUDE_FIELDS = {
   user_agent: 'user_agent',
   tenant: 'tenant',
 };
+
+function exclusionFieldFor(pivot) {
+  return PERSIST_EXCLUDE_FIELDS[pivot] || 'any';
+}
 
 
 export function mount(ctx) {
@@ -354,28 +359,37 @@ export function mount(ctx) {
     }
     if (btn.dataset.globalExcludeKey) {
       const key = btn.dataset.globalExcludeKey;
-      const field = PERSIST_EXCLUDE_FIELDS[query.pivot_by];
-      if (!field || !key || key === 'Lainnya' || key === 'Tidak tersedia') {
+      if (!key || key === 'Lainnya' || key === 'Tidak tersedia') {
         notify('Kategori ini belum dapat dijadikan pengecualian permanen.', 'error');
         return;
       }
-      const match = field === 'url' ? 'contains' : 'exact';
-      if (!confirm(`Sembunyikan "${key}" secara permanen dari Triage dan Statistik?\n\nAturan dapat dihapus lagi di Pengaturan → Pengecualian.`)) return;
-      btn.disabled = true;
-      try {
-        const body = await json('/api/settings/exclusions', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({field, match, pattern: key, label: `Dari statistik: ${query.pivot_by}`}),
-          signal,
-        });
-        notify(body.added === false ? 'Kategori ini sudah ada di daftar pengecualian.' : `Kategori "${key}" disembunyikan permanen.`, body.added === false ? 'info' : 'success');
-        await loadData();
-      } catch (err) {
-        if (err.name !== 'AbortError') notify(err.message || 'Gagal menambahkan pengecualian.', 'error');
-      } finally {
-        if (btn.isConnected) btn.disabled = false;
-      }
+      openExclusionDialog({
+        signal,
+        notify,
+        initial: {
+          field: exclusionFieldFor(query.pivot_by),
+          match: 'glob',
+          pattern: key,
+          label: `Dari statistik: ${query.pivot_by}`,
+        },
+        onSaved: () => loadData(),
+      });
+      return;
+    }
+    if (btn.dataset.globalExcludeSecondary || btn.dataset.secondaryExcludeKey) {
+      const key = btn.dataset.secondaryExcludeKey || btn.dataset.globalExcludeSecondary;
+      if (!key || !query.secondary_pivot) return;
+      openExclusionDialog({
+        signal,
+        notify,
+        initial: {
+          field: exclusionFieldFor(query.secondary_pivot),
+          match: 'glob',
+          pattern: key,
+          label: `Dari statistik pivot kedua: ${query.secondary_pivot}`,
+        },
+        onSaved: () => loadData(),
+      });
       return;
     }
     if (btn.dataset.action === 'reset-stats') {

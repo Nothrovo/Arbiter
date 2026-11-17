@@ -101,6 +101,8 @@ test('exclusion rules normalize defensively and expose labels for the settings p
   assert.match(view, /\/api\/settings\/exclusions\/import/);
   assert.match(view, /data-action="add-exclusion"/);
   assert.match(view, /Pengecualian kustom/);
+  assert.match(view, /exclusionErrorMessage/);
+  assert.match(view, /Restart layanan Arbiter/);
 });
 
 test('router resolves the settings, wazuh-queries, and error-codes destinations and rejects unknown pages', async () => {

@@ -619,6 +619,7 @@ def wazuh_search(
     timeout: float = 60.0,
     search_after: list[Any] | None = None,
     cursor: dict[str, Any] | None = None,
+    order: str = "desc",
 ) -> list[dict[str, Any]]:
     """Pull alert documents from the Wazuh Indexer within the configured severity range.
 
@@ -669,9 +670,10 @@ def wazuh_search(
 
     # `_id` is used as a tiebreaker so equal timestamps cannot be skipped or
     # repeated between pages. Fall back to timestamp-only if the index rejects it.
+    sort_order = "asc" if str(order).lower() == "asc" else "desc"
     sort_options: list[list[dict[str, Any]]] = [
-        [{"timestamp": {"order": "desc"}}, {"_id": {"order": "desc"}}],
-        [{"timestamp": {"order": "desc"}}],
+        [{"timestamp": {"order": sort_order}}, {"_id": {"order": sort_order}}],
+        [{"timestamp": {"order": sort_order}}],
     ]
     sort_spec: list[dict[str, Any]] | None = None
 
@@ -733,3 +735,65 @@ def wazuh_search(
         cursor["has_more"] = bool(page_after) and remaining <= 0 and not exhausted
         cursor["fetched"] = len(docs)
     return docs
+
+
+def wazuh_count(
+    *,
+    indexer_url: str,
+    username: str,
+    password: str,
+    index_pattern: str,
+    verify_tls: bool,
+    since: str = "",
+    until: str = "",
+    min_rule_level: int = MIN_RULE_LEVEL,
+    max_rule_level: int | None = None,
+    timeout: float = 30.0,
+) -> int:
+    """Count alerts in a severity/time range without downloading documents."""
+    base = str(indexer_url or "").strip().rstrip("/")
+    if not base or not _URL.match(base):
+        raise ValueError("URL Wazuh Indexer belum diatur atau tidak valid.")
+    pattern = str(index_pattern or "wazuh-alerts-*").strip()
+    if not _INDEX_PATTERN.match(pattern):
+        raise ValueError("Pola indeks tidak valid.")
+
+    level_range: dict[str, int] = {"gte": int(min_rule_level)}
+    if max_rule_level is not None:
+        level_range["lte"] = int(max_rule_level)
+    must_clauses: list[dict[str, Any]] = [{"range": {"rule.level": level_range}}]
+    ts_range: dict[str, str] = {}
+    if since and str(since).strip():
+        ts_since = _normalize_wazuh_timestamp(str(since))
+        if _valid_timestamp(ts_since):
+            ts_range["gte"] = ts_since
+    if until and str(until).strip():
+        ts_until = _normalize_wazuh_timestamp(str(until))
+        if _valid_timestamp(ts_until):
+            ts_range["lte"] = ts_until
+    if ts_range:
+        must_clauses.append({"range": {"timestamp": ts_range}})
+    query_obj: dict[str, Any] = (
+        must_clauses[0] if len(must_clauses) == 1 else {"bool": {"must": must_clauses}}
+    )
+
+    target = f"{base}/{urllib.parse.quote(pattern, safe='*-._,')}/_count"
+    opener = _wazuh_opener(base, username, password, verify_tls)
+    request = urllib.request.Request(
+        target,
+        data=json.dumps({"query": query_obj}).encode("utf-8"),
+        method="POST",
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+    )
+    if username:
+        auth_header = base64.b64encode(f"{username}:{password}".encode()).decode()
+        request.add_header("Authorization", f"Basic {auth_header}")
+    _, raw = _wazuh_request(opener, request, timeout)
+    try:
+        parsed = json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        raise ValueError("Respons Wazuh Indexer bukan JSON yang valid.") from None
+    count = parsed.get("count") if isinstance(parsed, dict) else None
+    if not isinstance(count, (int, float)):
+        raise ValueError("Wazuh Indexer tidak mengembalikan jumlah alert yang valid.")
+    return int(count)

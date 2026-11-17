@@ -422,6 +422,68 @@ class SettingsAPITests(unittest.TestCase):
             ],
         )
 
+    def test_pull_endpoints_require_a_configured_indexer_and_a_known_job(self):
+        unconfigured = self.client.post("/api/alerts/pull", json={})
+        self.assertEqual(unconfigured.status_code, 400, unconfigured.text)
+        self.assertIn("Indexer", unconfigured.json()["detail"])
+        self.assertNotIn("password", unconfigured.text.lower())
+
+        missing = self.client.get("/api/alerts/pull/00000000-0000-4000-8000-000000000404")
+        self.assertEqual(missing.status_code, 404, missing.text)
+        cancel_missing = self.client.post("/api/alerts/pull/00000000-0000-4000-8000-000000000404/cancel")
+        self.assertEqual(cancel_missing.status_code, 404, cancel_missing.text)
+
+    def test_wazuh_count_posts_scoped_count_without_downloading_documents(self):
+        import json as json_module
+        from app.settings import wazuh_count
+
+        captured = {}
+
+        class FakeResponse:
+            status = 200
+            def read(self, limit):
+                return b'{"count": 4242}'
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+
+        class FakeOpener:
+            def open(self, request, timeout):
+                captured["url"] = request.full_url
+                captured["body"] = json_module.loads(request.data.decode("utf-8"))
+                return FakeResponse()
+
+        with patch("app.settings._wazuh_opener", return_value=FakeOpener()):
+            total = wazuh_count(
+                indexer_url="https://wazuh.lab:9200",
+                username="analyst",
+                password="secret",
+                index_pattern="wazuh-alerts-*",
+                verify_tls=True,
+                since="2026-11-06T01:12:41+00:00",
+                until="2026-11-07T01:12:41+00:00",
+                min_rule_level=7,
+                max_rule_level=11,
+            )
+
+        self.assertEqual(total, 4242)
+        self.assertTrue(captured["url"].endswith("/wazuh-alerts-*/_count"))
+        self.assertEqual(
+            captured["body"]["query"]["bool"]["must"],
+            [
+                {"range": {"rule.level": {"gte": 7, "lte": 11}}},
+                {
+                    "range": {
+                        "timestamp": {
+                            "gte": "2026-11-06T01:12:41+0000",
+                            "lte": "2026-11-07T01:12:41+0000",
+                        }
+                    }
+                },
+            ],
+        )
+
     def test_wazuh_http_error_reason_surfaces_upstream_body(self):
         from app.settings import _http_error_reason
         import urllib.error as urlerror

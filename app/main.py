@@ -58,6 +58,7 @@ from app.exports import (
 )
 from app.parser import parse_export
 from app.privacy import sanitize_text
+from app.pull_jobs import cancel_job, get_job, start_pull_job
 from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS, FACET_COLUMNS, is_malicious_alert_record
 from app.settings import (
     _normalize_wazuh_timestamp,
@@ -1475,6 +1476,86 @@ def api_realtime_pull(payload: dict[str, Any] | None = Body(default=None)):
         "custom_range": custom_range,
         "index_pattern": wazuh.get("index_pattern", "wazuh-alerts-*"),
     }
+
+
+@app.post("/api/alerts/pull")
+def api_start_alert_pull(payload: dict[str, Any] | None = Body(default=None)):
+    """Start a background Wazuh backfill job and return its progress handle."""
+    data = payload if isinstance(payload, dict) else {}
+    with get_db() as conn:
+        stored = load_settings(conn)
+    wazuh = stored.get("wazuh", {})
+    if not wazuh.get("indexer_url"):
+        raise HTTPException(status_code=400, detail="Wazuh Indexer belum dikonfigurasi di halaman Pengaturan.")
+
+    realtime = stored.get("realtime", {})
+    try:
+        min_rule_level = int(data.get("min_rule_level") if data.get("min_rule_level") is not None else realtime.get("min_rule_level", 7))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="min_rule_level harus berupa angka.") from None
+    if not 0 <= min_rule_level <= 16:
+        raise HTTPException(status_code=400, detail="min_rule_level harus antara 0 dan 16.")
+
+    raw_max = data.get("max_rule_level", realtime.get("max_rule_level"))
+    max_rule_level: int | None = None
+    if raw_max is not None and str(raw_max).strip() != "":
+        try:
+            max_rule_level = int(raw_max)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="max_rule_level harus berupa angka.") from None
+        if not 0 <= max_rule_level <= 16 or max_rule_level < min_rule_level:
+            raise HTTPException(status_code=400, detail="max_rule_level tidak valid.")
+
+    raw_from = str(data.get("time_from") or "").strip()
+    raw_to = str(data.get("time_to") or "").strip()
+    if not raw_from and not data.get("all_time"):
+        raw_from = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    if raw_from:
+        norm_from = _normalize_wazuh_timestamp(raw_from)
+        if not _valid_timestamp(norm_from):
+            raise HTTPException(status_code=400, detail="Format waktu mulai (time_from) tidak valid.")
+        raw_from = norm_from
+    if raw_to:
+        norm_to = _normalize_wazuh_timestamp(raw_to)
+        if not _valid_timestamp(norm_to):
+            raise HTTPException(status_code=400, detail="Format waktu selesai (time_to) tidak valid.")
+        raw_to = norm_to
+
+    config = {
+        "indexer_url": wazuh.get("indexer_url", ""),
+        "username": wazuh.get("username", ""),
+        "password": wazuh_password(stored),
+        "index_pattern": wazuh.get("index_pattern", "wazuh-alerts-*"),
+        "verify_tls": bool(wazuh.get("verify_tls", True)),
+        "time_from": raw_from,
+        "time_to": raw_to,
+        "min_rule_level": min_rule_level,
+        "max_rule_level": max_rule_level,
+        "max_docs": data.get("max_docs", 100000),
+        "page_size": data.get("page_size", 1000),
+        "chunk_days": data.get("chunk_days", 1),
+    }
+    try:
+        job_id = start_pull_job(config)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from None
+    return {"job": get_job(job_id)}
+
+
+@app.get("/api/alerts/pull/{job_id}")
+def api_alert_pull_status(job_id: str):
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job pengambilan alert tidak ditemukan atau sudah kedaluwarsa.")
+    return {"job": job}
+
+
+@app.post("/api/alerts/pull/{job_id}/cancel")
+def api_alert_pull_cancel(job_id: str):
+    job = cancel_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job pengambilan alert tidak ditemukan atau sudah kedaluwarsa.")
+    return {"job": job}
 
 
 @app.post("/api/ai/test")
