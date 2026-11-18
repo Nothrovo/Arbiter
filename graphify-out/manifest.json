@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "app/database.py": {
-    "mtime": 1794812850.999294,
-    "seen": 1794882111.87648,
-    "ast_hash": "acd242d063bc40476a9b7a5465a6fe20",
+    "mtime": 1794963547.4550683,
+    "seen": 1794963693.8406916,
+    "ast_hash": "321ea4dfaa03ffd536963f126a9a5d38",
     "semantic_hash": ""
   },
   "app/exports.py": {
@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "app/main.py": {
-    "mtime": 1794907317.909066,
-    "seen": 1794907702.1724708,
-    "ast_hash": "2338cf885b661ae068a36dfb1b8e7a81",
+    "mtime": 1794916641.961166,
+    "seen": 1794963693.8407562,
+    "ast_hash": "a7ef0ea081f136cfb09976bac886892a",
     "semantic_hash": ""
   },
   "app/parser.py": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "app/index.html": {
-    "mtime": 1794907505.0119379,
-    "seen": 1794907702.1755135,
-    "ast_hash": "800bc2fb03882e57e1c4fd27d77b3fca",
+    "mtime": 1794963488.312262,
+    "seen": 1794963693.8442645,
+    "ast_hash": "f28248ccbea8bf6c3dd84b75dca25b34",
     "semantic_hash": ""
   },
   "docs/ui-ux-redesign/AUDIT.md": {
@@ -378,9 +378,9 @@
     "semantic_hash": ""
   },
   "tests/test_ui_api.py": {
-    "mtime": 1794274925.532697,
-    "seen": 1794534347.7958887,
-    "ast_hash": "b9db086db40f34436a024868ec407af7",
+    "mtime": 1794963512.313053,
+    "seen": 1794963693.8439896,
+    "ast_hash": "63fd5e799a8bd360691590f78c51b23d",
     "semantic_hash": ""
   },
   "docs/ui-ux-redesign/IMPLEMENTATION-CONTRACT.md": {
@@ -390,9 +390,9 @@
     "semantic_hash": ""
   },
   "app/static/js/app.js": {
-    "mtime": 1794907502.3749115,
-    "seen": 1794907702.1726131,
-    "ast_hash": "e69e3069faba06544979ade857200c90",
+    "mtime": 1794963622.5195024,
+    "seen": 1794963693.8408866,
+    "ast_hash": "55024a6f5890ec3dfd69d8d64877c56a",
     "semantic_hash": ""
   },
   "app/static/js/features/incidents/workspace.js": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/database-workspace.test.mjs": {
-    "mtime": 1793877061.7973137,
-    "seen": 1794534347.7958412,
-    "ast_hash": "e5e9e9479f4095d7f9597d00c58948d7",
+    "mtime": 1794963625.480431,
+    "seen": 1794963693.8429863,
+    "ast_hash": "49f6bbaf7e99e189344f37d955dd9cf2",
     "semantic_hash": ""
   },
   "tests/frontend/evidence-ledger.test.mjs": {
@@ -702,9 +702,9 @@
     "semantic_hash": ""
   },
   "app/settings.py": {
-    "mtime": 1794907280.9906976,
-    "seen": 1794907702.1725707,
-    "ast_hash": "81fc0565041f276df2624a659b201e49",
+    "mtime": 1794963457.99346,
+    "seen": 1794963693.8408449,
+    "ast_hash": "2efccde57334008e1074cb722e201cda",
     "semantic_hash": ""
   },
   "app/static/js/feature-loader.js": {
@@ -864,9 +864,9 @@
     "semantic_hash": ""
   },
   "tests/test_settings.py": {
-    "mtime": 1794907577.299663,
-    "seen": 1794907702.1751707,
-    "ast_hash": "a67ef31dc194fe1a118d153b29300f78",
+    "mtime": 1794963533.9109478,
+    "seen": 1794963693.8439436,
+    "ast_hash": "4d47f4367efb4c4258c7aec91c8c1de2",
     "semantic_hash": ""
   },
   "tests/test_wazuh_intel.py": {
@@ -930,9 +930,9 @@
     "semantic_hash": ""
   },
   "docs/ARCHITECTURE.md": {
-    "mtime": 1794274925.5303097,
-    "seen": 1794534347.7959054,
-    "ast_hash": "04b9747b422fc6992b1ba013987f74af",
+    "mtime": 1794963658.207482,
+    "seen": 1794963693.8442888,
+    "ast_hash": "53bf8c7a134d67e887de13137d1dfdad",
     "semantic_hash": ""
   },
   "app/exclusions.py": {
@@ -960,15 +960,15 @@
     "semantic_hash": ""
   },
   "app/pull_jobs.py": {
-    "mtime": 1794907606.7839592,
-    "seen": 1794907702.1725187,
-    "ast_hash": "5f3a31ebf16f8b69a2e60ebc51b06b5d",
+    "mtime": 1794963673.799968,
+    "seen": 1794963693.840799,
+    "ast_hash": "bc75c8bdc78d7e72af6672271d12fc98",
     "semantic_hash": ""
   },
   "app/static/js/features/pull/view.js": {
-    "mtime": 1794907686.0047553,
-    "seen": 1794907702.173176,
-    "ast_hash": "5490bc4dafcb14a642dabec5815ac2f1",
+    "mtime": 1794963679.5707722,
+    "seen": 1794963693.8412974,
+    "ast_hash": "5ca373b7a8f87417945279f045854508",
     "semantic_hash": ""
   },
   "app/static/js/ui/exclusion-dialog.js": {
@@ -978,15 +978,15 @@
     "semantic_hash": ""
   },
   "tests/frontend/pull.test.mjs": {
-    "mtime": 1794907632.7942204,
-    "seen": 1794907702.1745434,
-    "ast_hash": "72139b70ea9dcde06f03a58d28580110",
+    "mtime": 1794963629.2773352,
+    "seen": 1794963693.8433204,
+    "ast_hash": "84eb8f50b7485016ef2ecab0dd913a49",
     "semantic_hash": ""
   },
   "tests/test_pull_jobs.py": {
-    "mtime": 1794907594.8358393,
-    "seen": 1794907702.1751683,
-    "ast_hash": "744dad954a8aad4fdff5644e121652b6",
+    "mtime": 1794963594.3399396,
+    "seen": 1794963693.843942,
+    "ast_hash": "2f9f2c41d7b68fc1fc22c7e5f7bd9725",
     "semantic_hash": ""
   },
   "package-lock.json": {

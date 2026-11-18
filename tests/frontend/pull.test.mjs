@@ -32,7 +32,21 @@ test('pull page runs a background job with real progress and cancellation', () =
   assert.match(view, /chunk_days/);
   assert.match(view, /all_time/);
   assert.match(view, /#\/realtime/);
+  assert.match(view, /localStorage/);
+  assert.match(view, /\/api\/alerts\/pull'/, 'resume falls back to the server-side job list');
+  assert.match(view, /job\.rate/);
+  assert.match(view, /job\.eta_seconds/);
   assert.doesNotMatch(view, /fetch\(/, 'pull page must use the shared API client');
+});
+
+test('shell shows a running pull indicator that survives page changes', () => {
+  const html = read('app/index.html');
+  assert.match(html, /id="pull-activity"/);
+  const app = read('app/static/js/app.js');
+  assert.match(app, /checkPullActivity/);
+  assert.match(app, /\/api\/alerts\/pull/);
+  assert.match(app, /pull-activity-label/);
+  assert.match(app, /checkPullActivity\(\);\s*setInterval/);
 });
 
 test('exclusion dialog offers a field picker from Triage and Statistics', () => {

@@ -280,6 +280,10 @@ The chain is explanatory evidence, not a verdict. A context event (`5715`,
 | `POST /api/ai/triage/save` | Persists groups as editable incident cases with `verdict` and source `ai`. |
 | `GET /api/alerts` | Queue projection; `parsed_details` is available to the detail view, not to export by default. |
 | `GET /api/alerts/{id}` | Inspector detail: raw log, nested origin, classification metadata. |
+| `GET /api/alerts/pull` | Recent background pull jobs (active first), safe snapshots without credentials. |
+| `POST /api/alerts/pull` | Start a server-side Wazuh backfill; returns a job handle immediately. |
+| `GET /api/alerts/pull/{job_id}` | Pull progress, counters, timings, rate/ETA, and window state. |
+| `POST /api/alerts/pull/{job_id}/cancel` | Request cancellation; already-ingested alerts stay committed. |
 
 `safe_alerts()` strips `raw`, `data`, `full_log`, `parsed_details`, and
 `duplicate_instances` before any model-facing or client-facing triage payload.

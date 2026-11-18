@@ -273,10 +273,25 @@ realtimeToggle.addEventListener('click',async e=>{
 });
 window.addEventListener('arbiter:settings-saved',event=>{applyWorkspaceSettings(event.detail,true);});
 window.addEventListener('arbiter:realtime-changed',event=>{if(event.detail){realtimeState={enabled:Boolean(event.detail.enabled),interval_seconds:Number(event.detail.interval_seconds)||30};paintRealtime();}});
+const pullActivity=document.querySelector('#pull-activity');
+if(pullActivity)pullActivity.innerHTML=`${icon('upload')}<span class="pull-activity-label">Mengambil alert…</span>`;
+async function checkPullActivity(){
+  if(!pullActivity)return;
+  try{
+    const body=await json('/api/alerts/pull',{timeout:10000});
+    const active=(body.jobs||[]).find(job=>job.status==='queued'||job.status==='running');
+    if(!active){pullActivity.hidden=true;return;}
+    const percent=Math.max(0,Math.min(100,Number(active.percent)||0));
+    pullActivity.hidden=false;
+    pullActivity.querySelector('.pull-activity-label').textContent=`Ambil alert ${percent.toFixed(0)}%`;
+    pullActivity.title=`Pengambilan alert berjalan di server (${percent.toFixed(1)}%). Buka halaman Ambil Alert.`;
+  }catch{pullActivity.hidden=true;}
+}
+
 sidebar.addEventListener('keydown',e=>{if(e.key==='Escape')closeNav();if(e.key==='Tab'&&sidebar.classList.contains('is-open')){const focusable=[...sidebar.querySelectorAll('a,button')].filter(el=>el.getClientRects().length);const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 const help=document.querySelector('#help-dialog');document.querySelector('#help-button').addEventListener('click',()=>help.showModal());help.querySelector('[data-close-dialog]').addEventListener('click',()=>help.close());
 document.querySelector('.skip-link').addEventListener('click',e=>{e.preventDefault();main.focus();});
 window.addEventListener('beforeunload',e=>{if(guard&&!guard()){e.preventDefault();e.returnValue='';}});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)health();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){health();checkPullActivity();}});
 window.addEventListener('online',health);window.addEventListener('offline',health);
-router.start();health();tenants();loadWorkspaceSettings();setInterval(health,15000);
+router.start();health();tenants();loadWorkspaceSettings();checkPullActivity();setInterval(()=>{health();checkPullActivity();},15000);

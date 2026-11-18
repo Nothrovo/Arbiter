@@ -452,3 +452,12 @@
 @media(max-width:1099px) {
   .pull-layout { grid-template-columns:minmax(0,1fr); }
 }
+
+/* Header indicator for a server-side pull job that outlives the page. */
+.pull-activity { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--info); border-color:color-mix(in srgb, var(--info) 35%, var(--border)); }
+.pull-activity .icon { width:14px; height:14px; }
+.pull-activity-label { white-space:nowrap; }
+@media (max-width: 720px) {
+  .pull-activity-label { display:none; }
+  .pull-activity { padding:6px; }
+}

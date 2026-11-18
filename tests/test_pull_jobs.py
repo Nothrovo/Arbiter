@@ -25,7 +25,12 @@ def load_pull_jobs():
     def forbidden(*args, **kwargs):
         raise AssertionError("Real database access is forbidden in pull job tests")
 
-    database.__dict__.update(get_db=forbidden, init_database=forbidden, ingest_alert_with_dedup=forbidden)
+    database.__dict__.update(
+        get_db=forbidden,
+        init_database=forbidden,
+        ingest_alert_with_dedup=forbidden,
+        ingest_alerts_batch=forbidden,
+    )
     with patch.dict(sys.modules, {"app.config": config, "app.database": database}):
         sys.modules.pop("app.pull_jobs", None)
         module = importlib.import_module("app.pull_jobs")
@@ -125,6 +130,10 @@ class PullJobTests(unittest.TestCase):
         self.assertTrue(cancelled["cancel_requested"])
         self.assertIsNone(self.pull.get_job("does-not-exist"))
 
+        listed = self.pull.list_jobs(5)
+        self.assertEqual([item["id"] for item in listed], [job_id])
+        self.assertNotIn("SyntheticPass123", json.dumps(listed))
+
     def test_progress_tracks_fetched_documents_and_finishes(self):
         calls = []
 
@@ -136,6 +145,7 @@ class PullJobTests(unittest.TestCase):
             patch.object(self.pull, "wazuh_count", lambda **kwargs: 2),
             patch.object(self.pull, "wazuh_search", fake_search),
             patch.object(self.pull, "get_db", fake_get_db),
+            patch.object(self.pull, "ingest_alerts_batch", lambda conn, alerts: (len(alerts), 0, 0)),
             patch.object(self.pull, "ingest_alert_with_dedup", lambda conn, alert: (True, False)),
             patch.object(self.pull, "normalize_alert", lambda raw: raw),
         ):
@@ -152,8 +162,36 @@ class PullJobTests(unittest.TestCase):
         self.assertEqual(job["windows_done"], 2)
         self.assertEqual(job["percent"], 100.0)
         self.assertTrue(job["finished_at"])
+        self.assertGreaterEqual(job["rate"], 0)
+        for stage in ("count_ms", "fetch_ms", "normalize_ms", "ingest_ms"):
+            self.assertIn(stage, job["timings"])
         self.assertEqual(len(calls), 2)
         self.assertTrue(all(call["order"] == "asc" for call in calls))
+
+    def test_batch_failure_falls_back_to_per_document_ingest(self):
+        seen = []
+
+        def failing_batch(conn, alerts):
+            raise RuntimeError("synthetic batch failure")
+
+        def fake_single(conn, alert):
+            seen.append(alert["id"])
+            return True, False
+
+        with (
+            patch.object(self.pull, "wazuh_count", lambda **kwargs: 2),
+            patch.object(self.pull, "wazuh_search", lambda **kwargs: [{"id": "fallback-doc"}]),
+            patch.object(self.pull, "get_db", fake_get_db),
+            patch.object(self.pull, "ingest_alerts_batch", failing_batch),
+            patch.object(self.pull, "ingest_alert_with_dedup", fake_single),
+            patch.object(self.pull, "normalize_alert", lambda raw: raw),
+        ):
+            job_id = self.pull.start_pull_job(base_config())
+            job = wait_for(self.pull, job_id)
+
+        self.assertEqual(job["status"], "done")
+        self.assertEqual(job["inserted"], 2)
+        self.assertEqual(sorted(seen), ["fallback-doc", "fallback-doc"])
 
     def test_count_failure_does_not_abort_the_pull(self):
         def failing_count(**kwargs):

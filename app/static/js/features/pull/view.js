@@ -34,10 +34,22 @@ const STATUS_LABELS = {
 
 const STORAGE_KEY = 'arbiter:pull:job';
 
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  if (total < 60) return `${total} dtk`;
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  if (minutes < 60) return rest ? `${minutes} mnt ${rest} dtk` : `${minutes} mnt`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes ? `${hours} jam ${restMinutes} mnt` : `${hours} jam`;
+}
+
 function rememberJob(id) {
   try {
-    if (id) sessionStorage.setItem(STORAGE_KEY, id);
-    else sessionStorage.removeItem(STORAGE_KEY);
+    // localStorage survives closing the tab; the job itself lives on the server.
+    if (id) localStorage.setItem(STORAGE_KEY, id);
+    else localStorage.removeItem(STORAGE_KEY);
   } catch {
     // Private-mode browsers may block storage; the page still works.
   }
@@ -107,8 +119,8 @@ export async function mount(ctx) {
               </div>
               <div class="field">
                 <label for="pull-page-size">Per halaman</label>
-                <input class="input mono" id="pull-page-size" name="page_size" type="number" min="50" max="5000" step="50" value="1000">
-                <span class="meta">Dokumen per permintaan ke indexer (50–5000).</span>
+                <input class="input mono" id="pull-page-size" name="page_size" type="number" min="50" max="10000" step="100" value="2000">
+                <span class="meta">Dokumen per permintaan ke indexer (50–10000). Halaman lebih besar = lebih sedikit request.</span>
               </div>
               <div class="field">
                 <label for="pull-chunk-days">Pecah per hari</label>
@@ -137,6 +149,8 @@ export async function mount(ctx) {
             <dl class="detail-grid pull-progress-grid">
               <div class="key-value"><dt>Diperiksa</dt><dd class="num" id="pull-fetched">0</dd></div>
               <div class="key-value"><dt>Target</dt><dd class="num" id="pull-target">—</dd></div>
+              <div class="key-value"><dt>Laju</dt><dd class="num" id="pull-rate">—</dd></div>
+              <div class="key-value"><dt>Perkiraan selesai</dt><dd class="num" id="pull-eta">—</dd></div>
               <div class="key-value"><dt>Alert baru</dt><dd class="num" id="pull-inserted">0</dd></div>
               <div class="key-value"><dt>Dedup / sudah ada</dt><dd class="num" id="pull-deduplicated">0</dd></div>
               <div class="key-value"><dt>Gagal dinormalisasi</dt><dd class="num" id="pull-failed">0</dd></div>
@@ -156,6 +170,7 @@ export async function mount(ctx) {
             <li>Monitor <a href="#/realtime">Realtime</a> tetap dipakai untuk pull kecil berkala (interval 30 detik atau harian). Halaman ini untuk backfill manual.</li>
             <li>Progres berasal dari server, bukan perkiraan browser. Total alert dihitung lebih dulu dari indexer.</li>
             <li>Alert yang dikecualikan tetap masuk database; pengecualian hanya menyembunyikannya dari Triage, Statistik, dan AI Triage.</li>
+            <li>Job berjalan di server. Menutup tab atau berpindah menu tidak menghentikannya; buka lagi halaman ini untuk melanjutkan progres (ID job disimpan di browser).</li>
             <li>Job disimpan di memori proses. Restart server membatalkan job yang sedang berjalan.</li>
           </ul>
         </section>
@@ -179,7 +194,7 @@ export async function mount(ctx) {
         min_rule_level: undefined,
         max_rule_level: null,
         max_docs: Number(root.querySelector('#pull-max-docs').value) || 100000,
-        page_size: Number(root.querySelector('#pull-page-size').value) || 1000,
+        page_size: Number(root.querySelector('#pull-page-size').value) || 2000,
         chunk_days: Number(root.querySelector('#pull-chunk-days').value),
       };
       const severity = parseRealtimeSeverity(root.querySelector('#pull-severity').value);
@@ -275,6 +290,9 @@ export async function mount(ctx) {
     set('#pull-deduplicated', Number(job.deduplicated || 0).toLocaleString('id-ID'));
     set('#pull-failed', Number(job.failed || 0).toLocaleString('id-ID'));
     set('#pull-windows', job.windows_total ? `${job.windows_done || 0} / ${job.windows_total}` : '—');
+    const rate = Number(job.rate) || 0;
+    set('#pull-rate', rate > 0 ? `${rate.toLocaleString('id-ID', {maximumFractionDigits: 1})} alert/dtk` : '—');
+    set('#pull-eta', job.eta_seconds ? formatDuration(job.eta_seconds) : (job.status === 'done' ? 'Selesai' : '—'));
     const note = root.querySelector('#pull-progress-note');
     if (note) {
       if (job.status === 'error') note.textContent = `Gagal: ${job.error || 'tidak diketahui'}`;
@@ -301,20 +319,37 @@ export async function mount(ctx) {
   async function resumeJob() {
     let id = '';
     try {
-      id = sessionStorage.getItem(STORAGE_KEY) || '';
+      id = localStorage.getItem(STORAGE_KEY) || '';
     } catch {
       return;
     }
-    if (!id) return;
+    if (id) {
+      try {
+        const body = await json(`/api/alerts/pull/${encodeURIComponent(id)}`, {signal, timeout: 15000});
+        job = body.job;
+        root.querySelector('#pull-progress-card').hidden = false;
+        paintProgress();
+        if (job.status === 'queued' || job.status === 'running') pollLater(1000);
+        return;
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        rememberJob('');
+      }
+    }
+    // No stored id (new browser/tab) or it expired: fall back to the newest
+    // server-side job, preferring one that is still running.
     try {
-      const body = await json(`/api/alerts/pull/${encodeURIComponent(id)}`, {signal, timeout: 15000});
-      job = body.job;
+      const body = await json('/api/alerts/pull', {signal, timeout: 15000});
+      const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+      const latest = jobs.find(item => item.status === 'queued' || item.status === 'running') || jobs[0];
+      if (!latest) return;
+      job = latest;
+      rememberJob(job.id);
       root.querySelector('#pull-progress-card').hidden = false;
       paintProgress();
       if (job.status === 'queued' || job.status === 'running') pollLater(1000);
     } catch (error) {
-      if (error.name === 'AbortError') return;
-      rememberJob('');
+      if (error.name !== 'AbortError') rememberJob('');
     }
   }
 

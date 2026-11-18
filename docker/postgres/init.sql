@@ -82,5 +82,8 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_timestamp ON wazuh.alerts(ten
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_rule_level ON wazuh.alerts(rule_level);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_agent_name ON wazuh.alerts(agent_name);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_status ON wazuh.alerts((parsed_details->>'status'));
+-- Batch dedup lookup by Wazuh id uses jsonb containment/overlap operators.
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_wazuh_ids ON wazuh.alerts USING gin (wazuh_ids jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_alert_id ON wazuh.alerts(tenant, alert_id);
 -- Note: highly-cardinal user_agent, url_path, referer, and arbitrary text pattern
 -- dimensions intentionally do not carry broad btree indexes to prevent bloat on high-volume ingest.

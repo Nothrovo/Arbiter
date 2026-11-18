@@ -428,6 +428,10 @@ class SettingsAPITests(unittest.TestCase):
         self.assertIn("Indexer", unconfigured.json()["detail"])
         self.assertNotIn("password", unconfigured.text.lower())
 
+        listing = self.client.get("/api/alerts/pull")
+        self.assertEqual(listing.status_code, 200, listing.text)
+        self.assertIsInstance(listing.json()["jobs"], list)
+
         missing = self.client.get("/api/alerts/pull/00000000-0000-4000-8000-000000000404")
         self.assertEqual(missing.status_code, 404, missing.text)
         cancel_missing = self.client.post("/api/alerts/pull/00000000-0000-4000-8000-000000000404/cancel")
@@ -483,6 +487,39 @@ class SettingsAPITests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_wazuh_requests_advertise_and_decode_gzip_responses(self):
+        import gzip
+        from app.settings import wazuh_count
+
+        captured = {}
+
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Encoding": "gzip"}
+            def read(self, limit):
+                return gzip.compress(b'{"count": 7}')
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+
+        class FakeOpener:
+            def open(self, request, timeout):
+                captured["accept_encoding"] = request.get_header("Accept-encoding")
+                return FakeResponse()
+
+        with patch("app.settings._wazuh_opener", return_value=FakeOpener()):
+            total = wazuh_count(
+                indexer_url="https://wazuh.lab:9200",
+                username="analyst",
+                password="secret",
+                index_pattern="wazuh-alerts-*",
+                verify_tls=True,
+                since="2026-11-06T01:12:41+00:00",
+            )
+        self.assertEqual(total, 7)
+        self.assertEqual(captured["accept_encoding"], "gzip")
 
     def test_wazuh_http_error_reason_surfaces_upstream_body(self):
         from app.settings import _http_error_reason

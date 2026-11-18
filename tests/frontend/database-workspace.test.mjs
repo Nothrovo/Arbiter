@@ -9,7 +9,7 @@ import {tenantScope, tenantValues} from '../../app/static/js/state/scope.js';
 import {normalizeSidebarState, readSidebarState, writeSidebarState, toggleSidebarState} from '../../app/static/js/state/sidebar.js';
 
 // Execute the real shell without booting feature mounts, timers or networking.
-const source=readFileSync(new URL('../../app/static/js/app.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('router.start();health();tenants();loadWorkspaceSettings();setInterval(health,15000);','');
+const source=readFileSync(new URL('../../app/static/js/app.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('router.start();health();tenants();loadWorkspaceSettings();checkPullActivity();setInterval(()=>{health();checkPullActivity();},15000);','');
 function shell(){
   const nodes=new Map(), links=['triage','incidents'].map(page=>({dataset:{page},href:''}));
   const node=()=>({innerHTML:'',textContent:'',title:'',dataset:{},elements:{all:{}},classList:{contains:()=>false,remove(){},add(){},toggle(){}},setAttribute(){},addEventListener(){},querySelectorAll:()=>[],querySelector:()=>node(),close(){}});

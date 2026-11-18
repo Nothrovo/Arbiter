@@ -58,7 +58,7 @@ from app.exports import (
 )
 from app.parser import parse_export
 from app.privacy import sanitize_text
-from app.pull_jobs import cancel_job, get_job, start_pull_job
+from app.pull_jobs import cancel_job, get_job, list_jobs, start_pull_job
 from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS, FACET_COLUMNS, is_malicious_alert_record
 from app.settings import (
     _normalize_wazuh_timestamp,
@@ -361,6 +361,12 @@ def list_alerts(
         total = conn.execute(count_sql, scoped_params).fetchone()["n"]
 
     return {"items": rows, "total": total}
+
+
+@app.get("/api/alerts/pull")
+def api_list_alert_pulls(limit: int = Query(default=10, ge=1, le=50)):
+    """List recent pull jobs so a page (or the shell) can resume after navigation."""
+    return {"jobs": list_jobs(limit)}
 
 
 @app.get("/api/alerts/{alert_id}")
@@ -1532,7 +1538,7 @@ def api_start_alert_pull(payload: dict[str, Any] | None = Body(default=None)):
         "min_rule_level": min_rule_level,
         "max_rule_level": max_rule_level,
         "max_docs": data.get("max_docs", 100000),
-        "page_size": data.get("page_size", 1000),
+        "page_size": data.get("page_size", 2000),
         "chunk_days": data.get("chunk_days", 1),
     }
     try:

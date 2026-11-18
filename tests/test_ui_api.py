@@ -32,7 +32,12 @@ def load_isolated_api():
     def forbidden(*args, **kwargs):
         raise AssertionError("Real database/startup access is forbidden in UI tests")
 
-    database.__dict__.update(get_db=forbidden, init_database=forbidden, ingest_alert_with_dedup=forbidden)
+    database.__dict__.update(
+        get_db=forbidden,
+        init_database=forbidden,
+        ingest_alert_with_dedup=forbidden,
+        ingest_alerts_batch=forbidden,
+    )
     spec = importlib.util.spec_from_file_location("arbiter_synthetic_ui_api", ROOT / "app/main.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

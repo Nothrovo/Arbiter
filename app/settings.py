@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import gzip
 import ipaddress
 import json
 import re
@@ -487,7 +488,7 @@ def test_wazuh_connection(
         target,
         data=body,
         method="POST",
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        headers={"Accept": "application/json", "Content-Type": "application/json", "Accept-Encoding": "gzip"},
     )
     if username:
         token = base64.b64encode(f"{username}:{password}".encode()).decode()
@@ -556,7 +557,17 @@ def _wazuh_request(opener, request, timeout: float) -> tuple[int, bytes]:
     """Open a Wazuh request and translate transport errors into user-safe ValueErrors."""
     try:
         with opener.open(request, timeout=timeout) as response:
-            return response.status, response.read(64 * 1024 * 1024)
+            raw = response.read(64 * 1024 * 1024)
+            headers = getattr(response, "headers", None)
+            encoding = ""
+            if headers is not None:
+                try:
+                    encoding = str(headers.get("Content-Encoding", "") or "").lower()
+                except AttributeError:
+                    encoding = ""
+            if "gzip" in encoding:
+                raw = gzip.decompress(raw)
+            return response.status, raw
     except urllib.error.HTTPError as error:
         detail = _http_error_reason(error)
         if error.code in (401, 403):
@@ -698,7 +709,7 @@ def wazuh_search(
                 target,
                 data=json.dumps(payload).encode("utf-8"),
                 method="POST",
-                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                headers={"Accept": "application/json", "Content-Type": "application/json", "Accept-Encoding": "gzip"},
             )
             if auth_header:
                 request.add_header("Authorization", auth_header)
@@ -783,7 +794,7 @@ def wazuh_count(
         target,
         data=json.dumps({"query": query_obj}).encode("utf-8"),
         method="POST",
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        headers={"Accept": "application/json", "Content-Type": "application/json", "Accept-Encoding": "gzip"},
     )
     if username:
         auth_header = base64.b64encode(f"{username}:{password}".encode()).decode()

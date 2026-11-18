@@ -98,6 +98,9 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_timestamp ON wazuh.alerts(ten
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_rule_level ON wazuh.alerts(rule_level);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_agent_name ON wazuh.alerts(agent_name);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_status ON wazuh.alerts((parsed_details->>'status'));
+-- Batch dedup lookup by Wazuh id uses jsonb containment/overlap operators.
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_wazuh_ids ON wazuh.alerts USING gin (wazuh_ids jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_alert_id ON wazuh.alerts(tenant, alert_id);
 -- Note: highly-cardinal user_agent, url_path, referer, and arbitrary text pattern
 -- dimensions intentionally do not carry broad btree indexes to prevent bloat on high-volume ingest.
 """
@@ -785,3 +788,233 @@ def ingest_alert_with_dedup(conn: psycopg.Connection, a: dict[str, Any]) -> tupl
     if cur.fetchone():
         return True, False
     return False, False
+
+
+def _batch_instance(a: dict[str, Any], alert_id: str, wazuh_id: str, timestamp: str) -> dict[str, Any]:
+    """Instance metadata kept inside `duplicate_instances` for signature dedup."""
+    return {
+        "id": alert_id or wazuh_id,
+        "timestamp": timestamp,
+        "agent_name": a.get("agent_name"),
+        "agent_ip": a.get("agent_ip"),
+        "location": a.get("location"),
+        "full_log": a.get("full_log"),
+    }
+
+
+def _batch_insert_values(a: dict[str, Any], row: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        row["alert_id"],
+        row["timestamp"],
+        row["tenant"],
+        a.get("agent_name"),
+        a.get("agent_ip"),
+        a.get("rule_id"),
+        a.get("rule_level"),
+        a.get("description"),
+        json.dumps(a.get("rule_groups") or []),
+        a.get("decoder"),
+        a.get("location"),
+        a.get("source_ip"),
+        json.dumps(a.get("mitre_ids") or []),
+        a.get("cve"),
+        json.dumps(a.get("data") or {}),
+        json.dumps(a.get("raw") or {}, ensure_ascii=False),
+        row["log_signature"],
+        row["hit_count"],
+        row["first_seen"],
+        row["last_seen"],
+        json.dumps(row["wazuh_ids"]),
+        json.dumps(row["duplicate_instances"], ensure_ascii=False),
+        json.dumps(a.get("parsed_details") or {}),
+        False,
+        "",
+    )
+
+
+def ingest_alerts_batch(conn: psycopg.Connection, alerts: list[dict[str, Any]]) -> tuple[int, int, int]:
+    """Ingest a page of normalized alerts with one preload query and batched writes.
+
+    Same dedup semantics as `ingest_alert_with_dedup`, but the expensive
+    per-alert SELECT/UPDATE round-trips are collapsed into:
+      1. one lookup for alert ids / wazuh ids / signatures in the page,
+      2. in-memory maps for repeated ids and recurring signatures,
+      3. one `executemany` for row updates and inserts.
+
+    Returns (inserted, deduplicated, failed). Callers should run this inside a
+    transaction and fall back to the per-row function if the batch fails.
+    """
+    if not alerts:
+        return 0, 0, 0
+
+    by_alert: dict[tuple[str, str], dict[str, Any]] = {}
+    by_wazuh: dict[tuple[str, str], dict[str, Any]] = {}
+    by_sig: dict[tuple[str, str], dict[str, Any]] = {}
+    tenants: set[str] = set()
+    alert_ids: set[str] = set()
+    wazuh_ids: set[str] = set()
+    signatures: set[str] = set()
+
+    prepared: list[dict[str, Any]] = []
+    for a in alerts:
+        alert_id = str(a.get("alert_id") or a.get("id") or "").strip()
+        wazuh_id = str(a.get("wazuh_id") or alert_id).strip()
+        tenant = a.get("tenant") or "Default"
+        timestamp = a.get("timestamp") or ""
+        signature = str(a.get("log_signature") or "")
+        prepared.append({
+            "alert": a,
+            "alert_id": alert_id,
+            "wazuh_id": wazuh_id,
+            "tenant": tenant,
+            "timestamp": timestamp,
+            "signature": signature,
+        })
+        tenants.add(tenant)
+        if alert_id:
+            alert_ids.add(alert_id)
+        if wazuh_id:
+            wazuh_ids.add(wazuh_id)
+        if signature:
+            signatures.add(signature)
+
+    tenant_list = sorted(tenants)
+    existing_by_id: dict[int, dict[str, Any]] = {}
+
+    def register(row: dict[str, Any]) -> None:
+        existing_by_id[row["id"]] = row
+        tenant = row.get("tenant") or "Default"
+        if row.get("alert_id"):
+            by_alert[(tenant, row["alert_id"])] = row
+        for value in row.get("wazuh_ids") or []:
+            if isinstance(value, str) and value:
+                by_wazuh[(tenant, value)] = row
+        if row.get("log_signature"):
+            by_sig[(tenant, row["log_signature"])] = row
+
+    select_columns = (
+        "id, tenant, alert_id, wazuh_ids, log_signature, hit_count, "
+        "first_seen, last_seen, duplicate_instances"
+    )
+    if alert_ids or signatures:
+        rows = conn.execute(
+            f"""SELECT {select_columns} FROM wazuh.alerts
+                WHERE tenant = ANY(%s)
+                  AND (alert_id = ANY(%s) OR (log_signature = ANY(%s) AND log_signature <> ''))""",
+            (tenant_list, sorted(alert_ids) or [""], sorted(signatures) or [""]),
+        ).fetchall()
+        for row in rows:
+            register(row)
+    if wazuh_ids:
+        rows = conn.execute(
+            f"""SELECT {select_columns} FROM wazuh.alerts
+                WHERE tenant = ANY(%s) AND wazuh_ids ?| %s::text[]""",
+            (tenant_list, sorted(wazuh_ids)),
+        ).fetchall()
+        for row in rows:
+            register(row)
+
+    new_alerts: list[dict[str, Any]] = []
+    dirty: set[int] = set()
+    deduplicated = 0
+
+    for item in prepared:
+        a = item["alert"]
+        alert_id = item["alert_id"]
+        wazuh_id = item["wazuh_id"]
+        tenant = item["tenant"]
+        timestamp = item["timestamp"]
+        signature = item["signature"]
+
+        row = by_alert.get((tenant, alert_id)) if alert_id else None
+        if row is None and wazuh_id:
+            row = by_wazuh.get((tenant, wazuh_id))
+        if row is not None:
+            row["hit_count"] = (row.get("hit_count") or 1) + 1
+            row["last_seen"] = timestamp
+            if row.get("id") is not None:
+                dirty.add(row["id"])
+            deduplicated += 1
+            continue
+
+        if signature:
+            row = by_sig.get((tenant, signature))
+            if row is not None:
+                instance = _batch_instance(a, alert_id, wazuh_id, timestamp)
+                row["hit_count"] = (row.get("hit_count") or 1) + 1
+                wazuh_list = row.get("wazuh_ids") or []
+                if wazuh_id and wazuh_id not in wazuh_list:
+                    wazuh_list = [*wazuh_list, wazuh_id]
+                row["wazuh_ids"] = wazuh_list
+                instances = row.get("duplicate_instances") or []
+                row["duplicate_instances"] = [*instances, instance]
+                times = [t for t in (row.get("first_seen"), row.get("last_seen"), timestamp) if t]
+                row["first_seen"] = min(times) if times else timestamp
+                row["last_seen"] = max(times) if times else timestamp
+                if row.get("id") is not None:
+                    dirty.add(row["id"])
+                deduplicated += 1
+                continue
+
+        instance = _batch_instance(a, alert_id, wazuh_id, timestamp)
+        row = {
+            "id": None,
+            "tenant": tenant,
+            "alert_id": alert_id,
+            "timestamp": timestamp,
+            "log_signature": signature,
+            "hit_count": 1,
+            "first_seen": timestamp,
+            "last_seen": timestamp,
+            "wazuh_ids": [wazuh_id] if wazuh_id else [],
+            "duplicate_instances": [instance],
+            "alert": a,
+        }
+        new_alerts.append(row)
+        if alert_id:
+            by_alert[(tenant, alert_id)] = row
+        if wazuh_id:
+            by_wazuh[(tenant, wazuh_id)] = row
+        if signature:
+            by_sig[(tenant, signature)] = row
+
+    updates = []
+    for row_id in dirty:
+        row = existing_by_id.get(row_id)
+        if not row:
+            continue
+        updates.append((
+            row["hit_count"],
+            row["first_seen"],
+            row["last_seen"],
+            json.dumps(row.get("wazuh_ids") or []),
+            json.dumps(row.get("duplicate_instances") or [], ensure_ascii=False),
+            row_id,
+        ))
+    if updates:
+        conn.executemany(
+            """UPDATE wazuh.alerts
+               SET hit_count = %s, first_seen = %s, last_seen = %s,
+                   wazuh_ids = %s::jsonb, duplicate_instances = %s::jsonb
+               WHERE id = %s""",
+            updates,
+        )
+
+    inserted = 0
+    if new_alerts:
+        insert_values = [_batch_insert_values(row["alert"], row) for row in new_alerts]
+        conn.executemany(
+            """INSERT INTO wazuh.alerts(
+                alert_id, timestamp, tenant, agent_name, agent_ip, rule_id, rule_level,
+                description, rule_groups, decoder, location, source_ip, mitre_ids,
+                cve, data, raw, log_signature, hit_count, first_seen, last_seen,
+                wazuh_ids, duplicate_instances, parsed_details, is_reviewed, reviewer_notes
+            ) VALUES(
+                %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s::jsonb,
+                %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s
+            ) ON CONFLICT(alert_id, timestamp, agent_name, rule_id) DO NOTHING""",
+            insert_values,
+        )
+        inserted = len(insert_values)
+
+    return inserted, deduplicated, 0
