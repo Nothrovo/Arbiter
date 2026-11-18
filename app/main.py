@@ -293,6 +293,7 @@ def list_alerts(
     secondary_facet: str = "",
     secondary_facet_value: str = "",
     alert_ids: str = "",
+    filters: str = "",
     sort: str = "desc",
     sort_by: str = "timestamp",
     limit: int = 500,
@@ -308,7 +309,7 @@ def list_alerts(
         time_preset=time_preset, time_from=time_from, time_to=time_to,
         facet=facet, facet_value=facet_value,
         secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
-        alert_ids=alert_ids,
+        alert_ids=alert_ids, filters=filters,
     )
 
     # Sort order
@@ -356,7 +357,7 @@ def list_alerts(
         ORDER BY {order_col}
         LIMIT %s OFFSET %s
         """
-        count_sql = f"SELECT count(DISTINCT a.id) AS n FROM wazuh.alerts a {scoped_sql}"
+        count_sql = f"SELECT count(*) AS n FROM wazuh.alerts a {scoped_sql}"
         rows = conn.execute(sql, scoped_params + [limit, offset]).fetchall()
         total = conn.execute(count_sql, scoped_params).fetchone()["n"]
 
@@ -745,6 +746,7 @@ def get_stats(
     secondary_facet_value: str = "",
     exclude_pivot: str | None = None,
     hide_reviewed: bool = False,
+    filters: str = "",
 ):
     if pivot_by not in PIVOT_DEFINITIONS:
         raise HTTPException(
@@ -788,6 +790,7 @@ def get_stats(
         secondary_facet_value=secondary_facet_value,
         exclude_facet=exclude_facet,
         exclude_facet_value=exclude_facet_value,
+        filters=filters,
     )
     parent_where_sql, parent_base_params = alert_where(
         q=q,
@@ -801,6 +804,7 @@ def get_stats(
         time_to=time_to,
         facet=facet,
         facet_value=facet_value,
+        filters=filters,
     )
     workspace_where_sql, workspace_base_params = alert_where(
         q=q,
@@ -812,6 +816,7 @@ def get_stats(
         time_preset=time_preset,
         time_from=time_from,
         time_to=time_to,
+        filters=filters,
     )
 
     metric_expr = "COUNT(*)" if metric == "alerts" else "COALESCE(SUM(COALESCE(a.hit_count, 1)), 0)"
@@ -1072,6 +1077,7 @@ def get_facet_alert_ids(payload: dict[str, Any]):
     secondary_facet = payload.get("secondary_facet", "")
     secondary_facet_values = payload.get("secondary_facet_values", [])
     spotter_mode = str(payload.get("spotter_mode", "all")).strip().lower()
+    filters = payload.get("filters", "")
 
     if not isinstance(secondary_facet_values, list):
         raise HTTPException(status_code=422, detail="secondary_facet_values must be a list.")
@@ -1080,7 +1086,7 @@ def get_facet_alert_ids(payload: dict[str, Any]):
         q=q, tenant=tenant, status=status, group_id=group_id,
         filter_preset=filter_preset, review_status=review_status,
         time_preset=time_preset, time_from=time_from, time_to=time_to,
-        facet=facet, facet_value=facet_value,
+        facet=facet, facet_value=facet_value, filters=filters,
     )
 
     if secondary_facet and secondary_facet_values:
@@ -1133,6 +1139,7 @@ def triage_summary(
     facet: str = "",
     facet_value: str = "",
     alert_ids: str = "",
+    filters: str = "",
 ):
     where_sql, params = alert_where(
         q=q,
@@ -1149,6 +1156,7 @@ def triage_summary(
         secondary_facet=secondary_facet,
         secondary_facet_value=secondary_facet_value,
         alert_ids=alert_ids,
+        filters=filters,
     )
 
     with get_db() as conn:
@@ -1159,31 +1167,22 @@ def triage_summary(
                        COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS events,
                        COUNT(DISTINCT NULLIF(a.source_ip, '')) AS unique_source_ips,
                        COUNT(DISTINCT NULLIF(a.agent_name, '')) AS unique_agents,
+                       COUNT(*) FILTER (WHERE a.rule_level >= 15) AS sev_critical,
+                       COUNT(*) FILTER (WHERE a.rule_level >= 12 AND a.rule_level < 15) AS sev_high,
+                       COUNT(*) FILTER (WHERE a.rule_level >= 7 AND a.rule_level < 12) AS sev_medium,
+                       COUNT(*) FILTER (WHERE a.rule_level < 7) AS sev_low,
                        MIN(NULLIF(a.timestamp, '')) AS earliest,
                        MAX(NULLIF(a.timestamp, '')) AS latest
                 FROM wazuh.alerts a {where_sql}""",
             params,
         ).fetchone()
 
-        sev_rows = conn.execute(
-            f"""SELECT
-                    CASE
-                        WHEN a.rule_level >= 15 THEN 'critical'
-                        WHEN a.rule_level >= 12 THEN 'high'
-                        WHEN a.rule_level >= 7 THEN 'medium'
-                        ELSE 'low'
-                    END AS sev,
-                    COUNT(*) AS n
-                FROM wazuh.alerts a {where_sql}
-                GROUP BY 1""",
-            params,
-        ).fetchall()
-
-        sev_map = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-        for r in sev_rows:
-            k = str(r["sev"]).lower()
-            if k in sev_map:
-                sev_map[k] = int(r["n"] or 0)
+        sev_map = {
+            "critical": int(counts["sev_critical"] or 0) if counts else 0,
+            "high": int(counts["sev_high"] or 0) if counts else 0,
+            "medium": int(counts["sev_medium"] or 0) if counts else 0,
+            "low": int(counts["sev_low"] or 0) if counts else 0,
+        }
 
         group_row = conn.execute(
             f"""SELECT COUNT(DISTINCT m.group_id) AS n
@@ -1234,10 +1233,12 @@ def get_suggestions(
     use_local_ai: bool = False, tenant: list[str] = Query(default=["all"]), q: str = "",
     review_status: str = "all", filter_preset: str = "", status: str = "all",
     group_id: str | None = None, time_from: str = "", time_to: str = "",
+    filters: str = "",
 ):
     where, params = alert_where(
         tenant=tenant, q=q, review_status=review_status, filter_preset=filter_preset,
         status=status, group_id=group_id, time_from=time_from, time_to=time_to,
+        filters=filters,
     )
     with get_db() as conn:
         where, params = with_exclusions(where, params, _exclusion_document(conn))
@@ -2056,12 +2057,14 @@ def _get_alerts_for_export(
     time_preset: str = "", time_from: str = "", time_to: str = "",
     facet: str = "", facet_value: str = "",
     secondary_facet: str = "", secondary_facet_value: str = "",
+    filters: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     where, params = alert_where(
         q=q, tenant=tenant, review_status=review_status, filter_preset=filter_preset,
         status=status, group_id=group_id, time_preset=time_preset, time_from=time_from, time_to=time_to,
         facet=facet, facet_value=facet_value,
         secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
+        filters=filters,
     )
     clean_pks: list[int] = []
     if alert_ids:
@@ -2107,6 +2110,7 @@ def export_scope(
     time_preset: str = "", time_from: str = "", time_to: str = "",
     facet: str = "", facet_value: str = "",
     secondary_facet: str = "", secondary_facet_value: str = "",
+    filters: str = "",
 ) -> dict[str, Any]:
     normalize_tenants(tenant)
     # Explicit selection replaces triage filters, never tenant context.
@@ -2115,12 +2119,13 @@ def export_scope(
             alert_ids = ",".join(str(pk) for pk in positive_ids(alert_ids.split(",")))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        group_id, q, review_status, filter_preset, status, time_preset, time_from, time_to, facet, facet_value, secondary_facet, secondary_facet_value = None, "", "all", "", "all", "", "", "", "", "", "", ""
+        group_id, q, review_status, filter_preset, status, time_preset, time_from, time_to, facet, facet_value, secondary_facet, secondary_facet_value, filters = None, "", "all", "", "all", "", "", "", "", "", "", "", ""
     return dict(group_id=group_id, alert_ids=alert_ids, tenant=_scope_tenant_value(tenant), q=q,
                 review_status=review_status, filter_preset=filter_preset, status=status,
                 time_preset=time_preset, time_from=time_from, time_to=time_to,
                 facet=facet, facet_value=facet_value,
-                secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value)
+                secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
+                filters=filters)
 
 
 @app.get("/api/export/preview")

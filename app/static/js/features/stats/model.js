@@ -1,4 +1,5 @@
 import {choices, integer, queryFrom, scopeParams, tenantScope, tenantValues} from '../../state/scope.js';
+import {filtersValue} from '../../state/filters.js';
 import {withParams} from '../../router.js';
 
 export function drilldownScrollBehavior(matchMedia = globalThis.matchMedia?.bind(globalThis)) {
@@ -118,6 +119,8 @@ export function triageRouteFromStats(query, {facet, facet_value, secondary_facet
   if (query.time_preset) p.set('time_preset', query.time_preset);
   if (query.time_from) p.set('time_from', query.time_from);
   if (query.time_to) p.set('time_to', query.time_to);
+  const filters = filtersValue(query.filters);
+  if (filters) p.set('filters', filters);
 
   const f = facet || query.facet;
   const fv = facet_value || query.facet_value;

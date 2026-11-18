@@ -1,3 +1,5 @@
+import {filtersValue, parseFilters} from './filters.js';
+
 export const choices = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
 export const integer = (value, fallback) => Number.isFinite(Number(value)) ? Math.floor(Number(value)) : fallback;
 
@@ -42,6 +44,7 @@ export function queryFrom(params = new URLSearchParams()) {
     facet_value: get('facet_value') || '',
     secondary_facet: get('secondary_facet') || '',
     secondary_facet_value: get('secondary_facet_value') || '',
+    filters: parseFilters(get('filters')),
     sort_by: choices(get('sort_by'), ['timestamp', 'severity', 'hits'], 'timestamp'),
     sort: choices(get('sort'), ['asc', 'desc'], 'desc'),
     time_from: get('time_from') || '',
@@ -57,8 +60,9 @@ export function scopeParams(query, {ids, groupId} = {}) {
   const params = new URLSearchParams();
   for (const tenant of tenantValues(normalized)) params.append('tenant', tenant);
   for (const [key, value] of Object.entries(normalized)) {
-    if (!['tenant', 'tenants', 'tenantScope', 'limit', 'offset'].includes(key) && value !== '') params.set(key, String(value));
+    if (!['tenant', 'tenants', 'tenantScope', 'limit', 'offset', 'filters'].includes(key) && value !== '') params.set(key, String(value));
   }
+  if (normalized.filters?.length) params.set('filters', filtersValue(normalized.filters));
   if (groupId) {
     params.set('group_id', groupId);
     for (const key of ['q', 'filter_preset', 'status']) params.delete(key);
@@ -68,7 +72,7 @@ export function scopeParams(query, {ids, groupId} = {}) {
     if (!Array.isArray(ids) || !ids.length || ids.some(id => !(/^[1-9]\d*$/.test(String(id))))) throw new Error('Pilihan alert tidak valid. Pilih ulang sebelum mengekspor.');
     const clean = [...new Set(ids.map(Number))].filter(Number.isSafeInteger).filter(id => id > 0);
     if (clean.length !== new Set(ids.map(Number)).size) throw new Error('Pilihan alert tidak valid. Pilih ulang sebelum mengekspor.');
-    for (const key of ['q', 'review_status', 'filter_preset', 'status', 'group_id']) params.delete(key);
+    for (const key of ['q', 'review_status', 'filter_preset', 'status', 'group_id', 'filters']) params.delete(key);
     params.set('alert_ids', clean.join(','));
   }
   return params;
@@ -85,6 +89,8 @@ export function scopeDescription(params) {
     if (p.get('review_status') === 'unreviewed') parts.push('Belum direview');
     if (p.get('review_status') === 'reviewed') parts.push('Sudah direview');
     if (p.get('filter_preset')) parts.push(`Filter ${p.get('filter_preset')}`);
+    const chips = parseFilters(p.get('filters') || '');
+    if (chips.length) parts.push(`${chips.length} filter lapangan`);
     if (p.get('status') === 'ungrouped') parts.push('Belum masuk insiden');
     if (p.get('status') === 'grouped') parts.push('Sudah masuk insiden');
     if (p.get('time_preset')) parts.push(`Waktu: ${p.get('time_preset')}`);

@@ -6,6 +6,7 @@ import {createStatsSession} from '../../state/stats.js';
 import {drilldownScrollBehavior, normalizeStatsQuery, statsScopeParams, generateStatsCSV, generateMarkdownSummary, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {statsPage, statsResults, renderAppliedFilters} from './render.js';
 import {openExclusionDialog} from '../../ui/exclusion-dialog.js';
+import {filtersValue, readFilterBuilder, syncFilterBuilder} from '../../state/filters.js';
 
 const PERSIST_EXCLUDE_FIELDS = {
   url_path: 'url',
@@ -63,7 +64,7 @@ export function mount(ctx) {
     const appliedContainer = root.querySelector('#stats-applied-filters');
     if (appliedContainer) {
       appliedContainer.innerHTML = renderAppliedFilters(query, currentData);
-      appliedContainer.style.display = ((query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value)) ? 'flex' : 'none';
+      appliedContainer.style.display = ((query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value) || query.filters?.length) ? 'flex' : 'none';
     }
 
     if (!currentData || currentData.total === 0) {
@@ -150,6 +151,7 @@ export function mount(ctx) {
           secondary_facet: query.secondary_pivot,
           secondary_facet_values: keys,
           spotter_mode: spotterMode,
+          filters: filtersValue(query.filters),
         }),
         signal,
       });
@@ -247,6 +249,11 @@ export function mount(ctx) {
       }
       renderView();
     }
+    if (e.target.matches('[data-filter-field]')) syncFilterBuilder(root, 'stats-flt');
+    if (e.target.matches('[data-filter-op]')) {
+      const value2 = root.querySelector('[data-filter-value2]');
+      if (value2) value2.hidden = e.target.value !== 'range';
+    }
     if (e.target.matches('[data-select-drilldown]')) {
       const aid = Number(e.target.dataset.selectDrilldown);
       if (e.target.checked) selectedIds.add(aid);
@@ -288,6 +295,21 @@ export function mount(ctx) {
     const btn = e.target.closest('button, [role="button"]');
     if (!btn) return;
 
+    if (btn.dataset.removeFilter !== undefined) {
+      const index = Number(btn.dataset.removeFilter);
+      const next = (query.filters || []).filter((_, i) => i !== index);
+      updateRoute({filters: filtersValue(next)});
+      return;
+    }
+    if (btn.dataset.addFilter !== undefined) {
+      const added = readFilterBuilder(root, 'stats-flt');
+      if (!added) {
+        notify('Isi field, operator, dan nilai filter terlebih dahulu.', 'error');
+        return;
+      }
+      updateRoute({filters: filtersValue([...(query.filters || []), added])});
+      return;
+    }
     if (btn.dataset.metric) {
       updateRoute({metric: btn.dataset.metric});
       return;

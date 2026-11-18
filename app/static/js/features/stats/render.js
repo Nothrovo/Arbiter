@@ -1,6 +1,7 @@
 import {esc, icon, severity} from '../../ui/primitives.js';
 import {PIVOT_OPTIONS, METRIC_OPTIONS, CHART_OPTIONS, distributionPercentages, triageRouteFromStats, isMaliciousPath, isMaliciousAlert} from './model.js';
 import {renderBarChart, renderDonutChart, renderLineChart} from '../../ui/charts.js';
+import {filterBuilderHTML, renderFilterChips} from '../../state/filters.js';
 
 const PERSIST_EXCLUDE_PIVOTS = new Set([
   'url_path', 'rule_description', 'rule_id', 'source_ip', 'agent',
@@ -8,9 +9,9 @@ const PERSIST_EXCLUDE_PIVOTS = new Set([
 ]);
 
 export function renderAppliedFilters(query, data = null) {
-  if (!((query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value))) {
-    return '';
-  }
+  const chips = renderFilterChips(query.filters);
+  const hasPivot = (query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value);
+  if (!hasPivot) return chips;
   const metricLabel = data?.metric === 'events' ? 'event' : 'alert';
   const parentTotal = data?.parent_total;
   const primPct = data?.primary_percentage_of_total;
@@ -19,6 +20,7 @@ export function renderAppliedFilters(query, data = null) {
   const filteredCount = data?.total;
 
   return `
+    ${chips}
     ${query.facet && query.facet_value ? `
       <span class="badge neutral">
         Pivot Utama: <strong>${esc(query.facet)} = ${esc(query.facet_value)}</strong>
@@ -148,9 +150,10 @@ export function statsPage(query) {
         </div>
       </div>
 
-      <div id="stats-applied-filters" class="applied-filters" style="display:${(query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value) ? 'flex' : 'none'}">
+      <div id="stats-applied-filters" class="applied-filters" style="display:${(query.facet && query.facet_value) || (query.secondary_facet && query.secondary_facet_value) || query.filters?.length ? 'flex' : 'none'}">
         ${renderAppliedFilters(query, null)}
       </div>
+      ${filterBuilderHTML(query.filters, {prefix: 'stats-flt'})}
     </section>
 
     <div class="stats-chart-toolbar">

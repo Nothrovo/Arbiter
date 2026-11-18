@@ -1,5 +1,6 @@
 import {esc, icon, severity, formatTime} from '../../ui/primitives.js';
 import {tenantValues} from '../../state/scope.js';
+import {filtersValue} from '../../state/filters.js';
 import {withParams} from '../../router.js';
 
 export function summaryRequestParams(query) {
@@ -10,6 +11,8 @@ export function summaryRequestParams(query) {
   if (query.status && query.status !== 'all') p.set('status', query.status);
   if (query.group_id) p.set('group_id', query.group_id);
   if (query.alert_ids) p.set('alert_ids', query.alert_ids);
+  const filters = filtersValue(query.filters);
+  if (filters) p.set('filters', filters);
   if (query.review_status) p.set('review_status', query.review_status);
   if (query.time_preset) p.set('time_preset', query.time_preset);
   if (query.secondary_facet && query.secondary_facet_value) {

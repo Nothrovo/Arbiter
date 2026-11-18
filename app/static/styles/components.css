@@ -461,3 +461,19 @@
   .pull-activity-label { display:none; }
   .pull-activity { padding:6px; }
 }
+
+/* Kibana-style filter chips shared by Triage and Statistics. */
+.filter-builder { display:grid; gap:8px; margin-top:10px; }
+.filter-builder-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.filter-builder-row .select { flex:1 1 150px; min-width:120px; }
+.filter-builder-row .input { flex:2 1 200px; min-width:150px; }
+.filter-builder-row .button { flex:0 0 auto; }
+.filter-chip-list { display:flex; gap:6px; flex-wrap:wrap; }
+.filter-chip-list:empty { display:none; }
+.filter-chip { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:3px 4px 3px 10px; border-radius:999px; border:1px solid color-mix(in srgb, var(--info) 30%, var(--border)); background:color-mix(in srgb, var(--info) 10%, var(--surface)); color:var(--text); font-size:12px; font-weight:500; }
+.filter-chip-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.filter-chip-remove { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:0; border-radius:50%; background:transparent; color:var(--muted); font-size:14px; line-height:1; cursor:pointer; }
+.filter-chip-remove:hover, .filter-chip-remove:focus-visible { background:color-mix(in srgb, var(--critical) 16%, transparent); color:var(--critical); }
+@media (max-width: 720px) {
+  .filter-builder-row .select, .filter-builder-row .input, .filter-builder-row .button { flex:1 1 100%; }
+}

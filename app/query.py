@@ -10,6 +10,8 @@ from urllib.parse import unquote
 
 from fastapi import HTTPException
 
+from app.filters import build_filter_sql
+
 
 def validated_group_id(value: str | None) -> str | None:
     if value is not None and not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", value):
@@ -156,6 +158,7 @@ def alert_where(
     secondary_facet: str = "", secondary_facet_value: str = "",
     exclude_facet: str = "", exclude_facet_value: str = "",
     alert_ids: str | Sequence[int | str] | None = None,
+    filters: Any = None,
 ) -> tuple[str, list[Any]]:
     group_id = validated_group_id(group_id)
     clauses: list[str] = []
@@ -245,6 +248,10 @@ def alert_where(
             ex_val = str(exclude_facet_value).strip()
             clauses.append(f"{FACET_COLUMNS[exclude_facet]} != %s")
             params.append(ex_val)
+    filter_sql, filter_params = build_filter_sql(filters)
+    if filter_sql:
+        clauses.append(filter_sql)
+        params.extend(filter_params)
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params
 
 

@@ -285,6 +285,25 @@ The chain is explanatory evidence, not a verdict. A context event (`5715`,
 | `GET /api/alerts/pull/{job_id}` | Pull progress, counters, timings, rate/ETA, and window state. |
 | `POST /api/alerts/pull/{job_id}/cancel` | Request cancellation; already-ingested alerts stay committed. |
 
+### 7.1 Field filter chips
+
+Triage, Statistics, summaries, facet drill-down, and explicit-recipient exports
+accept one extra parameter:
+
+```
+filters=[{"field":"rule.description","op":"not_contains","value":"mhs"},
+         {"field":"data.url","op":"glob","value":"*/mhs/*"},
+         {"field":"rule.level","op":"range","value":"7","value2":"12"}]
+```
+
+Fields and operators are a closed whitelist in `app/filters.py` (Wazuh-style
+names such as `rule.level`, `rule.id`, `agent.name`, `data.srcip`, `data.url`,
+`data.status`, `mitre.id`, `full_log`). Chips are translated to parameterized
+SQL and ANDed into `alert_where()`. Invalid JSON, unknown fields, bad regex, or
+non-numeric severity bounds return `422`. Filter chips are excluded again from
+an export that names alert IDs explicitly — selection wins, exactly like the
+other triage filters.
+
 `safe_alerts()` strips `raw`, `data`, `full_log`, `parsed_details`, and
 `duplicate_instances` before any model-facing or client-facing triage payload.
 
