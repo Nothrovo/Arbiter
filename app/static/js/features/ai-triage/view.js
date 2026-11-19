@@ -146,13 +146,13 @@ export async function mount(ctx) {
       </section>`;
   }
 
-  function renderAlertTable(group, index) {
+  function renderAlertTable(group, index, position) {
     const records = groupAlerts(group, index);
     if (!records.length) return '<p class="meta">Tidak ada detail alert yang dapat ditampilkan.</p>';
     return `
       <div class="table-region ai-alert-table">
         <table class="data-table">
-          <thead><tr><th>Severity</th><th>Waktu</th><th>Agent / sumber</th><th>Alert</th><th class="numeric">Hits</th></tr></thead>
+          <thead><tr><th>Severity</th><th>Waktu</th><th>Agent / sumber</th><th>Alert</th><th class="numeric">Hits</th><th>Aksi</th></tr></thead>
           <tbody>
             ${records.map(alert => {
               const facts = alertFacts(alert);
@@ -162,6 +162,7 @@ export async function mount(ctx) {
                 <td><span class="mono">${esc(alert.agent_name || '—')}</span>${alert.source_ip ? `<br><span class="meta mono">${esc(alert.source_ip)}</span>` : ''}</td>
                 <td><span class="ai-alert-desc">${esc(alert.description || 'Tanpa deskripsi')}</span>${facts.length ? `<br><span class="meta">${esc(facts.join(' · '))}</span>` : ''}</td>
                 <td class="numeric num">${Number(alert.hit_count || 1).toLocaleString('id-ID')}</td>
+                <td><button class="button ai-alert-remove" type="button" data-action="remove-alert" data-group-index="${position}" data-alert-id="${esc(alert.id)}" title="Keluarkan alert ini dari korelasi">${icon('delete')} Keluarkan</button></td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -207,7 +208,7 @@ export async function mount(ctx) {
         </div>
         <details class="ai-group-details">
           <summary class="button">${icon('cases')} Lihat ${records.length.toLocaleString('id-ID')} alert lengkap</summary>
-          ${renderAlertTable(group, index)}
+          ${renderAlertTable(group, index, position)}
         </details>
         <div class="ai-group-actions">
           <a class="button" href="${alertsHref}">${icon('arrow')} Buka di Triage</a>
@@ -233,7 +234,7 @@ export async function mount(ctx) {
       ${result.warning ? `<div class="notice" data-kind="warning"><p>${esc(result.warning)}</p></div>` : ''}
       ${renderSummary(result, counts, result.mode)}
       ${result.groups.length
-        ? `<div class="ai-save-bar">${result.progress && !result.progress.done && result.progress.remaining > 0 ? `<button class="button" type="button" data-action="resume">${icon('spark')} Lanjutkan sisa (${result.progress.remaining.toLocaleString('id-ID')})</button>` : ''}<button class="button primary" type="button" data-action="save" ${saving ? 'disabled' : ''}>${icon('cases')} ${saving ? 'Menyimpan…' : 'Simpan ke Insiden'}</button><button class="button" type="button" data-action="merge-selected" ${mergeSelection.size < 2 ? 'disabled' : ''}>${icon('plus')} Gabungkan terpilih (<span data-merge-count>${mergeSelection.size}</span>)</button><button class="button" type="button" data-action="clear-merge" ${mergeSelection.size ? '' : 'disabled'}>Reset pilihan</button><span class="inline-status" id="ai-save-status" role="status"></span></div>
+        ? `<div class="ai-save-bar">${result.progress && !result.progress.done && result.progress.remaining > 0 ? `<button class="button" type="button" data-action="resume">${icon('spark')} Lanjutkan sisa (${result.progress.remaining.toLocaleString('id-ID')})</button>` : ''}<button class="button primary" type="button" data-action="save" ${saving ? 'disabled' : ''}>${icon('cases')} ${saving ? 'Menyimpan…' : 'Simpan ke Insiden'}</button><button class="button" type="button" data-action="merge-selected" ${mergeSelection.size < 2 ? 'disabled' : ''}>${icon('plus')} Gabungkan terpilih (<span data-merge-count>${mergeSelection.size}</span>)</button><button class="button" type="button" data-action="clear-merge" ${mergeSelection.size ? '' : 'disabled'}>Reset pilihan</button><button class="button" type="button" data-action="remove-all-groups">${icon('delete')} Hapus semua korelasi</button><span class="inline-status" id="ai-save-status" role="status"></span></div>
            <div class="ai-groups">${result.groups.map((group, index) => renderGroup(group, alertIndex(result.alerts), index)).join('')}</div>`
         : emptyState('Tidak ada alert pada scope ini', 'Ubah status review, ambang severity, atau scope tenant lalu jalankan ulang.')}`;
   }
@@ -488,6 +489,63 @@ export async function mount(ctx) {
     }
   }
 
+  async function removeAlert(group, alertId) {
+    if (!group || !result || !alertId) return;
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const ok = window.confirm('Keluarkan alert ini dari korelasi? Alert tetap tersimpan dan tidak akan dimasukkan lagi saat melanjutkan proses.');
+      if (!ok) return;
+    }
+    const params = new URLSearchParams();
+    for (const tenant of activeTenants()) params.append('tenant', tenant);
+    try {
+      await json(`/api/ai/triage/alerts/remove?${params}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({alert_ids: [Number(alertId)]}),
+        signal,
+        timeout: 20000,
+      });
+      const remainingGroups = result.groups
+        .map(item => item === group
+          ? {...item, alertIds: item.alertIds.filter(id => String(id) !== String(alertId))}
+          : item)
+        .filter(item => item.alertIds.length > 0);
+      result = {...result, groups: remainingGroups};
+      mergeSelection = new Set();
+      render();
+      notify('Alert dikeluarkan dari korelasi AI.', 'success');
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  }
+
+  async function removeAllGroups() {
+    if (!result?.groups?.length) return;
+    const count = result.groups.length;
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const ok = window.confirm(`Hapus semua ${count} korelasi AI? Alert tetap tersimpan dan ditandai sudah diproses.`);
+      if (!ok) return;
+    }
+    const groupKeys = result.groups.map(group => group.groupKey).filter(Boolean);
+    const groupTitles = result.groups.filter(group => !group.groupKey).map(group => group.title).filter(Boolean);
+    const payload = {tenant: activeTenants(), group_keys: groupKeys, group_titles: groupTitles};
+    try {
+      await json('/api/ai/triage/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+        signal,
+        timeout: 20000,
+      });
+      result = {...result, groups: []};
+      mergeSelection = new Set();
+      render();
+      notify('Semua korelasi AI dihapus. Alert tetap tersimpan.', 'success');
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  }
+
   async function save() {
     if (saving || !result?.groups?.length) return;
     saving = true;
@@ -549,7 +607,8 @@ export async function mount(ctx) {
             state.reviewStatus = savedOpts.reviewStatus;
             state.groupBy = savedOpts.groupBy;
           } else {
-            result = null;
+            // Keep the last result visible; tenant selection only changes the next run.
+            notify('Belum ada hasil tersimpan untuk scope ini. Hasil sebelumnya tetap ditampilkan; jalankan triage untuk scope baru.', 'info');
           }
           render();
         } catch (err) {
@@ -593,6 +652,14 @@ export async function mount(ctx) {
       const position = Number(event.target.closest('[data-action=remove-group]')?.dataset.groupIndex);
       const group = result?.groups?.[position];
       if (group) removeGroup(group);
+    }
+    if (action === 'remove-all-groups') removeAllGroups();
+    if (action === 'remove-alert') {
+      const button = event.target.closest('[data-action=remove-alert]');
+      const position = Number(button?.dataset.groupIndex);
+      const alertId = button?.dataset.alertId;
+      const group = result?.groups?.[position];
+      if (group && alertId) removeAlert(group, alertId);
     }
     if (action === 'copy-group-logs') {
       const position = Number(event.target.closest('[data-action=copy-group-logs]')?.dataset.groupIndex);

@@ -414,6 +414,7 @@
 .ai-group-details > summary { margin-bottom:12px; }
 .ai-group-actions { display:flex; gap:8px; flex-wrap:wrap; padding-top:12px; border-top:1px solid var(--border); }
 .ai-alert-table { margin-top:12px; }
+.ai-alert-remove { padding:4px 8px; font-size:12px; white-space:nowrap; }
 .ai-alert-desc { display:block; max-width:64ch; overflow-wrap:anywhere; }
 .ai-save-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 

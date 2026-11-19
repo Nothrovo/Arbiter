@@ -30,6 +30,7 @@ from app.auth import (
 )
 from app.config import HOST, PORT
 from app.ai_triage import (
+    AI_TRIAGE_LAST_KEY,
     AI_TRIAGE_STATE_KEY,
     current_wib_window_key,
     get_triage_state_key,
@@ -2109,6 +2110,116 @@ def _ai_triage_candidate_count(conn, where: str, params: list[Any]) -> int:
     return int(row["n"]) if row else 0
 
 
+def _ai_triage_state_candidates(conn, norm_tenants: list[str]) -> list[tuple[str, dict[str, Any]]]:
+    """All persisted triage states relevant to a request, newest-compatible first."""
+    keys = [get_triage_state_key(norm_tenants), AI_TRIAGE_STATE_KEY]
+    pointer = load_document(conn, AI_TRIAGE_LAST_KEY, None)
+    if isinstance(pointer, dict) and str(pointer.get("key") or ""):
+        keys.append(str(pointer["key"]))
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for key in keys:
+        if key in seen:
+            continue
+        seen.add(key)
+        state = load_document(conn, key, None)
+        if isinstance(state, dict) and isinstance(state.get("options"), dict):
+            candidates.append((key, state))
+    return candidates
+
+
+def _ai_triage_pick_state(conn, norm_tenants: list[str]) -> tuple[str, dict[str, Any] | None]:
+    candidates = _ai_triage_state_candidates(conn, norm_tenants)
+    if not candidates:
+        return "", None
+    exact_key = get_triage_state_key(norm_tenants)
+    requested = {str(t) for t in norm_tenants}
+
+    def covers(state: dict[str, Any]) -> bool:
+        saved = {str(t) for t in ((state.get("options") or {}).get("tenant") or ["all"])}
+        return "all" in saved or requested.issubset(saved)
+
+    covering = [item for item in candidates if covers(item[1])] or candidates
+
+    def rank(item: tuple[str, dict[str, Any]]) -> tuple[str, int]:
+        key, state = item
+        return str(state.get("saved_at") or ""), 1 if key == exact_key else 0
+
+    return max(covering, key=rank)
+
+
+def _ai_triage_state_matches(state: dict[str, Any], norm_tenants: list[str]) -> bool:
+    options = state.get("options") or {}
+    saved = options.get("tenant") or ["all"]
+    return sorted(str(t) for t in saved) == sorted(str(t) for t in norm_tenants)
+
+
+def _remember_triage_state(conn, state_key: str, state: dict[str, Any]) -> None:
+    save_document(conn, AI_TRIAGE_LAST_KEY, {
+        "key": state_key,
+        "tenant": (state.get("options") or {}).get("tenant"),
+        "saved_at": state.get("saved_at"),
+    })
+
+
+def _ai_triage_read_only(conn, state: dict[str, Any], norm_tenants: list[str]) -> dict[str, Any]:
+    """Render a saved result for a different tenant scope without rewriting it.
+
+    Groups are narrowed to the requested tenants so opening a tenant after an
+    all-tenant run shows that tenant's share of the same saved result.
+    """
+    options = state.get("options") or {}
+    group_list = state.get("groups") if isinstance(state.get("groups"), list) else []
+    saved_ids = [int(aid) for aid in (state.get("alert_ids") or []) if str(aid).isdigit()]
+    wanted_ids = {int(aid) for g in group_list for aid in (g.get("alert_ids") or []) if str(aid).isdigit()}
+    wanted_ids.update(saved_ids)
+    rows: list[Any] = []
+    if wanted_ids:
+        t_clause, t_params = tenant_clause("a", norm_tenants)
+        id_where = f"WHERE a.id = ANY(%s){f' AND {t_clause}' if t_clause else ''}"
+        rows = conn.execute(
+            f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
+                       a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
+                       a.mitre_ids, a.cve, a.hit_count, a.log_signature, a.parsed_details,
+                       a.data, COALESCE(a.raw->>'full_log', '') AS full_log
+                FROM wazuh.alerts a {id_where}
+                ORDER BY a.rule_level DESC NULLS LAST, a.timestamp DESC NULLS LAST, a.id DESC""",
+            [sorted(wanted_ids), *t_params],
+        ).fetchall()
+    by_id = {str(r["id"]): {**r, "id": str(r["id"])} for r in rows}
+    groups: list[dict[str, Any]] = []
+    for group in group_list:
+        if not isinstance(group, dict):
+            continue
+        ids = [aid for aid in (group.get("alert_ids") or []) if str(aid) in by_id]
+        if not ids:
+            continue
+        groups.append({**group, "alert_ids": ids, "alert_count": len(ids)})
+    final_ids = list(dict.fromkeys(aid for g in groups for aid in g["alert_ids"]))
+    final_alerts = [by_id[aid] for aid in final_ids if aid in by_id]
+    group_by = str(options.get("group_by") or "rule_description")
+    return {
+        "saved": True,
+        "read_only": True,
+        "options": options,
+        "progress": None,
+        "result": {
+            "mode": str(state.get("mode") or "local_rules"),
+            "warning": state.get("warning"),
+            "model": state.get("model"),
+            "alert_count": len(final_alerts),
+            "min_rule_level": int(options.get("min_rule_level") or 7),
+            "max_rule_level": options.get("max_rule_level"),
+            "group_by": group_by,
+            "saved_at": state.get("saved_at"),
+            "window_key": state.get("window_key"),
+            "progress": None,
+            "alerts": safe_alerts(final_alerts, limit=max(len(final_alerts), 1)),
+            "groups": groups,
+        },
+    }
+
+
 def _find_matching_open_ai_group(
     conn,
     *,
@@ -2188,14 +2299,12 @@ def _sync_triage_groups_with_saved_incidents(
 def api_get_ai_triage(tenant: list[str] = Query(None)):
     """Return the persisted AI triage state, automatically merging any new alerts within the 17:00 WIB window."""
     norm_tenants = list(normalize_tenants(tenant)) or ["all"]
-    state_key = get_triage_state_key(norm_tenants)
     with get_db() as conn:
-        state = load_document(conn, state_key, None)
-        if state is None and state_key != AI_TRIAGE_STATE_KEY:
-             # Fallback to global state if specific tenant state not found
-             state = load_document(conn, AI_TRIAGE_STATE_KEY, None)
+        state_key, state = _ai_triage_pick_state(conn, norm_tenants)
         if not isinstance(state, dict) or not isinstance(state.get("options"), dict):
             return {"saved": False, "result": None}
+        if not _ai_triage_state_matches(state, norm_tenants):
+            return _ai_triage_read_only(conn, state, norm_tenants)
         options = state["options"]
         tenant = options.get("tenant") or ["all"]
         try:
@@ -2328,6 +2437,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             },
         }
         save_document(conn, get_triage_state_key(norm_tenants), updated_state)
+        _remember_triage_state(conn, get_triage_state_key(norm_tenants), updated_state)
 
     return {
         "saved": True,
@@ -2554,6 +2664,7 @@ def api_ai_triage(payload: dict[str, Any]):
             },
         }
         save_document(conn, state_key, saved_state)
+        _remember_triage_state(conn, state_key, saved_state)
 
     return {
         "mode": mode,
@@ -2599,12 +2710,9 @@ def api_ai_triage_remove(payload: dict[str, Any]):
 
     tenant = payload.get("tenant") or ["all"]
     norm_tenants = list(normalize_tenants(tenant)) or ["all"]
-    state_key = get_triage_state_key(norm_tenants)
     removed = 0
     with get_db() as conn:
-        state = load_document(conn, state_key, None)
-        if state is None and state_key != AI_TRIAGE_STATE_KEY:
-            state = load_document(conn, AI_TRIAGE_STATE_KEY, None)
+        state_key, state = _ai_triage_pick_state(conn, norm_tenants)
         if not isinstance(state, dict) or not isinstance(state.get("groups"), list):
             raise HTTPException(status_code=404, detail="Belum ada hasil AI Triage yang bisa diubah.")
         kept: list[dict[str, Any]] = []
@@ -2624,6 +2732,62 @@ def api_ai_triage_remove(payload: dict[str, Any]):
         state["alert_ids"] = list(dict.fromkeys(final_ids))
         state["saved_at"] = datetime.now(timezone.utc).isoformat()
         save_document(conn, state_key, state)
+        _remember_triage_state(conn, state_key, state)
+    return {"removed": removed, "group_count": len(kept)}
+
+
+@app.post("/api/ai/triage/alerts/remove")
+def api_ai_triage_remove_alerts(payload: dict[str, Any]):
+    """Remove specific alerts from saved AI correlation groups.
+
+    The alerts stay marked as processed so a resumed batch does not re-add them.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload hapus alert tidak valid.")
+    raw_ids = payload.get("alert_ids")
+    if not isinstance(raw_ids, list) or not raw_ids:
+        raise HTTPException(status_code=400, detail="alert_ids harus berisi minimal satu alert.")
+    try:
+        alert_ids = positive_ids(raw_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not alert_ids:
+        raise HTTPException(status_code=400, detail="alert_ids harus berisi minimal satu alert.")
+    remove_ids = {str(pk) for pk in alert_ids}
+
+    tenant = payload.get("tenant") or ["all"]
+    norm_tenants = list(normalize_tenants(tenant)) or ["all"]
+    removed = 0
+    with get_db() as conn:
+        state_key, state = _ai_triage_pick_state(conn, norm_tenants)
+        if not isinstance(state, dict) or not isinstance(state.get("groups"), list):
+            raise HTTPException(status_code=404, detail="Belum ada hasil AI Triage yang bisa diubah.")
+        kept: list[dict[str, Any]] = []
+        removed_ids: set[str] = set()
+        for group in state["groups"]:
+            if not isinstance(group, dict):
+                continue
+            ids = [str(aid) for aid in (group.get("alert_ids") or [])]
+            kept_ids = [aid for aid in ids if aid not in remove_ids]
+            removed_ids.update(set(ids) - set(kept_ids))
+            if not kept_ids:
+                continue
+            kept.append({**group, "alert_ids": kept_ids, "alert_count": len(kept_ids)})
+        if not removed_ids:
+            raise HTTPException(status_code=404, detail="Alert tidak ditemukan pada korelasi tersimpan.")
+        removed = len(removed_ids)
+        state["groups"] = kept
+        state["alert_ids"] = list(dict.fromkeys(
+            aid for group in kept for aid in (group.get("alert_ids") or [])
+        ))
+        progress = state.get("progress")
+        if isinstance(progress, dict):
+            processed = {int(aid) for aid in (progress.get("processed_ids") or []) if str(aid).isdigit()}
+            processed.update(int(aid) for aid in remove_ids if str(aid).isdigit())
+            progress["processed_ids"] = sorted(processed)
+        state["saved_at"] = datetime.now(timezone.utc).isoformat()
+        save_document(conn, state_key, state)
+        _remember_triage_state(conn, state_key, state)
     return {"removed": removed, "group_count": len(kept)}
 
 

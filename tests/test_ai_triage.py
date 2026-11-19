@@ -658,6 +658,58 @@ class AITriageAPITests(unittest.TestCase):
         })
         self.assertEqual(missing.status_code, 404)
 
+    def test_ai_triage_all_tenant_result_survives_switching_to_one_tenant(self):
+        self.db.add_alert(110, "Alpha", rule_level=10, description="Alpha campaign",
+                          source_ip="203.0.113.110", parsed_details='{"path":"/a"}', log_signature="sig-cross-a")
+        self.db.add_alert(111, "Beta", rule_level=11, description="Beta campaign",
+                          source_ip="203.0.113.111", parsed_details='{"path":"/b"}', log_signature="sig-cross-b")
+        run = self.client.post("/api/ai/triage", json={
+            "tenant": ["all"], "limit": 100, "min_rule_level": 7,
+            "review_status": "all", "group_by": "indicator",
+        })
+        self.assertEqual(run.status_code, 200, run.text)
+
+        alpha = self.client.get("/api/ai/triage", params={"tenant": "Alpha"}).json()
+        self.assertTrue(alpha["saved"])
+        self.assertTrue(alpha["result"]["groups"], "all-tenant groups remain visible after switching tenant")
+        self.assertEqual({a["tenant"] for a in alpha["result"]["alerts"]}, {"Alpha"})
+        self.assertEqual({g["tenant"] for g in alpha["result"]["groups"]}, {"Alpha"})
+
+        beta = self.client.get("/api/ai/triage", params={"tenant": "Beta"}).json()
+        self.assertTrue(beta["saved"])
+        self.assertEqual({a["tenant"] for a in beta["result"]["alerts"]}, {"Beta"})
+
+        everything = self.client.get("/api/ai/triage", params={"tenant": "all"}).json()
+        self.assertEqual({a["tenant"] for a in everything["result"]["alerts"]}, {"Alpha", "Beta"})
+
+    def test_ai_triage_remove_alert_from_correlation(self):
+        self.db.add_alert(120, "Alpha", rule_level=10, description="Shared IP A",
+                          source_ip="203.0.113.120", parsed_details='{"path":"/x"}', log_signature="sig-ra-a")
+        self.db.add_alert(121, "Alpha", rule_level=10, description="Shared IP B",
+                          source_ip="203.0.113.120", parsed_details='{"path":"/y"}', log_signature="sig-ra-b")
+        run = self.client.post("/api/ai/triage", json={
+            "tenant": ["Alpha"], "limit": 100, "min_rule_level": 7,
+            "review_status": "all", "group_by": "indicator",
+        })
+        self.assertEqual(run.status_code, 200, run.text)
+        group = next(g for g in run.json()["groups"] if set(g["alert_ids"]) == {"120", "121"})
+
+        removed = self.client.post("/api/ai/triage/alerts/remove", json={
+            "tenant": ["Alpha"], "alert_ids": [120],
+        })
+        self.assertEqual(removed.status_code, 200, removed.text)
+        self.assertEqual(removed.json()["removed"], 1)
+
+        reopen = self.client.get("/api/ai/triage", params={"tenant": "Alpha"}).json()
+        updated = next(g for g in reopen["result"]["groups"] if group["group_key"] == g["group_key"])
+        self.assertEqual(updated["alert_ids"], ["121"])
+        self.assertNotIn("120", {a["id"] for a in reopen["result"]["alerts"]})
+
+        missing = self.client.post("/api/ai/triage/alerts/remove", json={
+            "tenant": ["Alpha"], "alert_ids": [99999],
+        })
+        self.assertEqual(missing.status_code, 404)
+
     def test_ai_triage_save_rejects_multi_tenant_group(self):
         self.db.add_alert(30, "Alpha", rule_level=10, description="Shared rule", source_ip="1.2.3.4")
         self.db.add_alert(31, "Beta", rule_level=10, description="Shared rule", source_ip="1.2.3.4")

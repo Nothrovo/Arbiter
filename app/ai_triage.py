@@ -21,13 +21,7 @@ from app.wazuh_intel import classify_alert, correlate_alerts
 WIB = timezone(timedelta(hours=7))
 WIB_CUTOFF_HOUR = 17
 AI_TRIAGE_STATE_KEY = "ai_triage_state"
-
-def get_triage_state_key(tenants: list[str]) -> str:
-    """Generate a unique state key based on the sorted list of selected tenants."""
-    if not tenants or "all" in tenants:
-        return AI_TRIAGE_STATE_KEY
-    suffix = "__".join(sorted(str(t).strip() for t in tenants if str(t).strip()))
-    return f"{AI_TRIAGE_STATE_KEY}_{suffix}"
+AI_TRIAGE_LAST_KEY = "ai_triage_last_state"
 
 def get_triage_state_key(tenants: list[str]) -> str:
     if not tenants or "all" in tenants:

@@ -187,6 +187,11 @@ test('ai-triage page sends only sanitized fields and offers TP/FP actions', () =
   assert.match(view, /data-action="remove-group"/);
   assert.match(view, /Hapus korelasi/);
   assert.match(view, /\/api\/ai\/triage\/remove/);
+  assert.match(view, /data-action="remove-alert"/);
+  assert.match(view, /Keluarkan/);
+  assert.match(view, /\/api\/ai\/triage\/alerts\/remove/);
+  assert.match(view, /data-action="remove-all-groups"/);
+  assert.match(view, /Hapus semua korelasi/);
   // Fallback is clearly labelled, never presented as AI.
   assert.match(view, /local_rules_fallback/);
   assert.match(view, /heuristik/i);

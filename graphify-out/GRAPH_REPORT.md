@@ -1,32 +1,32 @@
 # Graph Report - Arbiter  (2026-11-19)
 
 ## Corpus Check
-- 165 files · ~148,006 words
+- 165 files · ~149,187 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 15 file(s) not represented in the graph (top: .css 5, (none) 4, .woff2 4)
 
 ## Summary
-- 1870 nodes · 4661 edges · 103 communities (79 shown, 24 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 138 edges (avg confidence: 0.9)
+- 1884 nodes · 4704 edges · 112 communities (88 shown, 24 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 139 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bce0fc1e`
+- Built from commit: `48f8fe9c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- classify_alert
+- _active_response
 - ref_node_assert
 - test_ui_api.py
 - stats/view.js
-- state.js
-- esc
+- pull_jobs.py
+- incidents/render.js
 - ApiIntegrationTests
 - loadingRows
 - AITriageAPITests
 - start.sh
-- SyntheticRoot
+- _cluster_alerts
 - Arbiter — blueprint rombak UI/UX
 - Arbiter — audit UI/UX dan keputusan redesign
 - ARSITEKTUR.md
@@ -49,7 +49,7 @@
 - SettingsAPITests
 - test_pull_jobs.py
 - app.js
-- main.py
+- get_db
 - exclusions.py
 - SyntheticDB
 - suggest_groups
@@ -57,6 +57,7 @@
 - emptyState
 - StatsEndpointContractTests
 - .test_realtime_pull_respects_custom_severity_and_resets_since_on_severity_change
+- _normalize_wazuh_timestamp
 - Arsitektur Arbiter — Web & Tools
 - ai_triage.py
 - DatabaseTrustTests
@@ -66,19 +67,21 @@
 - settings.json
 - ui-ux-redesign/README.md
 - query.py
+- test_settings.py
 - Layout
 - Control
 - database.py
+- normalize_alert
 - database-workspace.test.mjs
 - json
 - wazuh_intel.py
 - 5\. Cara Kerja
 - sanitize_text
-- scope.js
+- router.js
 - error-codes/view.js
 - ⚡ Key Capabilities
 - Arbiter Architecture — Wazuh Read, Classify, Correlate
-- enrich_intel
+- intel.py
 - Any
 - package.json
 - ExclusionAPITests
@@ -97,13 +100,13 @@
 - validate-bash.sh
 - setup-ai-symlinks.sh
 - 8. Deployment
-- json
+- Arbiter
 - 4. Wireframe dan first viewport
 - 7\. Keamanan
 - wazuh_search
 - _FakeCursor
 - filters.js
-- _http_error_reason
+- triage-request.test.mjs
 - get_db
 - Control
 - mount
@@ -111,65 +114,69 @@
 - wazuh-queries/model.js
 - 5. Information architecture & interaction contracts
 - settings.py
-- Arbiter SOC Desk Upgrades Implementation Plan
-- Backend (safe isolated suites)
+- extract_active_response
+- 🚀 Setup & Getting Started
+- 6. Arsitektur Data
+- 2\. Deskripsi Produk
+- 6\. Komponen yang Dipakai
+- api_ai_triage_save
+- _review_activity_payload
+- 4. Data contracts
+- 7. Arsitektur Keamanan
+- 3\. Workflow
 
 ## God Nodes (most connected - your core abstractions)
 1. `esc()` - 95 edges
-2. `json()` - 74 edges
-3. `get_db()` - 72 edges
-4. `icon()` - 64 edges
-5. `mount()` - 46 edges
-6. `AITriageAPITests` - 44 edges
-7. `mount()` - 43 edges
+2. `json()` - 76 edges
+3. `get_db()` - 73 edges
+4. `icon()` - 65 edges
+5. `AITriageAPITests` - 46 edges
+6. `mount()` - 46 edges
+7. `mount()` - 45 edges
 8. `errorState()` - 39 edges
 9. `UIAPIContractTests` - 37 edges
 10. `mount()` - 35 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `5.6 AI Triage lokal` --references--> `safe_alerts()`  [INFERRED]
+  docs/DOKUMENTASI.md → app/ai_triage.py
+- `7.5 Perlindungan data dan ekspor` --references--> `safe_alerts()`  [INFERRED]
+  docs/DOKUMENTASI.md → app/ai_triage.py
 - `5.7 Alur ekspor` --references--> `export_scope()`  [INFERRED]
   docs/ARSITEKTUR.md → app/main.py
+- `5.8 Profil database dan pemeliharaan` --references--> `get_db()`  [INFERRED]
+  docs/ARSITEKTUR.md → app/database.py
 - `4.2 Normalized alert` --references--> `normalize_alert()`  [INFERRED]
   docs/ARCHITECTURE.md → app/core.py
-- `6.3 Ordered chain` --references--> `build_attack_chains()`  [INFERRED]
-  docs/ARCHITECTURE.md → app/wazuh_intel.py
-- `5.5 Korelasi` --references--> `build_attack_chains()`  [INFERRED]
-  docs/DOKUMENTASI.md → app/wazuh_intel.py
-- `6.1 Response linkage` --references--> `correlate_alerts()`  [INFERRED]
-  docs/ARCHITECTURE.md → app/wazuh_intel.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (103 total, 24 thin omitted)
-
-### Community 0 - "classify_alert"
-Cohesion: 0.11
-Nodes (10): _bump(), classify_alert(), extract_active_response(), _level_priority(), _profile_for(), _active_response(), ActiveResponseReadTests, ClassificationTests (+2 more)
+## Communities (112 total, 24 thin omitted)
 
 ### Community 1 - "ref_node_assert"
-Cohesion: 0.08
-Nodes (18): createRouter(), change(), parseRoute(), url, modelURL, mainPy, root, settingsView (+10 more)
+Cohesion: 0.10
+Nodes (24): filtersValue(), normalizeFilter(), parseFilters(), queryFrom(), rawTenantValues(), scopeDescription(), scopeParams(), tenantScope() (+16 more)
 
 ### Community 3 - "stats/view.js"
-Cohesion: 0.13
-Nodes (33): BENIGN_WHITELIST_PATTERNS, CHART_OPTIONS, distributionPercentages(), drilldownScrollBehavior(), generateMarkdownSummary(), generateStatsCSV(), INJECTION_PATTERNS, isMaliciousAlert() (+25 more)
+Cohesion: 0.12
+Nodes (36): BENIGN_WHITELIST_PATTERNS, CHART_OPTIONS, distributionPercentages(), drilldownScrollBehavior(), generateMarkdownSummary(), generateStatsCSV(), INJECTION_PATTERNS, isMaliciousAlert() (+28 more)
 
-### Community 4 - "state.js"
+### Community 4 - "pull_jobs.py"
 Cohesion: 0.16
-Nodes (18): cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), incidentPayload(), incidentRoute(), selectedIds(), STATUSES (+10 more)
+Nodes (14): ingest_alert_with_dedup(), _build_windows(), cancel_job(), get_job(), _ingest(), list_jobs(), _now(), _parse_time() (+6 more)
 
-### Community 5 - "esc"
-Cohesion: 0.17
-Nodes (29): caseHref(), filterIncidents(), SEVERITIES, allOptions(), options(), renderEvidence(), renderList(), renderWorkspace() (+21 more)
+### Community 5 - "incidents/render.js"
+Cohesion: 0.07
+Nodes (47): caseHref(), cleanIds(), draftFrom(), draftsEqual(), evidenceParams(), filterIncidents(), incidentPayload(), incidentRoute() (+39 more)
 
 ### Community 7 - "loadingRows"
-Cohesion: 0.12
-Nodes (39): PRESET_LABELS, PRESET_MS, STATUS_LABELS, mount(), pull(), render(), saveRealtime(), schedule() (+31 more)
+Cohesion: 0.15
+Nodes (35): mount(), pull(), render(), saveRealtime(), schedule(), aiLabel(), clone(), DEFAULT_SETTINGS (+27 more)
 
-### Community 10 - "SyntheticRoot"
-Cohesion: 0.22
-Nodes (3): context(), load(), SyntheticRoot
+### Community 10 - "_cluster_alerts"
+Cohesion: 0.17
+Nodes (4): ai_triage(), _cluster_alerts(), _cluster_prompt(), _validate_cluster_verdicts()
 
 ### Community 11 - "Arbiter — blueprint rombak UI/UX"
 Cohesion: 0.17
@@ -188,36 +195,36 @@ Cohesion: 0.13
 Nodes (14): AGENTS.md — Arbiter Project Context for AI Agents, Architecture (frontend), Design direction: Quiet Evidence Desk, Four destinations (not a monolithic page), Graph, Key policies, Privacy — STRICT, Repository layout (+6 more)
 
 ### Community 16 - "normalize_tenants"
-Cohesion: 0.12
-Nodes (22): Agent: code-reviewer, Agent: security-auditor, API Conventions — Arbiter, Credential redaction, Errors, Tenant scoping, add_group_members(), delete_group() (+14 more)
+Cohesion: 0.10
+Nodes (19): Agent: code-reviewer, Agent: security-auditor, API Conventions — Arbiter, Credential redaction, Errors, Tenant scoping, _build_ai_triage_where(), bulk_full_logs() (+11 more)
 
 ### Community 17 - "mount"
-Cohesion: 0.13
-Nodes (37): apiURL(), loadBatchIncidentOptions(), intelBadge(), intelSummary(), renderQueue(), renderTriageSummary(), summaryRequestParams(), chainLine() (+29 more)
+Cohesion: 0.12
+Nodes (40): apiURL(), json(), testIntelCache(), testModel(), updateExclusion(), claimBadge(), intelBadge(), intelSummary() (+32 more)
 
 ### Community 18 - "lookup_remote_ip_cache_detail"
-Cohesion: 0.09
-Nodes (12): enrich_ip(), _json_object(), lookup_remote_ip_cache(), lookup_remote_ip_cache_detail(), query_abuseipdb(), _resolve_remote_db_url(), _safe_remote_cache_error(), EnrichFallbackTests (+4 more)
+Cohesion: 0.20
+Nodes (6): _json_object(), lookup_remote_ip_cache(), lookup_remote_ip_cache_detail(), _FakeConnection, _psycopg_modules(), RemoteCacheLookupTests
 
 ### Community 21 - "icon"
-Cohesion: 0.15
-Nodes (23): save(), databaseIdentity(), summarizeTelemetryRange(), mount(), loadStatus(), maintain(), render(), switchTo() (+15 more)
+Cohesion: 0.14
+Nodes (27): save(), databaseIdentity(), summarizeTelemetryRange(), mount(), loadStatus(), maintain(), render(), switchTo() (+19 more)
 
 ### Community 22 - "api_get_ai_triage"
-Cohesion: 0.15
-Nodes (12): current_wib_window_key(), get_triage_state_key(), _ai_triage_batch_size(), _ai_triage_candidate_count(), _ai_triage_exclude_ids(), _ai_triage_progress(), _ai_triage_scope_signature(), api_ai_triage() (+4 more)
+Cohesion: 0.09
+Nodes (23): current_wib_window_key(), get_triage_state_key(), safe_alerts(), _ai_triage_batch_size(), _ai_triage_candidate_count(), _ai_triage_exclude_ids(), _ai_triage_pick_state(), _ai_triage_progress() (+15 more)
 
 ### Community 23 - "Arbiter"
 Cohesion: 0.33
 Nodes (5): Arbiter, Audience and usage, Development verification, Implemented case policy without schema changes, Product boundaries
 
 ### Community 24 - "exports.py"
-Cohesion: 0.09
-Nodes (8): generate_docx_landscape_report(), generate_gdocs_html_report(), generate_markdown_report(), generate_tsv_table(), generate_xlsx_workbook(), export_csv(), export_preview(), ExportTests
+Cohesion: 0.08
+Nodes (12): generate_docx_landscape_report(), generate_gdocs_html_report(), generate_markdown_report(), generate_tsv_table(), generate_xlsx_workbook(), Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter (+4 more)
 
 ### Community 25 - "mount"
-Cohesion: 0.14
-Nodes (38): aiSeverityKey(), alertFacts(), alertIndex(), boundedInteger(), DEFAULT_BATCH, formatWibWindowLabel(), GROUP_BY_OPTIONS, groupAlerts() (+30 more)
+Cohesion: 0.13
+Nodes (40): aiSeverityKey(), alertFacts(), alertIndex(), boundedInteger(), DEFAULT_BATCH, formatWibWindowLabel(), GROUP_BY_OPTIONS, groupAlerts() (+32 more)
 
 ### Community 26 - "re"
 Cohesion: 0.15
@@ -232,8 +239,12 @@ Cohesion: 0.13
 Nodes (14): 1. Inisialisasi Task Otomatis (`todo_list`), 1. Mode Maksimal (`/work`) — Autonomous Deep Engineering Mode, 2. Mode Normal (Tanpa `/work`), 2. Proaktif Menggunakan Skills & Subagents, 3. Pelacakan Jahitan Data Ujung-ke-Ujung (*Trace Every Seam*), 4. Pengujian Kasus Negatif (Bukan Cuma Kasus Ideal), 5. Verifikasi Lingkungan & Container, 6. Anti-Pengerdilan Data (Zero Artificial Truncation) (+6 more)
 
 ### Community 29 - "File Map and Interfaces"
-Cohesion: 0.17
-Nodes (9): Alert Statistics & Pivot Implementation Plan, File Map and Interfaces, Global Constraints, Review Focus, Self-Review, Task 2: Build SQL aggregation endpoints and schema support, Task 4: Add the compact Triage filter-summary strip, Task 5: Add approved post-core statistics enhancements (+1 more)
+Cohesion: 0.22
+Nodes (8): Alert Statistics & Pivot Implementation Plan, File Map and Interfaces, Global Constraints, Review Focus, Self-Review, Task 4: Add the compact Triage filter-summary strip, Task 5: Add approved post-core statistics enhancements, Task 6: Document the completed navigation and verification contract
+
+### Community 30 - "SettingsAPITests"
+Cohesion: 0.08
+Nodes (3): SettingsAPITests, __init__(), __init__()
 
 ### Community 31 - "test_pull_jobs.py"
 Cohesion: 0.11
@@ -241,35 +252,43 @@ Nodes (7): base_config(), fake_get_db(), FakeConnection, FakeTransaction, load_p
 
 ### Community 32 - "app.js"
 Cohesion: 0.06
-Nodes (35): adminOnlyPages, applyWorkspaceSettings(), canLeave(), checkPullActivity(), closeNav(), databaseChanged(), help, loadWorkspaceSettings() (+27 more)
+Nodes (42): adminOnlyPages, applyUserPermissions(), applyWorkspaceSettings(), canLeave(), checkPullActivity(), closeNav(), databaseChanged(), health() (+34 more)
 
-### Community 33 - "main.py"
-Cohesion: 0.08
-Nodes (34): with_exclusions(), api_alert_pull_cancel(), api_alert_pull_status(), api_database_status(), api_list_alert_pulls(), _exclusion_document(), _expire_stale_claims(), export_docx() (+26 more)
+### Community 33 - "get_db"
+Cohesion: 0.11
+Nodes (27): get_db(), with_exclusions(), add_group_members(), api_alert_pull_status(), api_database_status(), api_get_monitoring(), api_list_alert_pulls(), delete_group() (+19 more)
 
 ### Community 34 - "exclusions.py"
 Cohesion: 0.16
 Nodes (10): active_exclusion_rules(), build_exclusion_sql(), _coerce_enabled(), _escape_like(), glob_to_like(), normalize_exclusion_rule(), normalize_exclusions(), parse_wazuh_exclusion() (+2 more)
 
+### Community 35 - "SyntheticDB"
+Cohesion: 0.14
+Nodes (7): Backend (safe isolated suites), Design lint, Frontend, Testing — Arbiter, Task 2: Build SQL aggregation endpoints and schema support, TriageScopeTests, SyntheticDB
+
 ### Community 37 - "get_db"
-Cohesion: 0.15
-Nodes (24): list_users(), get_db(), api_ai_triage_remove(), api_auth_me(), api_create_user(), api_delete_user(), api_delete_wazuh_query(), api_get_monitoring() (+16 more)
+Cohesion: 0.16
+Nodes (19): list_users(), api_auth_me(), api_create_user(), api_delete_user(), api_list_users(), api_save_wazuh_query(), api_update_user(), api_update_wazuh_notepad() (+11 more)
 
 ### Community 38 - "emptyState"
-Cohesion: 0.23
-Nodes (18): copyHTML(), download(), request(), caseReportRoute(), createReportSession(), exportURL(), reportAction(), reportScope() (+10 more)
+Cohesion: 0.18
+Nodes (21): ApiError, copyHTML(), copyText(), download(), request(), caseReportRoute(), createReportSession(), exportURL() (+13 more)
+
+### Community 41 - "_normalize_wazuh_timestamp"
+Cohesion: 0.12
+Nodes (3): _normalize_wazuh_timestamp(), _valid_timestamp(), wazuh_count()
 
 ### Community 42 - "Arsitektur Arbiter — Web & Tools"
-Cohesion: 0.11
-Nodes (18): 10. Failure Modes dan Degradasi, 11. Keputusan Arsitektur dan Trade-off, 12. Batas Skalabilitas, 13. Peta Direktori Arsitektural, 14. Cara Memverifikasi Arsitektur, 15. Ringkasan Arsitektur, 1. Gaya Arsitektur, 2. Diagram Konteks (C4 Level 1) (+10 more)
+Cohesion: 0.15
+Nodes (13): 10. Failure Modes dan Degradasi, 11. Keputusan Arsitektur dan Trade-off, 12. Batas Skalabilitas, 13. Peta Direktori Arsitektural, 14. Cara Memverifikasi Arsitektur, 15. Ringkasan Arsitektur, 1. Gaya Arsitektur, 2. Diagram Konteks (C4 Level 1) (+5 more)
 
 ### Community 43 - "ai_triage.py"
-Cohesion: 0.10
-Nodes (21): ai_triage(), _alert_tenant(), _as_mapping(), _cluster_alerts(), _cluster_prompt(), format_wib_window_label(), _group_by_indicators(), find() (+13 more)
+Cohesion: 0.14
+Nodes (17): _alert_tenant(), _as_mapping(), format_wib_window_label(), _group_by_indicators(), find(), union(), _group_by_rule_description(), heuristic_triage() (+9 more)
 
 ### Community 45 - "Dokumentasi Arbiter"
-Cohesion: 0.11
-Nodes (18): 10\. Pengembangan dan Pemeliharaan, 11\. Lisensi, 1\. Ringkasan, 2.1 Untuk siapa, 2.2 Batas produk, 2.3 Destinasi aplikasi, 2.4 Kemampuan inti, 2\. Deskripsi Produk (+10 more)
+Cohesion: 0.22
+Nodes (9): 10\. Pengembangan dan Pemeliharaan, 11\. Lisensi, 1\. Ringkasan, 4.1 Alur end-to-end, 4.2 Pemisahan peran event, 4.3 Batas kepercayaan (trust boundary), 4\. Flowchart, 9\. Troubleshooting (+1 more)
 
 ### Community 46 - "Arbiter UI/UX Redesign — Quiet Evidence Desk"
 Cohesion: 0.18
@@ -291,6 +310,10 @@ Nodes (3): Approved implementation contract — Arbiter, Direction contract, Int
 Cohesion: 0.15
 Nodes (11): build_filter_sql(), _canonical_field(), _canonical_op(), _clean_value(), _error(), _escape_like(), _glob_to_like(), normalize_filter() (+3 more)
 
+### Community 51 - "test_settings.py"
+Cohesion: 0.23
+Nodes (7): decrypt_text(), encrypt_text(), _fernet(), is_encrypted(), _key_path(), _read_or_create_key_file(), SecretStoreError
+
 ### Community 52 - "Layout"
 Cohesion: 0.29
 Nodes (7): Global shell, Impor dan Laporan, Insiden, Klasifikasi & korelasi, Layout, Responsive, Triage
@@ -300,48 +323,52 @@ Cohesion: 0.12
 Nodes (9): createImportSession(), importPage(), importResult(), mount(), update(), moduleURL, click(), Control (+1 more)
 
 ### Community 54 - "database.py"
-Cohesion: 0.07
-Nodes (33): _batch_insert_values(), _batch_instance(), bump_daily_metrics(), check_profile_ready(), _clean_expired_previews_locked(), create_preview_token(), get_active_profile(), get_active_profile_id() (+25 more)
+Cohesion: 0.10
+Nodes (23): _batch_insert_values(), _batch_instance(), bump_daily_metrics(), check_profile_ready(), _clean_expired_previews_locked(), create_preview_token(), get_active_profile(), get_active_profile_id() (+15 more)
+
+### Community 55 - "normalize_alert"
+Cohesion: 0.21
+Nodes (4): normalize_alert(), build_log_signature(), DedupSafeguardTests, NormalizeIntegrationTests
 
 ### Community 56 - "database-workspace.test.mjs"
-Cohesion: 0.16
-Nodes (12): createNavigationMemory(), createSelection(), normalizeSidebarState(), readSidebarState(), SIDEBAR_KEY, toggleSidebarState(), writeSidebarState(), shell() (+4 more)
+Cohesion: 0.17
+Nodes (17): loadBatchIncidentOptions(), resolveAlertIdsForSecondaryKeys(), report(), updateQuery(), withParams(), createNavigationMemory(), paramsForScope(), scopeKey() (+9 more)
 
 ### Community 57 - "json"
-Cohesion: 0.16
-Nodes (8): local_ai_suggest_groups(), LocalAIUnavailable, normalize_alert(), ollama_request(), suggestions_with_fallback(), as_dict(), build_log_signature(), DedupSafeguardTests
+Cohesion: 0.24
+Nodes (5): local_ai_suggest_groups(), LocalAIUnavailable, ollama_request(), suggestions_with_fallback(), 5.5 Alur korelasi dan sugesti
 
 ### Community 58 - "wazuh_intel.py"
-Cohesion: 0.26
-Nodes (15): clean_val(), _alert_key(), _as_json(), build_attack_chains(), _chain_steps(), correlate_alerts(), _extract_payload_indicators(), _group_identity() (+7 more)
+Cohesion: 0.13
+Nodes (25): as_dict(), clean_val(), _alert_key(), _as_json(), build_attack_chains(), _bump(), _chain_steps(), classify_alert() (+17 more)
 
 ### Community 59 - "5\. Cara Kerja"
-Cohesion: 0.11
-Nodes (18): safe_alerts(), 7.1 Field filter chips, 7. API surfaces, 7.1 Trust boundary, 7.2 Kontrol keamanan per lapisan, 7.3 Batas yang harus dijaga saat deployment, 7. Arsitektur Keamanan, 5.1 Ingesti dan parsing (+10 more)
+Cohesion: 0.20
+Nodes (10): 5.1 Ingesti dan parsing, 5.2 Normalisasi, 5.3 Deduplikasi, 5.4 Klasifikasi, 5.5 Korelasi, 5.6 AI Triage lokal, 5.7 Triage dan insiden, 5.8 Threat intelligence dan redaksi (+2 more)
 
-### Community 61 - "scope.js"
-Cohesion: 0.22
-Nodes (17): scopeParams(), normalizeStatsQuery(), resolveAlertIdsForSecondaryKeys(), filtersValue(), normalizeFilter(), parseFilters(), paramsForScope(), scopeKey() (+9 more)
+### Community 61 - "router.js"
+Cohesion: 0.23
+Nodes (4): createRouter(), change(), parseRoute(), root
 
 ### Community 62 - "error-codes/view.js"
 Cohesion: 0.27
 Nodes (10): /review — Code review pass, ERROR_CODE_CATEGORIES, ERROR_CODE_SECTIONS, ERROR_CODES, filterErrorCodeSections(), mount(), render(), renderSections() (+2 more)
 
 ### Community 63 - "⚡ Key Capabilities"
-Cohesion: 0.07
-Nodes (28): 10. Privacy-First Redactor, 11. Official Deliverables (5 Export Paths), 1. Resilient Multi-Format Ingestion, 2. High-Precision Log Dissector (No False Fields), 3. Signature-Based Deduplication & Causal Correlation, 4. Enterprise Multi-Tenant Architecture, 5. Modular Destination UI, 6. Local AI Triage & Persistent Daily Case Grouping (`#/ai-triage`) (+20 more)
+Cohesion: 0.17
+Nodes (12): 10. Privacy-First Redactor, 11. Official Deliverables (5 Export Paths), 1. Resilient Multi-Format Ingestion, 2. High-Precision Log Dissector (No False Fields), 3. Signature-Based Deduplication & Causal Correlation, 4. Enterprise Multi-Tenant Architecture, 5. Modular Destination UI, 6. Local AI Triage & Persistent Daily Case Grouping (`#/ai-triage`) (+4 more)
 
 ### Community 64 - "Arbiter Architecture — Wazuh Read, Classify, Correlate"
-Cohesion: 0.09
-Nodes (23): 10. Acceptance tests, 11. Non-goals, 1. Design constraints, 2. Dataset evidence used to shape the architecture, 3. End-to-end pipeline, 4.1 Raw Wazuh alert (minimum), 4.2 Normalized alert, 4.3 Classification result (+15 more)
+Cohesion: 0.13
+Nodes (15): 10. Acceptance tests, 11. Non-goals, 1. Design constraints, 2. Dataset evidence used to shape the architecture, 3. End-to-end pipeline, 5.1 Curated rule profiles (explicit, not trained), 5.2 Context signals, 5.3 Wording policy (+7 more)
 
-### Community 65 - "enrich_intel"
-Cohesion: 0.33
-Nodes (4): is_valid_ip(), sync_remote_cache(), upsert_ip_cache(), enrich_intel()
+### Community 65 - "intel.py"
+Cohesion: 0.09
+Nodes (10): enrich_ip(), is_private_ip(), is_valid_ip(), query_abuseipdb(), _remote_profile_read_only(), _resolve_remote_db_url(), _safe_remote_cache_error(), sync_remote_cache() (+2 more)
 
 ### Community 66 - "Any"
 Cohesion: 0.10
-Nodes (21): api_add_exclusion(), api_ai_test(), api_ai_triage_save(), api_auth_login(), api_auth_logout(), api_create_report_audit_log(), api_database_config(), api_database_purge_alerts() (+13 more)
+Nodes (25): api_ai_test(), api_alert_pull_cancel(), api_auth_login(), api_auth_logout(), api_create_report_audit_log(), api_database_config(), api_database_purge_alerts(), api_database_purge_incidents() (+17 more)
 
 ### Community 67 - "package.json"
 Cohesion: 0.20
@@ -376,12 +403,12 @@ Cohesion: 0.28
 Nodes (4): flush(), harness(), startSample(), stats()
 
 ### Community 76 - "auth.py"
-Cohesion: 0.15
-Nodes (20): authenticate_user(), create_session_token(), create_user(), _default_admin_credentials(), delete_user(), get_user(), _hash_password(), _load_raw_users() (+12 more)
+Cohesion: 0.26
+Nodes (13): authenticate_user(), create_session_token(), create_user(), _default_admin_credentials(), delete_user(), get_user(), _hash_password(), _load_raw_users() (+5 more)
 
 ### Community 77 - "6.4 Skema database"
-Cohesion: 0.15
-Nodes (13): 6.1 Stack, 6.2 Modul backend, 6.3 Modul frontend, 6.4.1 `wazuh.alerts`, 6.4.2 `wazuh.analysis_groups`, 6.4.3 `wazuh.alert_group_members`, 6.4.5 `public.ip_intel_cache`, 6.4.6 Tabel Remote milik provider (+5 more)
+Cohesion: 0.25
+Nodes (8): 6.4.1 `wazuh.alerts`, 6.4.2 `wazuh.analysis_groups`, 6.4.3 `wazuh.alert_group_members`, 6.4.5 `public.ip_intel_cache`, 6.4.6 Tabel Remote milik provider, 6.4.7 Indeks performa, 6.4.8 Catatan operasional, 6.4 Skema database
 
 ### Community 78 - "4. Arsitektur Web (Frontend)"
 Cohesion: 0.29
@@ -395,49 +422,49 @@ Nodes (7): 8. Roadmap implementasi, tiap tahap bisa diverifikasi, Phase 0 — sa
 Cohesion: 0.33
 Nodes (6): 8.1 Topologi A — Docker standalone, 8.2 Topologi B — Host mode, 8.3 Topologi C — Python lokal, 8.4 Topologi D — Reverse proxy TLS, 8.5 Startup sequence, 8. Deployment
 
-### Community 85 - "json"
-Cohesion: 0.16
-Nodes (17): ApiError, copyText(), json(), applyUserPermissions(), health(), notify(), render(), renderLoginGate() (+9 more)
+### Community 85 - "Arbiter"
+Cohesion: 0.20
+Nodes (10): Arbiter, 🛠️ Architecture & Tech Stack, Dataset calibration and limits, 📄 License, 🎯 Overview, 🔒 Security & Privacy Notice, 📖 SOC Analyst Quickstart Workflow, 🧪 Testing & Quality Assurance (+2 more)
 
 ### Community 86 - "4. Wireframe dan first viewport"
 Cohesion: 0.33
 Nodes (6): 4. Wireframe dan first viewport, A. Triage desktop, B. Insiden index dan case workspace, C. Impor, D. Laporan, E. Mobile
 
 ### Community 87 - "7\. Keamanan"
-Cohesion: 0.33
-Nodes (6): 7.1 Prinsip desain, 7.2 Autentikasi dan otorisasi, 7.3 Rahasia saat istirahat, 7.4 Isolasi jaringan dan SSRF, 7.6 Batasan keamanan yang perlu diketahui, 7\. Keamanan
+Cohesion: 0.29
+Nodes (7): 7.1 Prinsip desain, 7.2 Autentikasi dan otorisasi, 7.3 Rahasia saat istirahat, 7.4 Isolasi jaringan dan SSRF, 7.5 Perlindungan data dan ekspor, 7.6 Batasan keamanan yang perlu diketahui, 7\. Keamanan
 
 ### Community 88 - "wazuh_search"
-Cohesion: 0.13
-Nodes (8): _normalize_wazuh_timestamp(), _valid_timestamp(), wazuh_count(), _wazuh_request(), wazuh_search(), _fmt(), main(), _existing()
+Cohesion: 0.18
+Nodes (4): wazuh_search(), _fmt(), main(), _existing()
 
 ### Community 89 - "_FakeCursor"
-Cohesion: 0.12
-Nodes (3): _FakeCursor, RemoteSyncTests, _SyncConnection
+Cohesion: 0.09
+Nodes (4): _FakeCursor, _FakeResult, RemoteSyncTests, _SyncConnection
 
 ### Community 90 - "filters.js"
 Cohesion: 0.24
 Nodes (14): escapeAttr(), escapeHtml(), FIELD_LABELS, FILTER_FIELDS, FILTER_OPS, filterBuilderHTML(), filterLabel(), filterOpOptions() (+6 more)
 
-### Community 91 - "_http_error_reason"
-Cohesion: 0.17
-Nodes (3): _http_error_reason(), __init__(), __init__()
+### Community 91 - "triage-request.test.mjs"
+Cohesion: 0.31
+Nodes (3): createSelection(), Element, requestsFor()
 
 ### Community 92 - "get_db"
-Cohesion: 0.13
-Nodes (14): api_delete_exclusion(), api_get_settings(), api_put_settings(), api_realtime_count(), api_realtime_pull(), api_start_alert_pull(), api_test_wazuh(), api_update_exclusion() (+6 more)
+Cohesion: 0.12
+Nodes (18): api_add_exclusion(), api_delete_exclusion(), api_delete_wazuh_query(), api_get_settings(), api_import_exclusions(), api_put_settings(), api_realtime_count(), api_realtime_pull() (+10 more)
 
 ### Community 93 - "Control"
 Cohesion: 0.22
 Nodes (3): click(), Control, fixture()
 
 ### Community 94 - "mount"
-Cohesion: 0.50
-Nodes (9): formatDuration(), mount(), paint(), paintProgress(), poll(), pollLater(), resumeJob(), stopPolling() (+1 more)
+Cohesion: 0.31
+Nodes (12): formatDuration(), mount(), paint(), paintProgress(), poll(), pollLater(), resumeJob(), stopPolling() (+4 more)
 
 ### Community 95 - "init_database"
-Cohesion: 0.29
-Nodes (4): init_database(), _load_profile_overrides(), lifespan(), 8.2 Metode A — Docker standalone (paling cepat)
+Cohesion: 0.40
+Nodes (3): init_database(), _load_profile_overrides(), 8.2 Metode A — Docker standalone (paling cepat)
 
 ### Community 96 - "wazuh-queries/model.js"
 Cohesion: 0.33
@@ -448,16 +475,36 @@ Cohesion: 0.40
 Nodes (5): 5. Information architecture & interaction contracts, Accessibility, Editing dan destructive actions, Refresh, Scope
 
 ### Community 99 - "settings.py"
-Cohesion: 0.10
-Nodes (12): is_private_ip(), _remote_profile_read_only(), _boolean(), _deep_merge(), default_settings(), intel_abuseipdb_key(), normalize_ollama_base_url(), test_wazuh_connection() (+4 more)
+Cohesion: 0.13
+Nodes (12): _boolean(), _deep_merge(), default_settings(), _http_error_reason(), intel_abuseipdb_key(), normalize_ollama_base_url(), test_wazuh_connection(), _text() (+4 more)
 
-### Community 100 - "Arbiter SOC Desk Upgrades Implementation Plan"
-Cohesion: 0.29
-Nodes (6): Arbiter SOC Desk Upgrades Implementation Plan, Global Constraints, Task 1: Favicon & Logo Arbiter, Task 2: GDocs & TSV Export: Full Log & Clean Borders, Task 3: Rich Forensic Correlation Cards, Task 4: Two-Way IP Intel Live Enrichment
+### Community 101 - "🚀 Setup & Getting Started"
+Cohesion: 0.33
+Nodes (6): Connecting to a Neuropetra `ip_intel` database, Method A: Standalone Docker Setup (Fastest for new users), Method B: Host Mode (Connect to existing PostgreSQL / IP Intel), Method C: Local Python Setup (Without Docker), Prerequisites, 🚀 Setup & Getting Started
 
-### Community 101 - "Backend (safe isolated suites)"
+### Community 102 - "6. Arsitektur Data"
 Cohesion: 0.40
-Nodes (4): Backend (safe isolated suites), Design lint, Frontend, Testing — Arbiter
+Nodes (5): 6.1 ERD, 6.2 Penyimpanan JSONB, 6.3 Indeks, 6.4 Kepemilikan data, 6. Arsitektur Data
+
+### Community 103 - "2\. Deskripsi Produk"
+Cohesion: 0.40
+Nodes (5): 2.1 Untuk siapa, 2.2 Batas produk, 2.3 Destinasi aplikasi, 2.4 Kemampuan inti, 2\. Deskripsi Produk
+
+### Community 104 - "6\. Komponen yang Dipakai"
+Cohesion: 0.40
+Nodes (5): 6.1 Stack, 6.2 Modul backend, 6.3 Modul frontend, 6.5 Kelompok endpoint API, 6\. Komponen yang Dipakai
+
+### Community 109 - "4. Data contracts"
+Cohesion: 0.50
+Nodes (4): 4.1 Raw Wazuh alert (minimum), 4.2 Normalized alert, 4.3 Classification result, 4. Data contracts
+
+### Community 110 - "7. Arsitektur Keamanan"
+Cohesion: 0.50
+Nodes (4): 7.1 Trust boundary, 7.2 Kontrol keamanan per lapisan, 7.3 Batas yang harus dijaga saat deployment, 7. Arsitektur Keamanan
+
+### Community 111 - "3\. Workflow"
+Cohesion: 0.50
+Nodes (4): 3.1 Workflow analis (harian), 3.2 Workflow data, 3.3 Siklus hidup insiden, 3\. Workflow
 
 ## Knowledge Gaps
 - **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
@@ -465,17 +512,17 @@ Nodes (4): Backend (safe isolated suites), Design lint, Frontend, Testing — Ar
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `esc()` connect `error-codes/view.js` to `app.js`, `stats/view.js`, `esc`, `emptyState`, `loadingRows`, `Code Style — Arbiter`, `Arsitektur Arbiter — Web & Tools`, `6.4 Skema database`, `normalize_tenants`, `mount`, `json`, `icon`, `Control`, `mount`, `5\. Cara Kerja`, `mount`?**
-  _High betweenness centrality (0.244) - this node is a cross-community bridge._
+- **Why does `esc()` connect `error-codes/view.js` to `app.js`, `stats/view.js`, `incidents/render.js`, `emptyState`, `loadingRows`, `Code Style — Arbiter`, `6\. Komponen yang Dipakai`, `Arsitektur Arbiter — Web & Tools`, `7. Arsitektur Keamanan`, `normalize_tenants`, `mount`, `icon`, `Control`, `database-workspace.test.mjs`, `mount`, `mount`?**
+  _High betweenness centrality (0.245) - this node is a cross-community bridge._
 - **Are the 6 inferred relationships involving `esc()` (e.g. with `Agent: code-reviewer` and `/review — Code review pass`) actually correct?**
   _`esc()` has 6 INFERRED edges - model-reasoned connections that need verification._
-- **Should `classify_alert` be split into smaller, more focused modules?**
-  _Cohesion score 0.11083743842364532 - nodes in this community are weakly interconnected._
-- **Why does `Task 1: Establish precise shared multi-tenant scope and safe facet contract` connect `normalize_tenants` to `mount`, `scope.js`, `File Map and Interfaces`?**
+- **Should `ref_node_assert` be split into smaller, more focused modules?**
+  _Cohesion score 0.09595959595959595 - nodes in this community are weakly interconnected._
+- **Why does `Agent: code-reviewer` connect `normalize_tenants` to `get_db`, `error-codes/view.js`?**
   _High betweenness centrality (0.106) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `json()` (e.g. with `mount()` and `loadSelected()`) actually correct?**
   _`json()` has 2 INFERRED edges - model-reasoned connections that need verification._
-- **Should `ref_node_assert` be split into smaller, more focused modules?**
-  _Cohesion score 0.08414634146341464 - nodes in this community are weakly interconnected._
-- **Why does `Agent: code-reviewer` connect `normalize_tenants` to `error-codes/view.js`?**
+- **Should `test_ui_api.py` be split into smaller, more focused modules?**
+  _Cohesion score 0.11724137931034483 - nodes in this community are weakly interconnected._
+- **Why does `safe_alerts()` connect `api_get_ai_triage` to `ai_triage.py`, `7. Arsitektur Keamanan`, `7\. Keamanan`, `5\. Cara Kerja`, `get_db`?**
   _High betweenness centrality (0.104) - this node is a cross-community bridge._
