@@ -50,6 +50,8 @@ export function queryFrom(params = new URLSearchParams()) {
     time_from: get('time_from') || '',
     time_to: get('time_to') || '',
     time_preset: get('time_preset') || '',
+    reviewed_from: get('reviewed_from') || '',
+    reviewed_to: get('reviewed_to') || '',
     limit: Math.min(10000, Math.max(1, integer(get('limit'), 50) || 50)),
     offset: Math.max(0, integer(get('offset'), 0) || 0),
   };
@@ -95,6 +97,7 @@ export function scopeDescription(params) {
     if (p.get('status') === 'grouped') parts.push('Sudah masuk insiden');
     if (p.get('time_preset')) parts.push(`Waktu: ${p.get('time_preset')}`);
     else if (p.get('time_from') || p.get('time_to')) parts.push(`Waktu: ${p.get('time_from') || '—'} s/d ${p.get('time_to') || 'kini'}`);
+    if (p.get('reviewed_from') || p.get('reviewed_to')) parts.push('Tanggal review terpilih');
   }
   return parts.join(' · ');
 }

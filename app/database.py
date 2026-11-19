@@ -43,8 +43,43 @@ CREATE TABLE IF NOT EXISTS wazuh.alerts (
     is_reviewed BOOLEAN NOT NULL DEFAULT false,
     reviewed_at TIMESTAMPTZ,
     reviewer_notes TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'unread',
+    claimed_by TEXT,
+    claimed_at TIMESTAMPTZ,
+    verdict TEXT,
+    reviewed_by TEXT,
     imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(alert_id, timestamp, agent_name, rule_id)
+);
+
+CREATE TABLE IF NOT EXISTS wazuh.alert_raw (
+    alert_pk BIGINT PRIMARY KEY REFERENCES wazuh.alerts(id) ON DELETE CASCADE,
+    raw JSONB NOT NULL DEFAULT '{}',
+    duplicate_instances JSONB DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS wazuh.daily_metrics_cache (
+    metric_date DATE NOT NULL,
+    tenant TEXT NOT NULL DEFAULT 'Default',
+    pulled_count INTEGER NOT NULL DEFAULT 0,
+    reviewed_count INTEGER NOT NULL DEFAULT 0,
+    tp_count INTEGER NOT NULL DEFAULT 0,
+    fp_count INTEGER NOT NULL DEFAULT 0,
+    benign_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY(metric_date, tenant)
+);
+
+CREATE TABLE IF NOT EXISTS wazuh.report_audit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL DEFAULT 'analyst',
+    format TEXT NOT NULL DEFAULT 'html',
+    tenant TEXT NOT NULL DEFAULT 'all',
+    alert_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'published',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS wazuh.analysis_groups (
@@ -103,6 +138,9 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_wazuh_ids ON wazuh.alerts USING gin 
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_alert_id ON wazuh.alerts(tenant, alert_id);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_review_timestamp ON wazuh.alerts(is_reviewed, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_review_timestamp ON wazuh.alerts(tenant, is_reviewed, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_reviewed_at ON wazuh.alerts(reviewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_claim_status ON wazuh.alerts(status, claimed_by, claimed_at);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_imported_at ON wazuh.alerts(imported_at DESC);
 -- Note: highly-cardinal user_agent, url_path, referer, and arbitrary text pattern
 -- dimensions intentionally do not carry broad btree indexes to prevent bloat on high-volume ingest.
 """
@@ -657,7 +695,126 @@ def init_database() -> None:
             "ALTER TABLE wazuh.analysis_groups "
             "ADD COLUMN IF NOT EXISTS verdict TEXT NOT NULL DEFAULT 'needs_review'"
         )
+        # Idempotent migrations for PRD v1.3 concurrency, claim locking, and verdict tracking.
+        for col_sql in (
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'unread'",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS claimed_by TEXT",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS verdict TEXT",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS reviewed_by TEXT",
+        ):
+            conn.execute(col_sql)
         _load_profile_overrides(conn)
+
+
+def bump_daily_metrics(
+    conn: Any,
+    tenant: str,
+    *,
+    pulled_delta: int = 0,
+    reviewed_delta: int = 0,
+    verdict: str | None = None,
+    metric_date: str | None = None,
+) -> None:
+    """Upsert daily metrics aggregation cache (PRD Section 4: avoid full table COUNT(*) scans)."""
+    from datetime import datetime, timezone
+
+    date_str = metric_date or datetime.now(timezone.utc).date().isoformat()
+    tp_d = 1 if verdict == "tp" else 0
+    fp_d = 1 if verdict == "fp" else 0
+    benign_d = 1 if verdict == "benign" else 0
+    try:
+        conn.execute(
+            """INSERT INTO wazuh.daily_metrics_cache(
+                   metric_date, tenant, pulled_count, reviewed_count, tp_count, fp_count, benign_count, updated_at
+               ) VALUES(%s, %s, %s, %s, %s, %s, %s, now())
+               ON CONFLICT(metric_date, tenant) DO UPDATE SET
+                   pulled_count = GREATEST(0, wazuh.daily_metrics_cache.pulled_count + EXCLUDED.pulled_count),
+                   reviewed_count = GREATEST(0, wazuh.daily_metrics_cache.reviewed_count + EXCLUDED.reviewed_count),
+                   tp_count = GREATEST(0, wazuh.daily_metrics_cache.tp_count + EXCLUDED.tp_count),
+                   fp_count = GREATEST(0, wazuh.daily_metrics_cache.fp_count + EXCLUDED.fp_count),
+                   benign_count = GREATEST(0, wazuh.daily_metrics_cache.benign_count + EXCLUDED.benign_count),
+                   updated_at = now()""",
+            (date_str, tenant or "Default", pulled_delta, reviewed_delta, tp_d, fp_d, benign_d),
+        )
+    except Exception:
+        pass
+
+
+def purge_raw_alerts(
+    conn: psycopg.Connection,
+    *,
+    retention_days: int = 30,
+    tenant: str = "all",
+    dry_run: bool = True,
+    preview_token: str | None = None,
+    expected_profile: str | None = None,
+) -> dict[str, Any]:
+    """PRD Section 3.A Data Retention: purge raw payload extension older than 30-90 days while retaining metadata & verdicts forever."""
+    raw_pid = getattr(conn, "_arbiter_profile_id", None)
+    conn_pid = raw_pid if isinstance(raw_pid, str) else None
+    with _profile_lock:
+        current_active = _active_profile
+        if conn_pid and conn_pid != current_active:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Profil database beralih di tengah pemrosesan ('{conn_pid}' -> '{current_active}'). Permintaan dibatalkan.",
+            )
+        active = _db_profiles.get(conn_pid or current_active, _db_profiles["local"])
+
+    if expected_profile and str(expected_profile).strip() != active["id"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Target profil database tidak cocok (aktif: '{active['id']}', diharapkan: '{expected_profile}').",
+        )
+    if not dry_run and active["mode"] == "read_only":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Database '{active['name']}' dalam mode Read-Only. Beralih ke profil Laptop (Lokal) untuk pembersihan data.",
+        )
+
+    if not (1 <= int(retention_days) <= 3650):
+        raise HTTPException(status_code=400, detail="Parameter retention_days harus antara 1 dan 3650 hari.")
+
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=int(retention_days))).strftime("%Y-%m-%dT%H:%M:%SZ")
+    criteria = {"tenant": tenant or "all", "retention_days": int(retention_days)}
+
+    clauses = ["a.timestamp < %s"]
+    params: list[Any] = [cutoff]
+    if tenant and tenant != "all":
+        clauses.append("a.tenant = %s")
+        params.append(tenant)
+
+    where_sql = "WHERE " + " AND ".join(clauses)
+    matching = conn.execute(
+        f"SELECT count(*) AS n FROM wazuh.alerts a {where_sql}",
+        params,
+    ).fetchone()["n"]
+
+    if dry_run:
+        token = create_preview_token("raw_retention", active["id"], criteria, matching)
+        return {
+            "dry_run": True,
+            "count": matching,
+            "retention_days": int(retention_days),
+            "cutoff": cutoff,
+            "preview_token": token,
+            "profile": active["id"],
+        }
+
+    validate_and_consume_preview_token(preview_token, "raw_retention", active["id"], criteria)
+    conn.execute(
+        f"DELETE FROM wazuh.alert_raw WHERE alert_pk IN (SELECT a.id FROM wazuh.alerts a {where_sql})",
+        params,
+    )
+    cur = conn.execute(
+        f"UPDATE wazuh.alerts a SET raw = '{{}}'::jsonb, duplicate_instances = '[]'::jsonb {where_sql}",
+        params,
+    )
+    actual_cleaned = cur.rowcount if (cur and hasattr(cur, "rowcount") and cur.rowcount is not None and cur.rowcount >= 0) else matching
+    return {"dry_run": False, "cleaned": actual_cleaned, "retention_days": int(retention_days)}
 
 
 def ingest_alert_with_dedup(conn: psycopg.Connection, a: dict[str, Any]) -> tuple[bool, bool]:
@@ -787,7 +944,23 @@ def ingest_alert_with_dedup(conn: psycopg.Connection, a: dict[str, Any]) -> tupl
         values,
     )
 
-    if cur.fetchone():
+    inserted_row = cur.fetchone()
+    if inserted_row:
+        new_pk = inserted_row["id"] if isinstance(inserted_row, dict) else inserted_row[0]
+        try:
+            conn.execute(
+                """INSERT INTO wazuh.alert_raw(alert_pk, raw, duplicate_instances)
+                   VALUES(%s, %s::jsonb, %s::jsonb)
+                   ON CONFLICT(alert_pk) DO UPDATE SET raw = EXCLUDED.raw, duplicate_instances = EXCLUDED.duplicate_instances""",
+                (
+                    new_pk,
+                    json.dumps(a.get("raw") or {}, ensure_ascii=False),
+                    json.dumps(instances, ensure_ascii=False),
+                ),
+            )
+        except Exception:
+            pass
+        bump_daily_metrics(conn, tenant, pulled_delta=1)
         return True, False
     return False, False
 
@@ -1018,5 +1191,11 @@ def ingest_alerts_batch(conn: psycopg.Connection, alerts: list[dict[str, Any]]) 
             insert_values,
         )
         inserted = len(insert_values)
+        per_tenant_counts: dict[str, int] = {}
+        for row in new_alerts:
+            t_name = str(row.get("tenant") or "Default")
+            per_tenant_counts[t_name] = per_tenant_counts.get(t_name, 0) + 1
+        for t_name, cnt in per_tenant_counts.items():
+            bump_daily_metrics(conn, t_name, pulled_delta=cnt)
 
     return inserted, deduplicated, 0

@@ -23,7 +23,7 @@ from app.settings import load_document, save_document
 AUTH_USERS_KEY = "auth_users"
 SESSION_COOKIE_NAME = "arbiter_session"
 SESSION_TTL_SECONDS = 12 * 3600  # 12 hours
-VALID_ROLES = {"admin", "analyst"}
+VALID_ROLES = {"admin", "director", "analyst"}
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,50}$")
 
 
@@ -146,7 +146,7 @@ def create_user(
         raise ValueError("Password terlalu panjang.")
     clean_role = str(role or "analyst").strip().lower()
     if clean_role not in VALID_ROLES:
-        raise ValueError("Role harus 'admin' atau 'analyst'.")
+        raise ValueError("Role harus 'admin', 'director', atau 'analyst'.")
     clean_display = str(display_name or "").strip()[:100] or clean_username
 
     users = _load_raw_users(conn)
@@ -187,7 +187,7 @@ def update_user(
     if role is not None and str(role).strip() != "":
         clean_role = str(role).strip().lower()
         if clean_role not in VALID_ROLES:
-            raise ValueError("Role harus 'admin' atau 'analyst'.")
+            raise ValueError("Role harus 'admin', 'director', atau 'analyst'.")
         if record.get("role") == "admin" and clean_role != "admin":
             admin_count = sum(1 for u in users if str(u.get("role") or "") == "admin")
             if admin_count <= 1:

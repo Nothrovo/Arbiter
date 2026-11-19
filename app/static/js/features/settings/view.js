@@ -453,23 +453,27 @@ export async function mount(ctx) {
       <section class="form-section" id="user-management-section" data-settings-panel="users" ${activePanel==='users'?'':'hidden'}>
         <div class="split">
           <div>
-            <h2 class="section-heading">Manajemen Pengguna (Khusus Admin)</h2>
-            <p class="meta">Kelola akun login Arbiter. Peran <strong>Admin</strong> memiliki akses penuh termasuk Pengaturan &amp; Database. Peran <strong>Analis</strong> dapat mengakses Triage, Statistik, Insiden, Impor, Laporan, Realtime, AI Triage, dan Rumus Query Wazuh.</p>
+            <h2 class="section-heading">Manajemen Pengguna (RBAC — Khusus Admin)</h2>
+            <p class="meta">Kelola akun login Arbiter sesuai matriks RBAC PRD v1.3: <strong>Admin</strong> (akses penuh sistem, database, &amp; user), <strong>Director / Lead</strong> (Monitoring Dashboard, audit laporan insiden, kontrol prioritas backlog), dan <strong>Analyst (L1/L2)</strong> (klaim alert, perpanjang investigasi, isi verdict TP/FP/Benign, manage backlog, buat laporan insiden).</p>
           </div>
           <span class="badge neutral">${users.length} akun</span>
         </div>
 
         <div class="stack" id="user-list" style="margin-top:var(--space-3)">
-          ${users.map(u => `
+          ${users.map(u => {
+            const roleLabel = u.role === 'admin' ? 'Admin' : u.role === 'director' ? 'Director / Lead' : 'Analis';
+            const roleClass = u.role === 'admin' ? 'warning' : u.role === 'director' ? 'info' : 'neutral';
+            return `
             <div class="split" style="padding:var(--space-3);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);align-items:center;gap:var(--space-3);flex-wrap:wrap" data-user-row="${esc(u.username)}">
               <div>
                 <strong>${esc(u.display_name || u.username)}</strong>
                 <span class="mono meta" style="margin-left:var(--space-2)">@${esc(u.username)}</span>
-                <span class="badge ${u.role === 'admin' ? 'warning' : 'neutral'}" style="margin-left:var(--space-2)">${u.role === 'admin' ? 'Admin' : 'Analis'}</span>
+                <span class="badge ${roleClass}" style="margin-left:var(--space-2)">${roleLabel}</span>
               </div>
               <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap">
                 <select class="select" data-user-role="${esc(u.username)}" aria-label="Role untuk ${esc(u.username)}" style="width:auto">
-                  <option value="analyst" ${u.role === 'analyst' ? 'selected' : ''}>Analis</option>
+                  <option value="analyst" ${u.role === 'analyst' ? 'selected' : ''}>Analis (L1/L2)</option>
+                  <option value="director" ${u.role === 'director' ? 'selected' : ''}>Director / Lead</option>
                   <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
                 </select>
                 <input class="input" type="password" data-user-password="${esc(u.username)}" placeholder="Password baru (opsional)" autocomplete="new-password" style="width:190px">
@@ -477,7 +481,7 @@ export async function mount(ctx) {
                 <button class="button" type="button" data-action="delete-user" data-username="${esc(u.username)}">Hapus</button>
               </div>
             </div>
-          `).join('') || '<p class="meta">Memuat daftar akun…</p>'}
+          `;}).join('') || '<p class="meta">Memuat daftar akun…</p>'}
         </div>
 
         <form id="user-create-form" class="stack" style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--border-subtle)" novalidate>
@@ -494,8 +498,9 @@ export async function mount(ctx) {
             <div class="field">
               <label for="new-user-role">Role</label>
               <select class="select" id="new-user-role" name="role">
-                <option value="analyst" selected>Analis (tanpa Pengaturan &amp; Database)</option>
-                <option value="admin">Admin (akses penuh)</option>
+                <option value="analyst" selected>Analyst (L1/L2) — Triage, Klaim, Verdict &amp; Laporan</option>
+                <option value="director">Director / Lead — Monitoring Dashboard &amp; Audit Laporan</option>
+                <option value="admin">Admin — Akses penuh konfigurasi, database, &amp; user</option>
               </select>
             </div>
             <div class="field">

@@ -1,15 +1,28 @@
 # Environments & Secrets
 .env
 .env.*
+*.env
 !.env.example
+.runtime/
+secrets/
+.secrets/
 .venv/
 venv/
 ENV/
 secret.key
 *.secret.key
+**/secret.key
 *.pem
 *.key
 *.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kdbx
+*credentials*.json
+*service-account*.json
+*secret*.json
 .arbiter/
 
 # AI-agent local overrides & generated symlinks (shared .ai/ config is committed)
@@ -50,15 +63,25 @@ dist/
 .coverage
 htmlcov/
 
-# Local databases, dumps & runtime logs
+# Local databases, dumps, telemetry exports & runtime logs
 *.db
 *.sqlite
 *.sqlite3
 *.sql.gz
 *.dump
 *.log
+*.pcap
+*.pcapng
+*.ndjson
+wazuh-alerts*.json
+*export*.json
+*export*.csv
+*export*.xlsx
+*export*.docx
 logs/
 pgdata/
+backups/
+data/
 
 # OS, Editors & Temporary files
 .DS_Store

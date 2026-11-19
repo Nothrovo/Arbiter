@@ -606,6 +606,37 @@ class SettingsAPITests(unittest.TestCase):
         self.assertEqual(queries[0]["content"], "not ([payload])")
         self.assertEqual(save_q.json()["notepad"], "not (\"payload_1\" or \"payload_2\")")
 
+        # Admin can also create a Director / Lead account per PRD v1.3 RBAC matrix
+        self.client.cookies.clear()
+        dir_created = self.client.post(
+            "/api/auth/users",
+            headers=admin_headers,
+            json={"username": "lead_csirt", "password": "directorPass99", "role": "director", "display_name": "Kasubag CSIRT"},
+        )
+        self.assertEqual(dir_created.status_code, 200, dir_created.text)
+        self.assertEqual(dir_created.json()["user"]["role"], "director")
+
+        dir_login = self.client.post("/api/auth/login", json={"username": "lead_csirt", "password": "directorPass99"})
+        self.assertEqual(dir_login.status_code, 200, dir_login.text)
+        dir_headers = {"Authorization": f"Bearer {dir_login.json()['token']}"}
+
+        # Director can access Monitoring Dashboard but cannot mutate system settings
+        mon_res = self.client.get("/api/monitoring", headers=dir_headers)
+        self.assertEqual(mon_res.status_code, 200, mon_res.text)
+        self.assertEqual(
+            self.client.put("/api/settings", headers=dir_headers, json={"ui": {"sidebar_default": "collapsed"}}).status_code,
+            403,
+        )
+
+    def test_retention_raw_days_validates_30_to_90_day_bounds(self):
+        ok_res = self.client.put("/api/settings", json={"retention": {"raw_days": 60}})
+        self.assertEqual(ok_res.status_code, 200, ok_res.text)
+        self.assertEqual(ok_res.json()["settings"]["retention"]["raw_days"], 60)
+
+        for bad_days in (7, 29, 91, 365):
+            bad_res = self.client.put("/api/settings", json={"retention": {"raw_days": bad_days}})
+            self.assertEqual(bad_res.status_code, 400, bad_res.text)
+
 
 if __name__ == "__main__":
     unittest.main()

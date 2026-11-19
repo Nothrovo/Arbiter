@@ -159,6 +159,7 @@ def alert_where(
     exclude_facet: str = "", exclude_facet_value: str = "",
     alert_ids: str | Sequence[int | str] | None = None,
     filters: Any = None,
+    reviewed_from: str = "", reviewed_to: str = "",
 ) -> tuple[str, list[Any]]:
     group_id = validated_group_id(group_id)
     clauses: list[str] = []
@@ -252,6 +253,12 @@ def alert_where(
     if filter_sql:
         clauses.append(filter_sql)
         params.extend(filter_params)
+    if reviewed_from and str(reviewed_from).strip():
+        clauses.append("a.reviewed_at >= %s")
+        params.append(str(reviewed_from).strip())
+    if reviewed_to and str(reviewed_to).strip():
+        clauses.append("a.reviewed_at <= %s")
+        params.append(str(reviewed_to).strip())
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params
 
 

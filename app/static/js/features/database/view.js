@@ -201,6 +201,25 @@ export async function mount(ctx) {
             </div>
             <div id="purge-incidents-result" class="inline-status" style="margin-top:8px;" aria-live="polite"></div>
           </form>
+
+          <form id="purge-raw-form" class="stack">
+            <h3>Retensi Log Mentah (Data Decoupling)</h3>
+            <p class="muted">Hapus payload JSON raksasa (<span class="mono">alert_raw</span>) setelah 30–90 hari. Metadata inti, hit count, dan verdict statistik tetap disimpan selamanya untuk audit tahunan.</p>
+            <label class="field">
+              <span>Batas Retensi Log Mentah (30–90 Hari)</span>
+              <select class="select" id="purge-raw-days" name="retention_days">
+                <option value="30" selected>30 hari (Standar Operasional)</option>
+                <option value="45">45 hari</option>
+                <option value="60">60 hari</option>
+                <option value="90">90 hari (Maksimum PRD)</option>
+              </select>
+            </label>
+            <div style="display:flex; gap:8px; margin-top:16px;">
+              <button class="button" type="button" data-action="dry-run-raw"${degraded ? ' disabled' : ''}>Pratinjau Retensi</button>
+              <button class="button danger" type="button" data-action="execute-purge-raw"${isReadOnly || degraded ? ' disabled' : ''}>Bersihkan Log Mentah</button>
+            </div>
+            <div id="purge-raw-result" class="inline-status" style="margin-top:8px;" aria-live="polite"></div>
+          </form>
         </div>
       </section>
     `;
@@ -385,6 +404,46 @@ export async function mount(ctx) {
       const resultSlot = root.querySelector('#purge-incidents-result');
 
       await maintain('incidents', {status}, isDry, btn, resultSlot);
+      return;
+    }
+
+    if (action === 'dry-run-raw' || action === 'execute-purge-raw') {
+      const isDry = action === 'dry-run-raw';
+      const retention_days = Number(root.querySelector('#purge-raw-days')?.value) || 30;
+      const resultSlot = root.querySelector('#purge-raw-result');
+      btn.disabled = true;
+      try {
+        const prev = previews.raw;
+        const payload = {retention_days, tenant: 'all', dry_run: isDry};
+        if (!isDry) {
+          if (!prev || prev.retention_days !== retention_days || !prev.preview_token) {
+            throw new Error('Buat pratinjau retensi terlebih dahulu sebelum membersihkan log mentah.');
+          }
+          payload.preview_token = prev.preview_token;
+        }
+        const res = await json(apiURL('/api/database/purge-raw'), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+          signal,
+        });
+        if (isDry) {
+          previews.raw = {retention_days, preview_token: res.preview_token, count: res.count};
+          if (resultSlot) resultSlot.textContent = `Pratinjau: ${res.count} alert berusia > ${retention_days} hari siap dibersihkan log mentahnya (metadata & verdict tetap tersimpan).`;
+        } else {
+          delete previews.raw;
+          if (resultSlot) resultSlot.textContent = `${res.cleaned ?? 0} log mentah berhasil dibersihkan.`;
+          notify(`${res.cleaned ?? 0} log mentah berusia > ${retention_days} hari dibersihkan.`, 'success');
+          await loadStatus();
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          if (resultSlot) resultSlot.textContent = err.message;
+          notify(err.message, 'error');
+        }
+      } finally {
+        if (btn.isConnected) btn.disabled = false;
+      }
       return;
     }
   }, {signal});

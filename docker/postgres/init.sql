@@ -33,8 +33,43 @@ CREATE TABLE IF NOT EXISTS wazuh.alerts (
     is_reviewed BOOLEAN NOT NULL DEFAULT false,
     reviewed_at TIMESTAMPTZ,
     reviewer_notes TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'unread',
+    claimed_by TEXT,
+    claimed_at TIMESTAMPTZ,
+    verdict TEXT,
+    reviewed_by TEXT,
     imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(alert_id, timestamp, agent_name, rule_id)
+);
+
+CREATE TABLE IF NOT EXISTS wazuh.alert_raw (
+    alert_pk BIGINT PRIMARY KEY REFERENCES wazuh.alerts(id) ON DELETE CASCADE,
+    raw JSONB NOT NULL DEFAULT '{}',
+    duplicate_instances JSONB DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS wazuh.daily_metrics_cache (
+    metric_date DATE NOT NULL,
+    tenant TEXT NOT NULL DEFAULT 'Default',
+    pulled_count INTEGER NOT NULL DEFAULT 0,
+    reviewed_count INTEGER NOT NULL DEFAULT 0,
+    tp_count INTEGER NOT NULL DEFAULT 0,
+    fp_count INTEGER NOT NULL DEFAULT 0,
+    benign_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY(metric_date, tenant)
+);
+
+CREATE TABLE IF NOT EXISTS wazuh.report_audit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL DEFAULT 'analyst',
+    format TEXT NOT NULL DEFAULT 'html',
+    tenant TEXT NOT NULL DEFAULT 'all',
+    alert_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'published',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS wazuh.analysis_groups (
@@ -87,5 +122,8 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_wazuh_ids ON wazuh.alerts USING gin 
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_alert_id ON wazuh.alerts(tenant, alert_id);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_review_timestamp ON wazuh.alerts(is_reviewed, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_review_timestamp ON wazuh.alerts(tenant, is_reviewed, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_reviewed_at ON wazuh.alerts(reviewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_claim_status ON wazuh.alerts(status, claimed_by, claimed_at);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_imported_at ON wazuh.alerts(imported_at DESC);
 -- Note: highly-cardinal user_agent, url_path, referer, and arbitrary text pattern
 -- dimensions intentionally do not carry broad btree indexes to prevent bloat on high-volume ingest.

@@ -12,6 +12,7 @@ test('application loads local modular shell with six real destinations and no CD
   for (const file of [
     'app.js',
     'features/triage/view.js',
+    'features/monitoring/view.js',
     'features/stats/view.js',
     'features/incidents/view.js',
     'features/imports/view.js',

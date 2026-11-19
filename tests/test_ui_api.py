@@ -66,7 +66,23 @@ class SyntheticDB:
             source_ip TEXT, mitre_ids TEXT, cve TEXT, data TEXT, raw TEXT,
             hit_count INTEGER, first_seen TEXT, last_seen TEXT, wazuh_ids TEXT,
             duplicate_instances TEXT, parsed_details TEXT, is_reviewed INTEGER,
-            reviewer_notes TEXT, reviewed_at TEXT, log_signature TEXT
+            reviewer_notes TEXT, reviewed_at TEXT, log_signature TEXT,
+            status TEXT DEFAULT 'unread', claimed_by TEXT, claimed_at TEXT,
+            verdict TEXT, reviewed_by TEXT, imported_at TEXT DEFAULT '2026-01-01T00:00:00Z'
+        );
+        CREATE TABLE wazuh.alert_raw (
+            alert_pk INTEGER PRIMARY KEY, raw TEXT, duplicate_instances TEXT, created_at TEXT
+        );
+        CREATE TABLE wazuh.daily_metrics_cache (
+            metric_date TEXT, tenant TEXT, pulled_count INTEGER DEFAULT 0,
+            reviewed_count INTEGER DEFAULT 0, tp_count INTEGER DEFAULT 0,
+            fp_count INTEGER DEFAULT 0, benign_count INTEGER DEFAULT 0,
+            updated_at TEXT, PRIMARY KEY(metric_date, tenant)
+        );
+        CREATE TABLE wazuh.report_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, author TEXT,
+            format TEXT, tenant TEXT, alert_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'published', created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE public.ip_intel_cache (
             ip TEXT PRIMARY KEY, abuse_score INTEGER, vt_malicious INTEGER,
@@ -497,6 +513,87 @@ class UIAPIContractTests(unittest.TestCase):
         self.assertEqual(alert["source_ip"], "198.51.100.77")
         self.assertEqual(alert["abuse_score"], 0)
         self.assertEqual(alert["vt_malicious"], 0)
+
+    def test_atomic_claim_blocks_second_analyst_until_released_or_expired(self):
+        # Analyst 1 claims alert #1
+        c1 = self.client.post("/api/alerts/1/claim", params={"tenant": "Alpha"}, json={"user_id": "analis1"})
+        self.assertEqual(c1.status_code, 200, c1.text)
+        self.assertEqual(c1.json()["status"], "claimed")
+        self.assertEqual(c1.json()["claimed_by"], "analis1")
+
+        # Analyst 2 attempts to claim alert #1 simultaneously -> rejected with 409 Conflict
+        c2 = self.client.post("/api/alerts/1/claim", params={"tenant": "Alpha"}, json={"user_id": "analis2"})
+        self.assertEqual(c2.status_code, 409, c2.text)
+        self.assertIn("analis1", c2.json()["detail"])
+
+        # Analyst 1 sends heartbeat -> succeeds
+        hb = self.client.post("/api/alerts/1/heartbeat", params={"tenant": "Alpha"}, json={"user_id": "analis1"})
+        self.assertEqual(hb.status_code, 200, hb.text)
+
+        # Simulate 31-minute timeout expiration -> Analyst 2 can now claim it!
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET claimed_at = '2020-01-01T00:00:00+00:00' WHERE id = 1"
+        )
+        c2_after_expiry = self.client.post("/api/alerts/1/claim", params={"tenant": "Alpha"}, json={"user_id": "analis2"})
+        self.assertEqual(c2_after_expiry.status_code, 200, c2_after_expiry.text)
+        self.assertEqual(c2_after_expiry.json()["claimed_by"], "analis2")
+
+        # Release claim -> returns to unread
+        rel = self.client.post("/api/alerts/1/release", params={"tenant": "Alpha"}, json={"user_id": "analis2"})
+        self.assertEqual(rel.status_code, 200, rel.text)
+        self.assertEqual(rel.json()["status"], "unread")
+
+    def test_bulk_pattern_verdict_sweeps_matching_backlog_only(self):
+        self.db.add_alert(50, "Alpha", rule_id="31101", description="Web server 400 error code.", source_ip="203.0.113.9")
+        self.db.add_alert(51, "Alpha", rule_id="31101", description="Web server 400 error code.", source_ip="203.0.113.9")
+        self.db.add_alert(52, "Alpha", rule_id="5710", description="SSH brute force", source_ip="203.0.113.9")
+
+        preview = self.client.post(
+            "/api/alerts/bulk-verdict-pattern",
+            params={"tenant": "Alpha"},
+            json={"rule_id": "31101", "source_ip": "203.0.113.9", "verdict": "fp", "dry_run": True},
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(preview.json()["count"], 2)
+
+        applied = self.client.post(
+            "/api/alerts/bulk-verdict-pattern",
+            params={"tenant": "Alpha"},
+            json={"rule_id": "31101", "source_ip": "203.0.113.9", "verdict": "fp", "reviewed_by": "analis1"},
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        self.assertEqual(applied.json()["count"], 2)
+        self.assertEqual(applied.json()["verdict"], "fp")
+
+        row_50 = self.client.get("/api/alerts/50", params={"tenant": "Alpha"}).json()
+        self.assertTrue(row_50["is_reviewed"])
+        self.assertEqual(row_50["verdict"], "fp")
+        row_52 = self.client.get("/api/alerts/52", params={"tenant": "Alpha"}).json()
+        self.assertFalse(row_52["is_reviewed"])
+
+    def test_monitoring_dashboard_returns_metrics_leaderboard_and_audit_logs(self):
+        # Export a report to generate an audit log entry
+        self.client.get("/api/export/markdown", params={"tenant": "Alpha"})
+        res = self.client.get("/api/monitoring", params={"tenant": "Alpha"})
+        self.assertEqual(res.status_code, 200, res.text)
+        body = res.json()
+        self.assertIn("metrics", body)
+        self.assertIn("total_pull_today", body["metrics"])
+        self.assertIn("outstanding_backlog", body["metrics"])
+        self.assertIn("global_review_count", body["metrics"])
+        self.assertIsInstance(body["leaderboard"], list)
+        self.assertIsInstance(body["audit_logs"], list)
+        self.assertTrue(any("Laporan" in item["title"] or "Synthetic" in item["title"] for item in body["audit_logs"]))
+
+    def test_alert_detail_recovers_decoupled_raw_payload_from_alert_raw_table(self):
+        self.db.add_alert(60, "Alpha", raw="{}")
+        self.db.connection.execute(
+            "INSERT INTO wazuh.alert_raw(alert_pk, raw, duplicate_instances) VALUES (?, ?, ?)",
+            (60, '{"full_log":"Decoupled raw payload from extension table"}', '[]'),
+        )
+        detail = self.client.get("/api/alerts/60", params={"tenant": "Alpha"})
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(detail.json()["full_log"], "Decoupled raw payload from extension table")
 
 
 if __name__ == "__main__":

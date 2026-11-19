@@ -38,7 +38,9 @@ test('default Triage sends the same explicit unreviewed scope to list and summar
 test('explicit review scope and repeated tenants survive queue and summary requests',async()=>{
   for(const review of ['all','reviewed','unreviewed']){
     const requests=await requestsFor(`tenant=Alpha&tenant=Beta&review_status=${review}&facet=rule_id&facet_value=5703&secondary_facet=agent&secondary_facet_value=node&limit=25&offset=25`);
-    for(const url of requests){
+    const queueAndSummary=requests.filter(url=>url.pathname==='/api/alerts'||url.pathname==='/api/triage/summary');
+    assert.equal(queueAndSummary.length,2);
+    for(const url of queueAndSummary){
       assert.deepEqual(url.searchParams.getAll('tenant'),['Alpha','Beta']);
       assert.equal(url.searchParams.get('facet'),'rule_id');
       assert.equal(url.searchParams.get('facet_value'),'5703');

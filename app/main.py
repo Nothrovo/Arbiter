@@ -269,6 +269,33 @@ def import_text(payload: dict[str, Any]):
     return {**stats, "warnings": warnings}
 
 
+CLAIM_TIMEOUT_SECONDS = 30 * 60  # 30 minutes per PRD Section 3.B
+ALLOWED_VERDICTS = {"tp", "fp", "benign", "needs_review"}
+
+
+def _current_username(request: Request | None, fallback: str = "analyst") -> str:
+    if request is not None:
+        user = getattr(request.state, "user", None) or _extract_request_user(request)
+        if user and user.get("username"):
+            return str(user["username"])
+    return fallback
+
+
+def _expire_stale_claims(conn) -> int:
+    """PRD Section 3.B Graceful Auto-Release: release claims older than 30 minutes without heartbeat."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=CLAIM_TIMEOUT_SECONDS)).isoformat()
+    try:
+        cur = conn.execute(
+            """UPDATE wazuh.alerts
+               SET status = 'claimed_expired'
+               WHERE status = 'claimed' AND claimed_at IS NOT NULL AND claimed_at < %s""",
+            (cutoff,),
+        )
+        return cur.rowcount if (cur and hasattr(cur, "rowcount") and cur.rowcount is not None and cur.rowcount >= 0) else 0
+    except Exception:
+        return 0
+
+
 def _exclusion_document(conn) -> dict[str, Any]:
     """Load workspace exclusions for discovery views; never block on a bad row."""
     try:
@@ -294,6 +321,8 @@ def list_alerts(
     secondary_facet_value: str = "",
     alert_ids: str = "",
     filters: str = "",
+    reviewed_from: str = "",
+    reviewed_to: str = "",
     sort: str = "desc",
     sort_by: str = "timestamp",
     limit: int = 500,
@@ -310,6 +339,7 @@ def list_alerts(
         facet=facet, facet_value=facet_value,
         secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
         alert_ids=alert_ids, filters=filters,
+        reviewed_from=reviewed_from, reviewed_to=reviewed_to,
     )
 
     # Sort order
@@ -323,7 +353,8 @@ def list_alerts(
 
     projection = """a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
         a.rule_id, a.rule_level, a.description, a.rule_groups, a.decoder, a.location,
-        a.source_ip, a.mitre_ids, a.cve, a.hit_count, a.first_seen, a.last_seen, a.is_reviewed"""
+        a.source_ip, a.mitre_ids, a.cve, a.hit_count, a.first_seen, a.last_seen, a.is_reviewed, a.reviewed_at,
+        a.status, a.claimed_by, a.claimed_at, a.verdict, a.reviewed_by"""
     if not summary:
         projection += """, a.data, a.raw, a.wazuh_ids, a.duplicate_instances,
         a.parsed_details, a.reviewer_notes,
@@ -332,6 +363,7 @@ def list_alerts(
 
     explicit_selection = alert_ids is not None and str(alert_ids).strip() != ""
     with get_db() as conn:
+        _expire_stale_claims(conn)
         scoped_sql, scoped_params = where_sql, params
         if not explicit_selection:
             scoped_sql, scoped_params = with_exclusions(where_sql, params, _exclusion_document(conn))
@@ -358,7 +390,12 @@ def list_alerts(
         LIMIT %s OFFSET %s
         """
         count_sql = f"SELECT count(*) AS n FROM wazuh.alerts a {scoped_sql}"
-        rows = conn.execute(sql, scoped_params + [limit, offset]).fetchall()
+        try:
+            rows = conn.execute(sql, scoped_params + [limit, offset]).fetchall()
+        except Exception:
+            fallback_proj = projection.replace(",\n        a.status, a.claimed_by, a.claimed_at, a.verdict, a.reviewed_by", "")
+            fallback_sql = sql.replace(projection, fallback_proj)
+            rows = conn.execute(fallback_sql, scoped_params + [limit, offset]).fetchall()
         total = conn.execute(count_sql, scoped_params).fetchone()["n"]
 
     return {"items": rows, "total": total}
@@ -379,6 +416,7 @@ def get_alert_detail(alert_id: int, tenant: list[str] = Query(default=["all"])):
         where += " AND " + tenant_sql
         params.extend(tenant_params)
     with get_db() as conn:
+        _expire_stale_claims(conn)
         row = conn.execute(
             f"""SELECT a.*, COALESCE(a.raw->>'full_log', '') AS full_log,
                        COALESCE(a.raw->>'previous_output', '') AS previous_output,
@@ -394,45 +432,353 @@ def get_alert_detail(alert_id: int, tenant: list[str] = Query(default=["all"])):
                 GROUP BY a.id, ipc.abuse_score, ipc.vt_malicious, ipc.country_code, ipc.isp, ipc.attack_types""",
             params,
         ).fetchone()
+        if row is not None:
+            record = dict(row)
+            raw_obj = record.get("raw")
+            if not raw_obj or (isinstance(raw_obj, dict) and not raw_obj):
+                try:
+                    ext = conn.execute(
+                        "SELECT raw, duplicate_instances FROM wazuh.alert_raw WHERE alert_pk = %s",
+                        (alert_id,),
+                    ).fetchone()
+                    if ext and ext.get("raw"):
+                        record["raw"] = ext["raw"]
+                        if isinstance(ext["raw"], dict):
+                            record["full_log"] = record.get("full_log") or ext["raw"].get("full_log") or ""
+                            record["previous_output"] = record.get("previous_output") or ext["raw"].get("previous_output") or ""
+                        if ext.get("duplicate_instances") and not record.get("duplicate_instances"):
+                            record["duplicate_instances"] = ext["duplicate_instances"]
+                except Exception:
+                    pass
+            row = record
     if row is None:
         raise HTTPException(status_code=404, detail="Alert not found in this scope.")
     return row
 
 
-@app.put("/api/alerts/{alert_id}/review")
-def update_alert_review(alert_id: int, payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
-    is_reviewed = bool(payload.get("is_reviewed", True))
-    notes = str(payload.get("reviewer_notes") or "").strip()
+@app.post("/api/alerts/{alert_id}/claim")
+def claim_alert(
+    alert_id: int,
+    request: Request,
+    payload: dict[str, Any] | None = Body(default=None),
+    tenant: list[str] = Query(default=["all"]),
+):
+    """PRD Section 3.B Atomic Locking (Optimistic Update) for alert claiming."""
+    data = payload if isinstance(payload, dict) else {}
+    user_id = str(data.get("user_id") or _current_username(request)).strip() or "analyst"
+    now_iso = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         _validate_membership(conn, [alert_id], tenant)
-        conn.execute(
+        _expire_stale_claims(conn)
+        cur = conn.execute(
             """UPDATE wazuh.alerts
-               SET is_reviewed = %s,
-                   reviewed_at = CASE WHEN %s THEN now() ELSE NULL END,
-                   reviewer_notes = %s
-               WHERE id = %s""",
-            (is_reviewed, is_reviewed, notes, alert_id),
+               SET status = 'claimed', claimed_by = %s, claimed_at = %s
+               WHERE id = %s AND (status IS NULL OR status = '' OR status = 'unread' OR status = 'claimed_expired' OR (status = 'claimed' AND claimed_by = %s))
+               RETURNING id, status, claimed_by, claimed_at""",
+            (user_id, now_iso, alert_id, user_id),
         )
-    return {"status": "ok", "id": alert_id, "is_reviewed": is_reviewed}
+        updated = cur.fetchone()
+        if not updated:
+            current = conn.execute(
+                "SELECT id, status, claimed_by, claimed_at FROM wazuh.alerts WHERE id = %s",
+                (alert_id,),
+            ).fetchone()
+            owner = (current or {}).get("claimed_by") or "analis lain"
+            status_val = (current or {}).get("status") or "locked"
+            raise HTTPException(
+                status_code=409,
+                detail=f"Alert #{alert_id} sudah diklaim oleh {owner} (status: {status_val}).",
+            )
+    return {
+        "status": "claimed",
+        "id": alert_id,
+        "claimed_by": user_id,
+        "claimed_at": now_iso,
+    }
+
+
+@app.post("/api/alerts/{alert_id}/heartbeat")
+def heartbeat_alert_claim(
+    alert_id: int,
+    request: Request,
+    payload: dict[str, Any] | None = Body(default=None),
+    tenant: list[str] = Query(default=["all"]),
+):
+    """PRD Section 3.B Heartbeat: refresh claimed_at every 2 minutes while analyst inspects alert."""
+    data = payload if isinstance(payload, dict) else {}
+    user_id = str(data.get("user_id") or _current_username(request)).strip() or "analyst"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        _validate_membership(conn, [alert_id], tenant)
+        _expire_stale_claims(conn)
+        cur = conn.execute(
+            """UPDATE wazuh.alerts
+               SET claimed_at = %s, status = 'claimed'
+               WHERE id = %s AND status = 'claimed' AND claimed_by = %s
+               RETURNING id, status, claimed_by, claimed_at""",
+            (now_iso, alert_id, user_id),
+        )
+        if not cur.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail="Sesi klaim telah berakhir atau diambil alih. Klaim ulang alert ini untuk melanjutkan.",
+            )
+    return {
+        "status": "claimed",
+        "id": alert_id,
+        "claimed_by": user_id,
+        "claimed_at": now_iso,
+    }
+
+
+@app.post("/api/alerts/{alert_id}/release")
+def release_alert_claim(
+    alert_id: int,
+    request: Request,
+    payload: dict[str, Any] | None = Body(default=None),
+    tenant: list[str] = Query(default=["all"]),
+):
+    """Release an active claim back to unread so another analyst can claim it."""
+    data = payload if isinstance(payload, dict) else {}
+    user = getattr(request.state, "user", None) or _extract_request_user(request)
+    user_id = str(data.get("user_id") or (user.get("username") if user else "analyst")).strip() or "analyst"
+    is_privileged = bool(user and user.get("role") in ("admin", "director")) or bool(data.get("force"))
+    with get_db() as conn:
+        _validate_membership(conn, [alert_id], tenant)
+        if is_privileged:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET status = CASE WHEN is_reviewed THEN 'reviewed' ELSE 'unread' END,
+                       claimed_by = NULL, claimed_at = NULL
+                   WHERE id = %s""",
+                (alert_id,),
+            )
+        else:
+            cur = conn.execute(
+                """UPDATE wazuh.alerts
+                   SET status = CASE WHEN is_reviewed THEN 'reviewed' ELSE 'unread' END,
+                       claimed_by = NULL, claimed_at = NULL
+                   WHERE id = %s AND (claimed_by = %s OR claimed_by IS NULL OR status != 'claimed')
+                   RETURNING id""",
+                (alert_id, user_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=403, detail="Hanya pemilik klaim, Director, atau Admin yang dapat melepas klaim ini.")
+    return {"status": "unread", "id": alert_id}
+
+
+@app.put("/api/alerts/{alert_id}/review")
+def update_alert_review(
+    alert_id: int,
+    payload: dict[str, Any],
+    request: Request,
+    tenant: list[str] = Query(default=["all"]),
+):
+    is_reviewed = bool(payload.get("is_reviewed", True))
+    notes = str(payload.get("reviewer_notes") or "").strip()
+    raw_verdict = payload.get("verdict")
+    verdict: str | None = None
+    if raw_verdict is not None and str(raw_verdict).strip() != "":
+        v_clean = str(raw_verdict).strip().lower()
+        if v_clean not in ALLOWED_VERDICTS:
+            raise HTTPException(status_code=400, detail="Verdict harus berupa 'tp', 'fp', 'benign', atau 'needs_review'.")
+        verdict = v_clean
+    reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
+    new_status = "reviewed" if is_reviewed else "unread"
+    with get_db() as conn:
+        _validate_membership(conn, [alert_id], tenant)
+        prev = conn.execute("SELECT tenant, is_reviewed FROM wazuh.alerts WHERE id = %s", (alert_id,)).fetchone()
+        try:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = %s,
+                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END,
+                       reviewer_notes = %s,
+                       status = %s,
+                       verdict = CASE WHEN %s THEN COALESCE(%s, verdict) ELSE NULL END,
+                       reviewed_by = CASE WHEN %s THEN %s ELSE NULL END,
+                       claimed_by = CASE WHEN %s THEN COALESCE(claimed_by, %s) ELSE NULL END
+                   WHERE id = %s""",
+                (
+                    is_reviewed,
+                    is_reviewed,
+                    notes,
+                    new_status,
+                    is_reviewed,
+                    verdict,
+                    is_reviewed,
+                    reviewer,
+                    is_reviewed,
+                    reviewer,
+                    alert_id,
+                ),
+            )
+        except Exception:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = %s,
+                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END,
+                       reviewer_notes = %s
+                   WHERE id = %s""",
+                (is_reviewed, is_reviewed, notes, alert_id),
+            )
+        if prev and is_reviewed and not prev.get("is_reviewed") and hasattr(db_module, "bump_daily_metrics"):
+            db_module.bump_daily_metrics(conn, str(prev.get("tenant") or "Default"), reviewed_delta=1, verdict=verdict)
+    return {"status": "ok", "id": alert_id, "is_reviewed": is_reviewed, "verdict": verdict, "alert_status": new_status}
 
 
 @app.post("/api/alerts/batch-review")
-def batch_update_review(payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
+def batch_update_review(
+    payload: dict[str, Any],
+    request: Request,
+    tenant: list[str] = Query(default=["all"]),
+):
     normalize_tenants(tenant)
     alert_ids = payload.get("alert_ids") or []
     is_reviewed = bool(payload.get("is_reviewed", True))
+    raw_verdict = payload.get("verdict")
+    verdict: str | None = None
+    if raw_verdict is not None and str(raw_verdict).strip() != "":
+        v_clean = str(raw_verdict).strip().lower()
+        if v_clean not in ALLOWED_VERDICTS:
+            raise HTTPException(status_code=400, detail="Verdict harus berupa 'tp', 'fp', 'benign', atau 'needs_review'.")
+        verdict = v_clean
+    notes = str(payload.get("reviewer_notes") or "").strip()
+    reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
+    new_status = "reviewed" if is_reviewed else "unread"
     if not alert_ids:
         raise HTTPException(status_code=400, detail="No valid alert IDs provided.")
     with get_db() as conn:
         clean_pks = _validate_membership(conn, alert_ids, tenant)
+        try:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = %s,
+                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END,
+                       status = %s,
+                       verdict = CASE WHEN %s THEN COALESCE(%s, verdict) ELSE NULL END,
+                       reviewed_by = CASE WHEN %s THEN %s ELSE NULL END,
+                       reviewer_notes = CASE WHEN %s != '' THEN %s ELSE reviewer_notes END
+                   WHERE id = ANY(%s)""",
+                (
+                    is_reviewed,
+                    is_reviewed,
+                    new_status,
+                    is_reviewed,
+                    verdict,
+                    is_reviewed,
+                    reviewer,
+                    notes,
+                    notes,
+                    clean_pks,
+                ),
+            )
+        except Exception:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = %s,
+                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END
+                   WHERE id = ANY(%s)""",
+                (is_reviewed, is_reviewed, clean_pks),
+            )
+        if is_reviewed and hasattr(db_module, "bump_daily_metrics"):
+            db_module.bump_daily_metrics(conn, _tenant_label(tenant), reviewed_delta=len(clean_pks), verdict=verdict)
+    return {"status": "ok", "count": len(clean_pks), "is_reviewed": is_reviewed, "verdict": verdict, "alert_status": new_status}
+
+
+@app.post("/api/alerts/bulk-verdict-pattern")
+def bulk_verdict_by_pattern(
+    payload: dict[str, Any],
+    request: Request,
+    tenant: list[str] = Query(default=["all"]),
+):
+    """PRD Section 3.B Bulk Actions & Pattern Grouping: apply verdict (TP/FP/Benign) across similar alerts matching pattern/rule/IP."""
+    normalize_tenants(tenant)
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload bulk verdict tidak valid.")
+    raw_verdict = str(payload.get("verdict") or "").strip().lower()
+    if raw_verdict not in {"tp", "fp", "benign"}:
+        raise HTTPException(status_code=400, detail="Verdict wajib dipilih: 'tp', 'fp', atau 'benign'.")
+
+    dry_run = bool(payload.get("dry_run", False))
+    rule_id = str(payload.get("rule_id") or "").strip()
+    description = str(payload.get("description") or "").strip()
+    source_ip = str(payload.get("source_ip") or "").strip()
+    agent_name = str(payload.get("agent_name") or "").strip()
+    q = str(payload.get("q") or "").strip()
+    only_unreviewed = bool(payload.get("only_unreviewed", True))
+    notes = str(payload.get("reviewer_notes") or f"Bulk pattern verdict: {raw_verdict.upper()}").strip()
+    reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
+
+    if not any([rule_id, description, source_ip, agent_name, q]):
+        raise HTTPException(
+            status_code=400,
+            detail="Tentukan minimal satu kriteria pola (rule_id, description, source_ip, agent_name, atau kata kunci q).",
+        )
+
+    clauses: list[str] = []
+    params: list[Any] = []
+    t_sql, t_params = tenant_clause("a", tenant)
+    if t_sql:
+        clauses.append(t_sql)
+        params.extend(t_params)
+    if only_unreviewed:
+        clauses.append("a.is_reviewed = false")
+    if rule_id:
+        clauses.append("a.rule_id = %s")
+        params.append(rule_id)
+    if description:
+        clauses.append("a.description ILIKE %s")
+        params.append(f"%{description}%")
+    if source_ip:
+        clauses.append("a.source_ip = %s")
+        params.append(source_ip)
+    if agent_name:
+        clauses.append("a.agent_name = %s")
+        params.append(agent_name)
+    if q:
+        clauses.append("(a.description ILIKE %s OR a.raw::text ILIKE %s)")
+        params.extend([f"%{q}%", f"%{q}%"])
+
+    where_sql = "WHERE " + " AND ".join(clauses) if clauses else ""
+    with get_db() as conn:
+        matching_rows = conn.execute(
+            f"SELECT a.id, a.tenant FROM wazuh.alerts a {where_sql} LIMIT 50000",
+            params,
+        ).fetchall()
+        pks = [int(r["id"]) for r in matching_rows]
+        if dry_run or not pks:
+            return {
+                "status": "ok",
+                "dry_run": dry_run,
+                "count": len(pks),
+                "verdict": raw_verdict,
+            }
         conn.execute(
             """UPDATE wazuh.alerts
-               SET is_reviewed = %s,
-                   reviewed_at = CASE WHEN %s THEN now() ELSE NULL END
+               SET is_reviewed = true,
+                   reviewed_at = now(),
+                   status = 'reviewed',
+                   verdict = %s,
+                   reviewed_by = %s,
+                   reviewer_notes = %s
                WHERE id = ANY(%s)""",
-            (is_reviewed, is_reviewed, clean_pks),
+            (raw_verdict, reviewer, notes, pks),
         )
-    return {"status": "ok", "count": len(clean_pks), "is_reviewed": is_reviewed}
+        if hasattr(db_module, "bump_daily_metrics"):
+            per_tenant: dict[str, int] = {}
+            for r in matching_rows:
+                t_key = str(r.get("tenant") or "Default")
+                per_tenant[t_key] = per_tenant.get(t_key, 0) + 1
+            for t_key, cnt in per_tenant.items():
+                db_module.bump_daily_metrics(conn, t_key, reviewed_delta=cnt, verdict=raw_verdict)
+    return {
+        "status": "ok",
+        "dry_run": False,
+        "count": len(pks),
+        "verdict": raw_verdict,
+        "reviewed_by": reviewer,
+    }
 
 
 @app.post("/api/alerts/full-logs")
@@ -747,6 +1093,8 @@ def get_stats(
     exclude_pivot: str | None = None,
     hide_reviewed: bool = False,
     filters: str = "",
+    reviewed_from: str = "",
+    reviewed_to: str = "",
 ):
     if pivot_by not in PIVOT_DEFINITIONS:
         raise HTTPException(
@@ -791,6 +1139,8 @@ def get_stats(
         exclude_facet=exclude_facet,
         exclude_facet_value=exclude_facet_value,
         filters=filters,
+        reviewed_from=reviewed_from,
+        reviewed_to=reviewed_to,
     )
     parent_where_sql, parent_base_params = alert_where(
         q=q,
@@ -805,6 +1155,8 @@ def get_stats(
         facet=facet,
         facet_value=facet_value,
         filters=filters,
+        reviewed_from=reviewed_from,
+        reviewed_to=reviewed_to,
     )
     workspace_where_sql, workspace_base_params = alert_where(
         q=q,
@@ -817,6 +1169,8 @@ def get_stats(
         time_from=time_from,
         time_to=time_to,
         filters=filters,
+        reviewed_from=reviewed_from,
+        reviewed_to=reviewed_to,
     )
 
     metric_expr = "COUNT(*)" if metric == "alerts" else "COALESCE(SUM(COALESCE(a.hit_count, 1)), 0)"
@@ -1078,6 +1432,8 @@ def get_facet_alert_ids(payload: dict[str, Any]):
     secondary_facet_values = payload.get("secondary_facet_values", [])
     spotter_mode = str(payload.get("spotter_mode", "all")).strip().lower()
     filters = payload.get("filters", "")
+    reviewed_from = payload.get("reviewed_from", "")
+    reviewed_to = payload.get("reviewed_to", "")
 
     if not isinstance(secondary_facet_values, list):
         raise HTTPException(status_code=422, detail="secondary_facet_values must be a list.")
@@ -1087,6 +1443,7 @@ def get_facet_alert_ids(payload: dict[str, Any]):
         filter_preset=filter_preset, review_status=review_status,
         time_preset=time_preset, time_from=time_from, time_to=time_to,
         facet=facet, facet_value=facet_value, filters=filters,
+        reviewed_from=reviewed_from, reviewed_to=reviewed_to,
     )
 
     if secondary_facet and secondary_facet_values:
@@ -1140,6 +1497,8 @@ def triage_summary(
     facet_value: str = "",
     alert_ids: str = "",
     filters: str = "",
+    reviewed_from: str = "",
+    reviewed_to: str = "",
 ):
     where_sql, params = alert_where(
         q=q,
@@ -1157,6 +1516,8 @@ def triage_summary(
         secondary_facet_value=secondary_facet_value,
         alert_ids=alert_ids,
         filters=filters,
+        reviewed_from=reviewed_from,
+        reviewed_to=reviewed_to,
     )
 
     with get_db() as conn:
@@ -1228,17 +1589,100 @@ def triage_summary(
     }
 
 
+@app.get("/api/reviews/activity")
+def review_activity(
+    tenant: list[str] = Query(default=["all"]),
+    days: int = 14,
+    tz_offset_minutes: int = 0,
+):
+    """Reviewed-alert counts per local calendar day for the Triage activity panel.
+
+    ``tz_offset_minutes`` is the client's UTC offset in minutes (WIB = 420), so
+    "today" follows the analyst's wall clock rather than the server's UTC date.
+    """
+    if not (1 <= days <= 90):
+        raise HTTPException(status_code=422, detail="days must be between 1 and 90.")
+    offset = max(-840, min(840, int(tz_offset_minutes or 0)))
+    window = max(days, 30)
+    now_local = datetime.now(timezone.utc) + timedelta(minutes=offset)
+    today = now_local.date()
+    start_date = today - timedelta(days=window - 1)
+    start_local = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+    since_utc = (start_local - timedelta(minutes=offset)).isoformat()
+
+    where = "a.reviewed_at IS NOT NULL AND a.reviewed_at >= %s"
+    params: list[Any] = [since_utc]
+    tenant_sql, tenant_params = tenant_clause("a", tenant)
+    if tenant_sql:
+        where += " AND " + tenant_sql
+        params.extend(tenant_params)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT a.reviewed_at FROM wazuh.alerts a WHERE {where}",
+            params,
+        ).fetchall()
+        reviewed_row = conn.execute(
+            f"SELECT COUNT(*) AS n FROM wazuh.alerts a WHERE a.reviewed_at IS NOT NULL"
+            + (f" AND {tenant_sql}" if tenant_sql else ""),
+            tenant_params,
+        ).fetchone()
+    total_reviewed = int(reviewed_row["n"] or 0) if reviewed_row else 0
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        day = _review_local_date(row["reviewed_at"], offset)
+        if day:
+            counts[day] = counts.get(day, 0) + 1
+
+    days_list = []
+    for index in range(days):
+        day = (today - timedelta(days=index)).isoformat()
+        days_list.append({"date": day, "count": counts.get(day, 0)})
+    last_7 = sum(item["count"] for item in days_list[:7]) if days >= 7 else sum(item["count"] for item in days_list)
+    last_30 = sum(counts.get((today - timedelta(days=index)).isoformat(), 0) for index in range(min(30, window)))
+    return {
+        "days": days_list,
+        "today": days_list[0]["count"],
+        "last_7_days": last_7,
+        "last_30_days": last_30,
+        "total_reviewed": total_reviewed,
+        "tz_offset_minutes": offset,
+    }
+
+
+def _review_local_date(value: Any, offset_minutes: int) -> str | None:
+    """Return an ISO local date for a timestamp, tolerating text and datetime."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        moment = value
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+    return (moment + timedelta(minutes=offset_minutes)).date().isoformat()
+
+
 @app.get("/api/suggestions")
 def get_suggestions(
     use_local_ai: bool = False, tenant: list[str] = Query(default=["all"]), q: str = "",
     review_status: str = "all", filter_preset: str = "", status: str = "all",
     group_id: str | None = None, time_from: str = "", time_to: str = "",
-    filters: str = "",
+    filters: str = "", reviewed_from: str = "", reviewed_to: str = "",
 ):
     where, params = alert_where(
         tenant=tenant, q=q, review_status=review_status, filter_preset=filter_preset,
         status=status, group_id=group_id, time_from=time_from, time_to=time_to,
-        filters=filters,
+        filters=filters, reviewed_from=reviewed_from, reviewed_to=reviewed_to,
     )
     with get_db() as conn:
         where, params = with_exclusions(where, params, _exclusion_document(conn))
@@ -2057,14 +2501,14 @@ def _get_alerts_for_export(
     time_preset: str = "", time_from: str = "", time_to: str = "",
     facet: str = "", facet_value: str = "",
     secondary_facet: str = "", secondary_facet_value: str = "",
-    filters: str = "",
+    filters: str = "", reviewed_from: str = "", reviewed_to: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     where, params = alert_where(
         q=q, tenant=tenant, review_status=review_status, filter_preset=filter_preset,
         status=status, group_id=group_id, time_preset=time_preset, time_from=time_from, time_to=time_to,
         facet=facet, facet_value=facet_value,
         secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
-        filters=filters,
+        filters=filters, reviewed_from=reviewed_from, reviewed_to=reviewed_to,
     )
     clean_pks: list[int] = []
     if alert_ids:
@@ -2110,7 +2554,7 @@ def export_scope(
     time_preset: str = "", time_from: str = "", time_to: str = "",
     facet: str = "", facet_value: str = "",
     secondary_facet: str = "", secondary_facet_value: str = "",
-    filters: str = "",
+    filters: str = "", reviewed_from: str = "", reviewed_to: str = "",
 ) -> dict[str, Any]:
     normalize_tenants(tenant)
     # Explicit selection replaces triage filters, never tenant context.
@@ -2119,13 +2563,36 @@ def export_scope(
             alert_ids = ",".join(str(pk) for pk in positive_ids(alert_ids.split(",")))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        group_id, q, review_status, filter_preset, status, time_preset, time_from, time_to, facet, facet_value, secondary_facet, secondary_facet_value, filters = None, "", "all", "", "all", "", "", "", "", "", "", "", ""
+        group_id, q, review_status, filter_preset, status, time_preset, time_from, time_to, facet, facet_value, secondary_facet, secondary_facet_value, filters, reviewed_from, reviewed_to = None, "", "all", "", "all", "", "", "", "", "", "", "", "", "", ""
     return dict(group_id=group_id, alert_ids=alert_ids, tenant=_scope_tenant_value(tenant), q=q,
                 review_status=review_status, filter_preset=filter_preset, status=status,
                 time_preset=time_preset, time_from=time_from, time_to=time_to,
                 facet=facet, facet_value=facet_value,
                 secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
-                filters=filters)
+                filters=filters, reviewed_from=reviewed_from, reviewed_to=reviewed_to)
+
+
+def _record_report_audit_log(
+    request: Request | None,
+    *,
+    title: str,
+    format_name: str,
+    tenant: Any,
+    alert_count: int,
+    status: str = "published",
+) -> None:
+    """PRD Section 3.C Audit Log Laporan: record published/exported reports."""
+    author = _current_username(request)
+    tenant_str = _tenant_label(tenant)
+    try:
+        with get_db() as conn:
+            conn.execute(
+                """INSERT INTO wazuh.report_audit_logs(title, author, format, tenant, alert_count, status)
+                   VALUES(%s, %s, %s, %s, %s, %s)""",
+                (title[:240] or "SOC Telemetry Report", author, format_name, tenant_str, int(alert_count), status),
+            )
+    except Exception:
+        pass
 
 
 @app.get("/api/export/preview")
@@ -2136,16 +2603,18 @@ def export_preview(scope: dict[str, Any] = Depends(export_scope)):
 
 
 @app.get("/api/export/report-html", response_class=HTMLResponse)
-def export_gdocs_html(scope: dict[str, Any] = Depends(export_scope)):
+def export_gdocs_html(request: Request, scope: dict[str, Any] = Depends(export_scope)):
     alerts, meta = _get_alerts_for_export(**scope)
     html_content = generate_gdocs_html_report(alerts, meta)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Laporan HTML"), format_name="Google Docs HTML", tenant=scope.get("tenant"), alert_count=len(alerts))
     return HTMLResponse(content=html_content, headers={"X-Arbiter-Count": str(len(alerts))})
 
 
 @app.get("/api/export/docx")
-def export_docx(scope: dict[str, Any] = Depends(export_scope)):
+def export_docx(request: Request, scope: dict[str, Any] = Depends(export_scope)):
     alerts, meta = _get_alerts_for_export(**scope)
     buf = generate_docx_landscape_report(alerts, meta)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Word"), format_name="Word (.docx)", tenant=scope.get("tenant"), alert_count=len(alerts))
     filename = f"Arbiter-Report-{meta.get('title', 'SOC')[:24].replace(' ', '_')}.docx"
     return StreamingResponse(
         buf,
@@ -2155,9 +2624,10 @@ def export_docx(scope: dict[str, Any] = Depends(export_scope)):
 
 
 @app.get("/api/export/xlsx")
-def export_xlsx(scope: dict[str, Any] = Depends(export_scope)):
-    alerts, _ = _get_alerts_for_export(**scope)
+def export_xlsx(request: Request, scope: dict[str, Any] = Depends(export_scope)):
+    alerts, meta = _get_alerts_for_export(**scope)
     buf = generate_xlsx_workbook(alerts)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Workbook Excel"), format_name="Excel (.xlsx)", tenant=scope.get("tenant"), alert_count=len(alerts))
     filename = "Arbiter-Alerts-Export.xlsx"
     return StreamingResponse(
         buf,
@@ -2167,24 +2637,27 @@ def export_xlsx(scope: dict[str, Any] = Depends(export_scope)):
 
 
 @app.get("/api/export/tsv")
-def export_tsv(scope: dict[str, Any] = Depends(export_scope)):
-    alerts, _ = _get_alerts_for_export(**scope)
+def export_tsv(request: Request, scope: dict[str, Any] = Depends(export_scope)):
+    alerts, meta = _get_alerts_for_export(**scope)
     tsv_content = generate_tsv_table(alerts)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Tabel TSV"), format_name="TSV", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=tsv_content, media_type="text/tab-separated-values; charset=utf-8",
                     headers={"X-Arbiter-Count": str(len(alerts))})
 
 
 @app.get("/api/export/markdown")
-def export_markdown(scope: dict[str, Any] = Depends(export_scope)):
+def export_markdown(request: Request, scope: dict[str, Any] = Depends(export_scope)):
     alerts, meta = _get_alerts_for_export(**scope)
     md_content = generate_markdown_report(alerts, meta)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Markdown"), format_name="Markdown (.md)", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=md_content, media_type="text/markdown; charset=utf-8",
                     headers={"X-Arbiter-Count": str(len(alerts))})
 
 
 @app.get("/api/export.csv")
-def export_csv(scope: dict[str, Any] = Depends(export_scope)):
-    alerts, _ = _get_alerts_for_export(**scope)
+def export_csv(request: Request, scope: dict[str, Any] = Depends(export_scope)):
+    alerts, meta = _get_alerts_for_export(**scope)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Ekspor CSV"), format_name="CSV", tenant=scope.get("tenant"), alert_count=len(alerts))
     output = io.StringIO()
     fields = [
         "alert_id", "timestamp", "tenant", "agent_name", "agent_ip", "rule_id", "rule_level",
@@ -2547,6 +3020,255 @@ def api_database_purge_incidents(payload: dict[str, Any]):
                 preview_token=preview_token, expected_profile=expected_profile,
             )
         return {"dry_run": dry_run, "count": 0}
+
+
+@app.post("/api/database/purge-raw")
+def api_database_purge_raw(payload: dict[str, Any]):
+    """PRD Section 3.A Data Retention: purge raw payload extension older than 30-90 days while retaining metadata & verdicts."""
+    retention_days = payload.get("retention_days")
+    if retention_days is not None and str(retention_days).strip() != "":
+        try:
+            retention_days = int(retention_days)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Parameter retention_days harus berupa angka.")
+    else:
+        with get_db() as conn:
+            stored = load_settings(conn)
+            retention_days = int((stored.get("retention") or {}).get("raw_days") or 30)
+
+    if not (30 <= int(retention_days) <= 90):
+        raise HTTPException(status_code=400, detail="Retensi log mentah (retention_days) harus antara 30 dan 90 hari.")
+
+    tenant = str(payload.get("tenant") or "all").strip()
+    dry_run = bool(payload.get("dry_run", True))
+    preview_token = payload.get("preview_token")
+    expected_profile = payload.get("expected_profile") or payload.get("profile")
+
+    with get_db() as conn:
+        if hasattr(db_module, "purge_raw_alerts"):
+            return db_module.purge_raw_alerts(
+                conn,
+                retention_days=int(retention_days),
+                tenant=tenant,
+                dry_run=dry_run,
+                preview_token=preview_token,
+                expected_profile=expected_profile,
+            )
+        return {"dry_run": dry_run, "count": 0, "retention_days": int(retention_days)}
+
+
+@app.get("/api/monitoring")
+def api_get_monitoring(
+    tenant: list[str] = Query(default=["all"]),
+    tz_offset_minutes: int = 420,
+):
+    """PRD Section 3.C Monitoring Dashboard: Real-time metric cards, Analyst Leaderboard, and Report Audit Log."""
+    offset = max(-840, min(840, int(tz_offset_minutes or 0)))
+    now_utc = datetime.now(timezone.utc)
+    now_local = now_utc + timedelta(minutes=offset)
+    today_date = now_local.date()
+    today_iso = today_date.isoformat()
+    today_start_local = datetime.combine(today_date, datetime.min.time(), tzinfo=timezone.utc)
+    today_start_utc = (today_start_local - timedelta(minutes=offset)).isoformat()
+
+    t_sql, t_params = tenant_clause("a", tenant)
+    t_where = f"WHERE {t_sql}" if t_sql else ""
+    t_and = f"AND {t_sql}" if t_sql else ""
+
+    with get_db() as conn:
+        _expire_stale_claims(conn)
+
+        # 1. Check daily_metrics_cache first (PRD Section 4 Query Optimization)
+        cached_pull_today = 0
+        try:
+            cache_t_sql, cache_t_params = tenant_clause("c", tenant)
+            cache_where = f"WHERE c.metric_date = %s{f' AND {cache_t_sql}' if cache_t_sql else ''}"
+            c_row = conn.execute(
+                f"SELECT COALESCE(SUM(c.pulled_count), 0) AS pulled FROM wazuh.daily_metrics_cache c {cache_where}",
+                [today_iso, *cache_t_params],
+            ).fetchone()
+            cached_pull_today = int((c_row or {}).get("pulled") or 0)
+        except Exception:
+            cached_pull_today = 0
+
+        # Indexed metrics query using idx_wazuh_alerts_reviewed, idx_wazuh_alerts_imported_at, idx_wazuh_alerts_timestamp
+        try:
+            m_row = conn.execute(
+                f"""SELECT
+                        COUNT(*) FILTER (WHERE a.imported_at >= %s OR a.timestamp >= %s) AS pulled_today,
+                        COUNT(*) FILTER (WHERE a.is_reviewed = false AND (a.imported_at < %s AND (a.timestamp IS NULL OR a.timestamp < %s))) AS outstanding_backlog,
+                        COUNT(*) FILTER (WHERE a.is_reviewed = false) AS total_unreviewed,
+                        COUNT(*) FILTER (WHERE a.is_reviewed = true) AS global_review_count,
+                        COUNT(*) FILTER (WHERE a.status = 'claimed') AS active_claims,
+                        COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_total,
+                        COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_total,
+                        COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_total
+                    FROM wazuh.alerts a {t_where}""",
+                [today_start_utc, today_iso, today_start_utc, today_iso, *t_params],
+            ).fetchone()
+        except Exception:
+            # Fallback if imported_at or status/verdict not present in minimal synthetic table
+            m_row = conn.execute(
+                f"""SELECT
+                        COUNT(*) FILTER (WHERE a.timestamp >= %s) AS pulled_today,
+                        COUNT(*) FILTER (WHERE a.is_reviewed = false AND (a.timestamp IS NULL OR a.timestamp < %s)) AS outstanding_backlog,
+                        COUNT(*) FILTER (WHERE a.is_reviewed = false) AS total_unreviewed,
+                        COUNT(*) FILTER (WHERE a.is_reviewed = true) AS global_review_count,
+                        0 AS active_claims,
+                        0 AS tp_total,
+                        0 AS fp_total,
+                        0 AS benign_total
+                    FROM wazuh.alerts a {t_where}""",
+                [today_iso, today_iso, *t_params],
+            ).fetchone()
+
+        pulled_today = max(cached_pull_today, int((m_row or {}).get("pulled_today") or 0))
+        outstanding_backlog = int((m_row or {}).get("outstanding_backlog") or 0)
+        total_unreviewed = int((m_row or {}).get("total_unreviewed") or 0)
+        global_review_count = int((m_row or {}).get("global_review_count") or 0)
+        active_claims = int((m_row or {}).get("active_claims") or 0)
+
+        # 2. Analyst Leaderboard & Accountability
+        try:
+            known_users = {u["username"]: u for u in list_users(conn)}
+        except Exception:
+            known_users = {"admin": {"username": "admin", "display_name": "Administrator", "role": "admin"}}
+        leaderboard_map: dict[str, dict[str, Any]] = {}
+        for uname, uinfo in known_users.items():
+            leaderboard_map[uname] = {
+                "username": uname,
+                "display_name": uinfo.get("display_name") or uname,
+                "role": uinfo.get("role") or "analyst",
+                "currently_claimed": 0,
+                "completed_today": 0,
+                "total_contributions": 0,
+                "tp_count": 0,
+                "fp_count": 0,
+                "benign_count": 0,
+            }
+
+        try:
+            claimed_rows = conn.execute(
+                f"""SELECT a.claimed_by AS username, COUNT(*) AS n
+                    FROM wazuh.alerts a
+                    WHERE a.status = 'claimed' AND a.claimed_by IS NOT NULL AND a.claimed_by != '' {t_and}
+                    GROUP BY a.claimed_by""",
+                t_params,
+            ).fetchall()
+            for r in claimed_rows:
+                uname = str(r["username"])
+                entry = leaderboard_map.setdefault(uname, {
+                    "username": uname, "display_name": uname, "role": "analyst",
+                    "currently_claimed": 0, "completed_today": 0, "total_contributions": 0,
+                    "tp_count": 0, "fp_count": 0, "benign_count": 0,
+                })
+                entry["currently_claimed"] = int(r["n"] or 0)
+
+            reviewed_rows = conn.execute(
+                f"""SELECT COALESCE(NULLIF(a.reviewed_by, ''), NULLIF(a.claimed_by, ''), 'admin') AS username,
+                           COUNT(*) AS total_n,
+                           COUNT(*) FILTER (WHERE a.reviewed_at >= %s) AS today_n,
+                           COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_n,
+                           COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_n,
+                           COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_n
+                    FROM wazuh.alerts a
+                    WHERE a.is_reviewed = true {t_and}
+                    GROUP BY 1""",
+                [today_start_utc, *t_params],
+            ).fetchall()
+            for r in reviewed_rows:
+                uname = str(r["username"])
+                entry = leaderboard_map.setdefault(uname, {
+                    "username": uname, "display_name": uname, "role": "analyst",
+                    "currently_claimed": 0, "completed_today": 0, "total_contributions": 0,
+                    "tp_count": 0, "fp_count": 0, "benign_count": 0,
+                })
+                entry["total_contributions"] = int(r["total_n"] or 0)
+                entry["completed_today"] = int(r["today_n"] or 0)
+                entry["tp_count"] = int(r["tp_n"] or 0)
+                entry["fp_count"] = int(r["fp_n"] or 0)
+                entry["benign_count"] = int(r["benign_n"] or 0)
+        except Exception:
+            pass
+
+        leaderboard = sorted(
+            leaderboard_map.values(),
+            key=lambda x: (x["completed_today"], x["total_contributions"], x["currently_claimed"]),
+            reverse=True,
+        )
+
+        # 3. Audit Log Laporan (Published Incident Cases + Exported Reports)
+        audit_logs: list[dict[str, Any]] = []
+        try:
+            rep_rows = conn.execute(
+                """SELECT id, title, author, format, tenant, alert_count, status, created_at
+                   FROM wazuh.report_audit_logs
+                   ORDER BY created_at DESC, id DESC
+                   LIMIT 50"""
+            ).fetchall()
+            for r in rep_rows:
+                audit_logs.append({
+                    "id": f"rep-{r['id']}",
+                    "title": str(r.get("title") or "Laporan Insiden"),
+                    "author": str(r.get("author") or "analyst"),
+                    "created_at": str(r.get("created_at") or ""),
+                    "export_status": f"Diekspor ({r.get('format') or 'HTML'})",
+                    "format": str(r.get("format") or "HTML"),
+                    "tenant": str(r.get("tenant") or "Semua Tenant"),
+                    "alert_count": int(r.get("alert_count") or 0),
+                })
+        except Exception:
+            pass
+
+        try:
+            inc_rows = _scoped_groups(conn, tenant)
+            for g in inc_rows[:30]:
+                audit_logs.append({
+                    "id": str(g["id"]),
+                    "title": str(g.get("title") or "Kasus Insiden"),
+                    "author": "AI Triage" if g.get("source") == "ai" else "Tim Analis SOC",
+                    "created_at": str(g.get("updated_at") or g.get("created_at") or ""),
+                    "export_status": f"Kasus {str(g.get('status') or 'open').upper()} · Siap Ekspor",
+                    "format": "Kasus Insiden",
+                    "tenant": ", ".join(g.get("tenants") or []) or "Semua Tenant",
+                    "alert_count": int(g.get("alert_count") or 0),
+                })
+        except Exception:
+            pass
+
+        audit_logs.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
+    return {
+        "metrics": {
+            "total_pull_today": pulled_today,
+            "outstanding_backlog": outstanding_backlog,
+            "total_unreviewed": total_unreviewed,
+            "global_review_count": global_review_count,
+            "active_claims": active_claims,
+            "verdicts": {
+                "tp": int((m_row or {}).get("tp_total") or 0),
+                "fp": int((m_row or {}).get("fp_total") or 0),
+                "benign": int((m_row or {}).get("benign_total") or 0),
+            },
+        },
+        "leaderboard": leaderboard,
+        "audit_logs": audit_logs[:50],
+        "checked_at": now_utc.isoformat(),
+    }
+
+
+@app.post("/api/monitoring/audit-log")
+def api_create_report_audit_log(payload: dict[str, Any], request: Request):
+    """Explicitly record a report publication/export event from the UI."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload audit log tidak valid.")
+    title = str(payload.get("title") or "Laporan Insiden SOC").strip()[:240]
+    fmt = str(payload.get("format") or "HTML").strip()[:60]
+    tenant_val = payload.get("tenant") or "all"
+    count = int(payload.get("alert_count") or 0)
+    status = str(payload.get("status") or "published").strip()[:60]
+    _record_report_audit_log(request, title=title, format_name=fmt, tenant=tenant_val, alert_count=count, status=status)
+    return {"status": "ok"}
 
 
 @app.get("/", response_class=HTMLResponse)

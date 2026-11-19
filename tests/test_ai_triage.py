@@ -75,7 +75,7 @@ class AITriageAPITests(unittest.TestCase):
         self.assertIsInstance(response.json()["groups"], list)
 
     def test_ai_triage_validates_bounds(self):
-        for payload in ({"limit": 0}, {"limit": 10000}, {"min_rule_level": 99}, {"min_rule_level": -1}, {"min_rule_level": 12, "max_rule_level": 7}):
+        for payload in ({"limit": 0}, {"limit": 100001}, {"min_rule_level": 99}, {"min_rule_level": -1}, {"min_rule_level": 12, "max_rule_level": 7}):
             response = self.client.post("/api/ai/triage", json=payload)
             self.assertEqual(response.status_code, 400, response.text)
 
@@ -610,10 +610,10 @@ class AITriageAPITests(unittest.TestCase):
             agent_name="alpha-agent-1",
         )
 
-        # 4. Reopening the AI Triage page (GET /api/ai/triage) returns the saved triage AND
+        # 4. Reopening the AI Triage page (GET /api/ai/triage?tenant=Alpha) returns the saved triage AND
         #    automatically merges alert 42 (<= 17:00 WIB) into the existing group, while
         #    placing alert 43 (> 17:00 WIB) into a separate new group!
-        reopen = self.client.get("/api/ai/triage")
+        reopen = self.client.get("/api/ai/triage", params={"tenant": "Alpha"})
         self.assertEqual(reopen.status_code, 200, reopen.text)
         reopen_body = reopen.json()
         self.assertTrue(reopen_body["saved"])

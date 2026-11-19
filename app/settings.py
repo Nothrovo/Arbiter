@@ -55,6 +55,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "ui": {
         "sidebar_default": "expanded",
     },
+    "retention": {
+        "raw_days": 30,
+    },
     "exclusions": {
         "enabled": True,
         "rules": [],
@@ -258,6 +261,18 @@ def validate_settings(payload: dict[str, Any], current: dict[str, Any] | None = 
     if sidebar not in _SIDEBAR_VALUES:
         raise ValueError("ui.sidebar_default harus expanded atau collapsed.")
     ui["sidebar_default"] = sidebar
+
+    retention = settings.get("retention")
+    if not isinstance(retention, dict):
+        retention = {"raw_days": 30}
+        settings["retention"] = retention
+    try:
+        raw_days = int(retention.get("raw_days", 30))
+    except (TypeError, ValueError):
+        raise ValueError("retention.raw_days harus berupa angka.") from None
+    if not 30 <= raw_days <= 90:
+        raise ValueError("Retensi log mentah (retention.raw_days) harus antara 30 dan 90 hari.")
+    retention["raw_days"] = raw_days
 
     exclusions = settings.get("exclusions")
     if not isinstance(exclusions, dict):

@@ -19,8 +19,9 @@ const selection=createSelection(routeScope(new URLSearchParams(location.hash.spl
 let currentRoute, controller, cleanup, guard=null, notifyTimer, healthPending=false, lastHealth=null, routeVersion=0;
 const scrollPositions=new Map();
 let navigationMemory=createNavigationMemory();
-const pageTitles={triage:'Triage',stats:'Statistik',incidents:'Insiden',imports:'Impor',reports:'Laporan',realtime:'Realtime',pull:'Ambil Alert','ai-triage':'AI Triage','wazuh-queries':'Rumus Query Wazuh','error-codes':'Kamus Error Code',database:'Database',settings:'Pengaturan'};
+const pageTitles={triage:'Triage',monitoring:'Monitoring Kinerja SOC',stats:'Statistik',incidents:'Insiden',imports:'Impor',reports:'Laporan',realtime:'Realtime',pull:'Ambil Alert','ai-triage':'AI Triage','wazuh-queries':'Rumus Query Wazuh','error-codes':'Kamus Error Code',database:'Database',settings:'Pengaturan'};
 const adminOnlyPages=new Set(['database','settings']);
+const roleLabels={admin:'Admin',director:'Director / Lead',analyst:'Analis'};
 let currentUser=null, authChecked=false;
 for(const el of document.querySelectorAll('[data-icon]'))el.innerHTML=icon(el.dataset.icon);
 document.querySelector('#open-navigation').innerHTML=icon('menu');
@@ -54,8 +55,9 @@ function applyUserPermissions(){
   const slot=document.querySelector('#user-session-slot');
   if(!slot)return;
   if(!currentUser){slot.innerHTML='';return;}
-  const roleLabel=currentUser.role==='admin'?'Admin':'Analis';
-  slot.innerHTML=`<span class="badge ${currentUser.role==='admin'?'warning':'neutral'}" title="Masuk sebagai ${esc(currentUser.display_name||currentUser.username)} (${roleLabel})">${esc(currentUser.username)} · ${roleLabel}</span><button class="button" type="button" id="logout-button" aria-label="Keluar sesi">Keluar</button>`;
+  const roleLabel=roleLabels[currentUser.role]||'Analis';
+  const badgeClass=currentUser.role==='admin'?'warning':currentUser.role==='director'?'info':'neutral';
+  slot.innerHTML=`<span class="badge ${badgeClass}" title="Masuk sebagai ${esc(currentUser.display_name||currentUser.username)} (${roleLabel})">${esc(currentUser.username)} · ${roleLabel}</span><button class="button" type="button" id="logout-button" aria-label="Keluar sesi">Keluar</button>`;
   slot.querySelector('#logout-button')?.addEventListener('click',async()=>{
     try{await json('/api/auth/logout',{method:'POST'});}catch{/* ignore */}
     currentUser=null;

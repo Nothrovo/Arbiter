@@ -5,7 +5,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000 \
-    DATABASE_URL="postgresql://nothrovo@127.0.0.1:5432/abuseip"
+    DATABASE_URL="postgresql://arbiter@127.0.0.1:5432/abuseip"
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
