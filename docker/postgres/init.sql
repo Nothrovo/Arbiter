@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS wazuh.alerts (
     claimed_at TIMESTAMPTZ,
     verdict TEXT,
     reviewed_by TEXT,
+    flag_color TEXT,
+    flagged_by TEXT,
+    flagged_at TIMESTAMPTZ,
+    rule_status TEXT NOT NULL DEFAULT 'pending',
+    custom_rule_id VARCHAR(50),
+    rule_notes TEXT NOT NULL DEFAULT '',
+    rule_updated_by TEXT,
+    rule_updated_at TIMESTAMPTZ,
     imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(alert_id, timestamp, agent_name, rule_id)
 );
@@ -124,6 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_review_timestamp ON wazuh.alerts(is_
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_review_timestamp ON wazuh.alerts(tenant, is_reviewed, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_reviewed_at ON wazuh.alerts(reviewed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_claim_status ON wazuh.alerts(status, claimed_by, claimed_at);
+CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_flag_rule_status ON wazuh.alerts(flag_color, rule_status, tenant) WHERE flag_color IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_imported_at ON wazuh.alerts(imported_at DESC);
 -- Note: highly-cardinal user_agent, url_path, referer, and arbitrary text pattern
 -- dimensions intentionally do not carry broad btree indexes to prevent bloat on high-volume ingest.

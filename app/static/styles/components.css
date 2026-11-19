@@ -496,3 +496,48 @@
 .review-bar-count { min-height:12px; font-size:10px; color:var(--muted); }
 .review-bar-day { font-size:10px; color:var(--muted); white-space:nowrap; }
 .review-bar:hover .review-bar-track, .review-bar:focus-visible .review-bar-track { background:var(--hover); }
+
+/* Flag badges, buttons & Rule Tuning workspace */
+.badge.flag-green { background:var(--success-bg); color:var(--success); border:1px solid color-mix(in srgb, var(--success) 35%, transparent); }
+.badge.flag-yellow { background:var(--warning-bg); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent); }
+.badge.flag-red { background:var(--critical-bg); color:var(--critical); border:1px solid color-mix(in srgb, var(--critical) 35%, transparent); }
+.flag-btn-green { border-color:color-mix(in srgb, var(--success) 40%, var(--border)); color:var(--success); }
+.flag-btn-green:hover, .flag-btn-green.is-active { background:var(--success-bg); border-color:var(--success); }
+.flag-btn-yellow { border-color:color-mix(in srgb, var(--warning) 40%, var(--border)); color:var(--warning); }
+.flag-btn-yellow:hover, .flag-btn-yellow.is-active { background:var(--warning-bg); border-color:var(--warning); }
+.flag-btn-red { border-color:color-mix(in srgb, var(--critical) 40%, var(--border)); color:var(--critical); }
+.flag-btn-red:hover, .flag-btn-red.is-active { background:var(--critical-bg); border-color:var(--critical); }
+
+.flag-tabs { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+.flag-tab { display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:8px 14px; border:1px solid var(--border); border-radius:var(--radius-control); background:var(--surface); color:var(--muted); font-weight:500; cursor:pointer; }
+.flag-tab:hover { background:var(--hover); color:var(--text); }
+.flag-tab[aria-selected=true] { color:var(--text); border-color:var(--control); background:var(--raised); }
+.flag-tab[data-flag-tab=green][aria-selected=true] { border-color:var(--success); background:var(--success-bg); color:var(--success); }
+.flag-tab[data-flag-tab=yellow][aria-selected=true] { border-color:var(--warning); background:var(--warning-bg); color:var(--warning); }
+.flag-tab[data-flag-tab=red][aria-selected=true] { border-color:var(--critical); background:var(--critical-bg); color:var(--critical); }
+.flag-tab-count { font-size:11px; padding:1px 6px; border-radius:999px; background:var(--ground); color:var(--text); border:1px solid var(--border); }
+
+.flag-filter-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.flag-rule-filters { display:inline-flex; gap:6px; flex-wrap:wrap; }
+.flag-rule-filters .button[aria-pressed=true] { background:var(--raised); border-color:var(--control); color:var(--text); font-weight:600; }
+.flag-controls { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:16px; padding:14px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-panel); }
+.flag-controls .field { flex:1 1 200px; min-width:0; }
+.flag-pattern-controls { display:flex; gap:8px; flex-wrap:wrap; flex:2 1 320px; align-items:flex-end; }
+.flag-pattern-controls .field { flex:1 1 160px; }
+
+.flag-group-list { display:grid; gap:12px; }
+.flag-group-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-panel); overflow:hidden; }
+.flag-group-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; flex-wrap:wrap; }
+.flag-group-toggle { display:flex; align-items:center; gap:10px; flex:1 1 280px; min-width:0; text-align:left; background:none; border:0; padding:0; color:var(--text); cursor:pointer; }
+.flag-group-toggle .icon { flex:none; transition:transform 140ms ease; }
+.flag-group-toggle[aria-expanded=true] .icon { transform:rotate(90deg); }
+.flag-group-title { font-weight:600; font-size:14px; overflow-wrap:anywhere; }
+.flag-group-meta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:4px; font-size:12px; color:var(--muted); }
+.flag-group-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.flag-group-body { border-top:1px solid var(--border); padding:12px 16px; background:var(--ground); }
+.flag-rule-badge-done { background:var(--success-bg); color:var(--success); border:1px solid color-mix(in srgb, var(--success) 35%, transparent); }
+.flag-rule-badge-pending { background:var(--warning-bg); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent); }
+.flag-inline-log { margin:8px 0 0; }
+@media (prefers-reduced-motion: reduce) {
+  .flag-group-toggle .icon { transition:none; }
+}

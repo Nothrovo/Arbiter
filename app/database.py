@@ -48,6 +48,14 @@ CREATE TABLE IF NOT EXISTS wazuh.alerts (
     claimed_at TIMESTAMPTZ,
     verdict TEXT,
     reviewed_by TEXT,
+    flag_color TEXT,
+    flagged_by TEXT,
+    flagged_at TIMESTAMPTZ,
+    rule_status TEXT NOT NULL DEFAULT 'pending',
+    custom_rule_id VARCHAR(50),
+    rule_notes TEXT NOT NULL DEFAULT '',
+    rule_updated_by TEXT,
+    rule_updated_at TIMESTAMPTZ,
     imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(alert_id, timestamp, agent_name, rule_id)
 );
@@ -703,12 +711,24 @@ def init_database() -> None:
             "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ",
             "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS verdict TEXT",
             "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS reviewed_by TEXT",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS flag_color TEXT",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS flagged_by TEXT",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS flagged_at TIMESTAMPTZ",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS rule_status TEXT NOT NULL DEFAULT 'pending'",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS custom_rule_id VARCHAR(50)",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS rule_notes TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS rule_updated_by TEXT",
+            "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS rule_updated_at TIMESTAMPTZ",
         ):
             conn.execute(col_sql)
         # The index depends on columns that older databases only gain above.
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_claim_status "
             "ON wazuh.alerts(status, claimed_by, claimed_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_flag_rule_status "
+            "ON wazuh.alerts(flag_color, rule_status, tenant) WHERE flag_color IS NOT NULL"
         )
         _load_profile_overrides(conn)
 

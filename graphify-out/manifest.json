@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "app/database.py": {
-    "mtime": 1795050791.4779613,
-    "seen": 1795051656.9463167,
-    "ast_hash": "3dc35387925213960c9b67caea502593",
+    "mtime": 1795075396.068679,
+    "seen": 1795075760.309499,
+    "ast_hash": "3c746e00bdad29aa470c548d97af5410",
     "semantic_hash": ""
   },
   "app/exports.py": {
@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "app/main.py": {
-    "mtime": 1795072959.018731,
-    "seen": 1795073254.7371676,
-    "ast_hash": "c6277a16a541fb1a81ac07fec2278b84",
+    "mtime": 1795075506.6159775,
+    "seen": 1795075760.3095744,
+    "ast_hash": "3015324092898a4fcba5187492af6d67",
     "semantic_hash": ""
   },
   "app/parser.py": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "app/index.html": {
-    "mtime": 1795051609.5183573,
-    "seen": 1795051656.9488652,
-    "ast_hash": "9298c4b1a2f6bdf5b17ffb64e6326544",
+    "mtime": 1795075542.6164002,
+    "seen": 1795075760.3122952,
+    "ast_hash": "8e0dc4a5ca6b2f38f6f50261ee536153",
     "semantic_hash": ""
   },
   "docs/ui-ux-redesign/AUDIT.md": {
@@ -252,21 +252,21 @@
     "semantic_hash": ""
   },
   "app/static/js/features/triage/model.js": {
-    "mtime": 1795051596.8925586,
-    "seen": 1795051656.9470816,
-    "ast_hash": "7e57219f7dfbbe92805f239c579fd648",
+    "mtime": 1795075622.0093324,
+    "seen": 1795075760.3104393,
+    "ast_hash": "6dd9f28a263b63bd68705d02aa9a138c",
     "semantic_hash": ""
   },
   "app/static/js/features/triage/view.js": {
-    "mtime": 1795073032.5267785,
-    "seen": 1795073254.7379727,
-    "ast_hash": "3cae39b77d617a1a3f98a72a06aac1d0",
+    "mtime": 1795075636.3475008,
+    "seen": 1795075760.310441,
+    "ast_hash": "4f7e8845e16bc9da245dc1163bf7c5a1",
     "semantic_hash": ""
   },
   "app/static/js/router.js": {
-    "mtime": 1795072986.7571294,
-    "seen": 1795073254.7380292,
-    "ast_hash": "81f3d551c331ad4042e696bc090d7f43",
+    "mtime": 1795075544.5944235,
+    "seen": 1795075760.3104947,
+    "ast_hash": "3a7d8b878a9497ac2fcafd81ca6378c5",
     "semantic_hash": ""
   },
   "app/static/js/state/scope.js": {
@@ -282,9 +282,9 @@
     "semantic_hash": ""
   },
   "app/static/js/ui/primitives.js": {
-    "mtime": 1794274925.5284226,
-    "seen": 1794534347.7958167,
-    "ast_hash": "4e4155e36a29099e24da0648ca7a1773",
+    "mtime": 1795075540.4903753,
+    "seen": 1795075760.3107245,
+    "ast_hash": "287c346ba569530fe79a74cd03f5f045",
     "semantic_hash": ""
   },
   "tests/frontend/client.test.mjs": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/router.test.mjs": {
-    "mtime": 1795073207.2601743,
-    "seen": 1795073254.7391326,
-    "ast_hash": "368edeaf26fd15ba3f429199278209b2",
+    "mtime": 1795075727.8005743,
+    "seen": 1795075760.3115842,
+    "ast_hash": "247c213ca097685fa3d5e8c8a53ef000",
     "semantic_hash": ""
   },
   "tests/frontend/scope.test.mjs": {
@@ -366,9 +366,9 @@
     "semantic_hash": ""
   },
   "tests/frontend/shell.test.mjs": {
-    "mtime": 1794996039.0611253,
-    "seen": 1795051656.9482396,
-    "ast_hash": "6e2c7ee6cb5154e1997715014ad616a0",
+    "mtime": 1795075729.5425947,
+    "seen": 1795075760.3116617,
+    "ast_hash": "76594c4cec94b6ada9394f3f7cc4f7a8",
     "semantic_hash": ""
   },
   "tests/frontend/triage.test.mjs": {
@@ -378,9 +378,9 @@
     "semantic_hash": ""
   },
   "tests/test_ui_api.py": {
-    "mtime": 1795051643.5855176,
-    "seen": 1795051656.9486098,
-    "ast_hash": "2af241e8e4b574b292cef11bb2d06b34",
+    "mtime": 1795075407.7098157,
+    "seen": 1795075760.3120391,
+    "ast_hash": "73fa3e4f444e6718a33b3504ad596b88",
     "semantic_hash": ""
   },
   "docs/ui-ux-redesign/IMPLEMENTATION-CONTRACT.md": {
@@ -390,9 +390,9 @@
     "semantic_hash": ""
   },
   "app/static/js/app.js": {
-    "mtime": 1795072989.5351691,
-    "seen": 1795073254.7373056,
-    "ast_hash": "cf3474168760b016d49914dd90aeafce",
+    "mtime": 1795075775.3561325,
+    "seen": 1795075797.7670672,
+    "ast_hash": "f8b9c9db3f4b0c9438d3adc8ef6bceb1",
     "semantic_hash": ""
   },
   "app/static/js/features/incidents/workspace.js": {
@@ -624,8 +624,8 @@
     "semantic_hash": ""
   },
   "tests/frontend/triage-request.test.mjs": {
-    "mtime": 1795073211.2922282,
-    "seen": 1795073254.739327,
+    "mtime": 1795073464.8275316,
+    "seen": 1795075760.3117585,
     "ast_hash": "74a9818457e691dbd68440bcbc72cf6b",
     "semantic_hash": ""
   },
@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "app/static/js/features/ai-triage/view.js": {
-    "mtime": 1795073107.4478204,
-    "seen": 1795073254.7373314,
+    "mtime": 1795073464.4183533,
+    "seen": 1795075760.3097918,
     "ast_hash": "e4c6a985d7e775551fb8f497462d092e",
     "semantic_hash": ""
   },
@@ -990,26 +990,26 @@
     "semantic_hash": ""
   },
   "app/filters.py": {
-    "mtime": 1795072891.5197444,
-    "seen": 1795073254.7371461,
+    "mtime": 1795073463.9838276,
+    "seen": 1795075760.3095508,
     "ast_hash": "08cb6b9d4371152ffa14e4ae279cb3fd",
     "semantic_hash": ""
   },
   "app/static/js/state/filters.js": {
-    "mtime": 1795072985.241108,
-    "seen": 1795073254.7380311,
+    "mtime": 1795073464.6676493,
+    "seen": 1795075760.3104963,
     "ast_hash": "079a14ef474155c8e53bb20fcb152c8c",
     "semantic_hash": ""
   },
   "tests/frontend/filters.test.mjs": {
-    "mtime": 1795073205.3921492,
-    "seen": 1795073254.7388196,
+    "mtime": 1795073464.770531,
+    "seen": 1795075760.3112552,
     "ast_hash": "d8b187e768f518220f07733fa418b1ae",
     "semantic_hash": ""
   },
   "tests/test_filters.py": {
-    "mtime": 1795073166.4126246,
-    "seen": 1795073254.739472,
+    "mtime": 1795073464.9003353,
+    "seen": 1795075760.3119175,
     "ast_hash": "61af4cef7f496a864cca30e4854c0393",
     "semantic_hash": ""
   },
@@ -1032,9 +1032,39 @@
     "semantic_hash": ""
   },
   "tests/test_schema_migrations.py": {
-    "mtime": 1795050817.3799162,
-    "seen": 1795051656.9485745,
-    "ast_hash": "ee67c7d0f5abfc0fad97ead72d601fd8",
+    "mtime": 1795075403.1037617,
+    "seen": 1795075760.3119874,
+    "ast_hash": "d9a736c16b2cb5a0c54b9d54e5ff8672",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/flags/model.js": {
+    "mtime": 1795075575.7157888,
+    "seen": 1795075760.309906,
+    "ast_hash": "dc86489ab00dc3edbabd34404d9d1788",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/flags/render.js": {
+    "mtime": 1795075680.476019,
+    "seen": 1795075760.3099072,
+    "ast_hash": "375dd7aa0e2bfdaf0d06f05ccebcc652",
+    "semantic_hash": ""
+  },
+  "app/static/js/features/flags/view.js": {
+    "mtime": 1795075692.2891574,
+    "seen": 1795075760.309908,
+    "ast_hash": "a1f3b92b356d6b2c584fd62ac5b39d2d",
+    "semantic_hash": ""
+  },
+  "tests/frontend/flags.test.mjs": {
+    "mtime": 1795075739.0007057,
+    "seen": 1795075760.3112566,
+    "ast_hash": "5dd1865cf212ed7a116485486bea35e0",
+    "semantic_hash": ""
+  },
+  "tests/test_flags.py": {
+    "mtime": 1795075777.6491594,
+    "seen": 1795075797.7695637,
+    "ast_hash": "fab5e14b69987a1f497755a593a1fb43",
     "semantic_hash": ""
   },
   "package-lock.json": {

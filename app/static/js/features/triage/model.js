@@ -1,4 +1,5 @@
 import {esc, icon, severity, formatTime} from '../../ui/primitives.js';
+import {flagBadge} from '../flags/model.js';
 import {tenantValues} from '../../state/scope.js';
 import {filtersValue} from '../../state/filters.js';
 import {withParams} from '../../router.js';
@@ -73,8 +74,15 @@ export function intelBadge(alert) {
   return `<span class="score-badge ${cls}">Abuse ${score}%${vt ? ` · VT ${vt}` : ''}</span>`;
 }
 export function claimBadge(alert) {
+  const flagColor = String(alert?.flag_color || '').toLowerCase();
+  const flagTag = ['green', 'yellow', 'red'].includes(flagColor) ? flagBadge(flagColor, {compact: true}) : '';
+  const ruleDoneTag = flagTag && flagColor !== 'red' && alert?.rule_status === 'done'
+    ? `<span class="badge flag-rule-badge-done" style="margin-left:4px">${icon('check')}Rule${alert.custom_rule_id ? ` #${esc(alert.custom_rule_id)}` : ''}</span>`
+    : '';
   const verdict = String(alert?.verdict || '').toLowerCase();
-  const verdictTag = verdict === 'tp'
+  const verdictTag = flagTag
+    ? `${flagTag}${ruleDoneTag}`
+    : verdict === 'tp'
     ? '<span class="badge critical" style="margin-right:4px">TP</span>'
     : verdict === 'fp'
     ? '<span class="badge info" style="margin-right:4px">FP</span>'
@@ -84,7 +92,8 @@ export function claimBadge(alert) {
   if (alert?.is_reviewed) {
     const by = alert.reviewed_by ? ` oleh @${esc(alert.reviewed_by)}` : '';
     const time = alert.reviewed_at ? `<br><time datetime="${esc(alert.reviewed_at)}" class="num">${esc(formatTime(alert.reviewed_at))}</time>` : '';
-    return `${verdictTag}<span class="meta">Direview${by}${time}</span>`;
+    const spacer = verdictTag ? '<span style="margin-right:4px"></span>' : '';
+    return `${verdictTag}${spacer}<span class="meta">Direview${by}${time}</span>`;
   }
   if (alert?.status === 'claimed' && alert?.claimed_by) {
     return `<span class="badge warning" title="Sedang diklaim oleh @${esc(alert.claimed_by)}">Diklaim @${esc(alert.claimed_by)}</span>`;

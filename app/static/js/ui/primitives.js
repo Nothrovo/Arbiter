@@ -6,6 +6,7 @@ const paths = {
   upload: '<path d="M8 11V2M4 6l4-4 4 4M2 10v4h12v-4"/>',
   report: '<path d="M4 1h6l3 3v11H3V1zM9 1v4h4M5 8h6M5 11h6"/>',
   filter: '<path d="M2 3h12L9 8v5l-2 1V8z"/>',
+  flag: '<path d="M3 2v12M3 3h8.5L10 6.5l1.5 3.5H3"/>',
   chevron: '<path d="m6 3 5 5-5 5"/>',
   down: '<path d="m3 6 5 5 5-5"/>',
   close: '<path d="m4 4 8 8M12 4l-8 8"/>',

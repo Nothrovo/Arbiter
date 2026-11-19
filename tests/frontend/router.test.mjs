@@ -16,6 +16,9 @@ test('hash router preserves query and case identity and identifies unknown desti
   const monRoute = parseRoute('#/monitoring?tenant=lab');
   assert.equal(monRoute.path, '/monitoring');
   assert.equal(monRoute.page, 'monitoring');
+  const flagRoute = parseRoute('#/flags?tenant=lab&flag_color=green');
+  assert.equal(flagRoute.path, '/flags');
+  assert.equal(flagRoute.page, 'flags');
   assert.equal(parseRoute('').path, '/triage');
   assert.equal(parseRoute('#/unknown').page, 'not-found');
   assert.equal(withParams('/triage', new URLSearchParams('tenant=lab')), '#/triage?tenant=lab');

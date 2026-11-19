@@ -19,7 +19,7 @@ const selection=createSelection(routeScope(parseRoute(location.hash).params).key
 let currentRoute, controller, cleanup, guard=null, notifyTimer, healthPending=false, lastHealth=null, routeVersion=0;
 const scrollPositions=new Map();
 let navigationMemory=createNavigationMemory();
-const pageTitles={triage:'Triage',monitoring:'User Review',stats:'Statistik',incidents:'Insiden',imports:'Impor',reports:'Laporan',realtime:'Realtime',pull:'Ambil Alert','ai-triage':'AI Triage','wazuh-queries':'Rumus Query Wazuh','error-codes':'Kamus Error Code',database:'Database',settings:'Pengaturan'};
+const pageTitles={triage:'Triage',flags:'Flag & Rule Tuning',monitoring:'User Review',stats:'Statistik',incidents:'Insiden',imports:'Impor',reports:'Laporan',realtime:'Realtime',pull:'Ambil Alert','ai-triage':'AI Triage','wazuh-queries':'Rumus Query Wazuh','error-codes':'Kamus Error Code',database:'Database',settings:'Pengaturan'};
 const adminOnlyPages=new Set(['database','settings']);
 const roleLabels={admin:'Admin',director:'Director / Lead',analyst:'Analis'};
 let currentUser=null, authChecked=false;
@@ -105,7 +105,7 @@ function renderLoginGate(){
       document.querySelector('#sidebar')?.removeAttribute('hidden');
       document.querySelector('.utility-bar')?.removeAttribute('hidden');
       applyUserPermissions();
-      health();tenants();loadWorkspaceSettings();
+      health();tenants();loadWorkspaceSettings();checkFlagSummary();
       if(currentRoute)render(currentRoute);else router.start();
     }catch(err){
       if(errEl)errEl.textContent=err.message||'Username atau password salah.';
@@ -137,6 +137,7 @@ async function render(route){
   const scope=routeScope(route.params);
   tenantSelect.textContent=scope.label;
   tenantSelect.title=scope.all?'Semua tenant':scope.tenants.join(', ');
+  checkFlagSummary(route.params);
   for(const link of document.querySelectorAll('.nav-link')){
     const active=link.dataset.page===route.page;
     active?link.setAttribute('aria-current','page'):link.removeAttribute('aria-current');
@@ -176,12 +177,35 @@ async function health(force=false){
   try{const result=await probeConnection(()=>json('/api/health',{timeout:10000}),lastHealth);lastHealth=result.lastSuccess;el.dataset.state=result.state;el.querySelector('.connection-label').textContent=result.label;el.title=lastHealth?`${result.label} · Terakhir diperiksa ${lastHealth.toLocaleTimeString('id-ID')}`:result.label;}
   finally{healthPending=false;}
 }
+async function checkFlagSummary(params=null){
+  const badge=document.querySelector('#nav-flag-badge');
+  if(!badge||databaseUnverified)return;
+  const epoch=databaseEpoch;
+  try{
+    const scope=routeScope(params||(currentRoute?.params||parseRoute(location.hash).params));
+    const body=await json(`/api/flags/summary?${scopeParams(scope)}`,{timeout:10000});
+    if(epoch!==databaseEpoch)return;
+    const pending=Number(body?.pending_tuning||0);
+    const counts=body?.counts||{};
+    if(pending>0){
+      badge.hidden=false;
+      badge.textContent=pending>999?'999+':String(pending);
+      badge.title=`${pending.toLocaleString('id-ID')} alert belum dibuat rule (Hijau pending ${Number(counts.green?.pending||0)}, Kuning pending ${Number(counts.yellow?.pending||0)}, Merah ${Number(counts.red?.total||0)})`;
+    }else{
+      badge.hidden=true;
+      badge.textContent='';
+    }
+  }catch{
+    badge.hidden=true;
+  }
+}
 let tenantRows=[], databaseEpoch=0, databaseUnverified=false;
 function databaseChanged(status){
   databaseEpoch++;databaseUnverified=!status;
   selection.clear();selection.setScope('all',true);
   navigationMemory=createNavigationMemory();scrollPositions.clear();
   tenantRows=status?.tenants||[];
+  const fb=document.querySelector('#nav-flag-badge');if(fb){fb.hidden=true;fb.textContent='';}
   if(currentRoute)currentRoute.params=new URLSearchParams('tenant=all');
   history.replaceState(null,'','#/database?tenant=all');
   window.dispatchEvent(new Event('arbiter:route-replaced'));
@@ -220,7 +244,7 @@ tenantForm.addEventListener('submit',event=>{
 });
 tenantDialog.querySelectorAll('[data-close-tenant-scope]').forEach(button=>button.addEventListener('click',()=>tenantDialog.close()));
 document.querySelector('#refresh-workspace').addEventListener('click',async e=>{
-  const button=e.currentTarget;button.disabled=true;await Promise.all([health(),tenants()]);main.dispatchEvent(new CustomEvent('arbiter:refresh'));button.disabled=false;
+  const button=e.currentTarget;button.disabled=true;await Promise.all([health(),tenants(),checkFlagSummary()]);main.dispatchEvent(new CustomEvent('arbiter:refresh'));button.disabled=false;
 });
 const sidebar=document.querySelector('#sidebar'),scrim=document.querySelector('#nav-scrim');
 function openNav(){sidebar.classList.add('is-open');scrim.classList.add('is-open');document.querySelector('#open-navigation').setAttribute('aria-expanded','true');document.querySelector('#workspace').inert=true;sidebar.querySelector('.nav-link')?.focus();}
@@ -275,6 +299,7 @@ realtimeToggle.addEventListener('click',async e=>{
 });
 window.addEventListener('arbiter:settings-saved',event=>{applyWorkspaceSettings(event.detail,true);});
 window.addEventListener('arbiter:realtime-changed',event=>{if(event.detail){realtimeState={enabled:Boolean(event.detail.enabled),interval_seconds:Number(event.detail.interval_seconds)||30};paintRealtime();}});
+window.addEventListener('arbiter:flags-changed',()=>{checkFlagSummary();});
 const pullActivity=document.querySelector('#pull-activity');
 if(pullActivity)pullActivity.innerHTML=`${icon('upload')}<span class="pull-activity-label">Mengambil alert…</span>`;
 async function checkPullActivity(){
@@ -296,4 +321,5 @@ document.querySelector('.skip-link').addEventListener('click',e=>{e.preventDefau
 window.addEventListener('beforeunload',e=>{if(guard&&!guard()){e.preventDefault();e.returnValue='';}});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){health();checkPullActivity();}});
 window.addEventListener('online',health);window.addEventListener('offline',health);
+checkFlagSummary();
 router.start();health();tenants();loadWorkspaceSettings();checkPullActivity();setInterval(()=>{health();checkPullActivity();},15000);

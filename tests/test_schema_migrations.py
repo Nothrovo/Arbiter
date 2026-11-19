@@ -24,6 +24,18 @@ class SchemaMigrationOrderTests(unittest.TestCase):
             init.index("idx_wazuh_alerts_claim_status"),
         )
 
+    def test_flag_index_is_created_after_flag_columns(self):
+        schema = SOURCE.split('SCHEMA_SQL = """', 1)[1].split('"""', 1)[0]
+        self.assertNotIn("CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_flag_rule_status", schema)
+        init = SOURCE.split("def init_database", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("ADD COLUMN IF NOT EXISTS flag_color", init)
+        self.assertIn("ADD COLUMN IF NOT EXISTS rule_status", init)
+        self.assertIn("idx_wazuh_alerts_flag_rule_status", init)
+        self.assertLess(
+            init.index("ADD COLUMN IF NOT EXISTS rule_status"),
+            init.index("idx_wazuh_alerts_flag_rule_status"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

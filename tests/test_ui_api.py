@@ -58,6 +58,9 @@ class SyntheticDB:
         self.connection.execute("ATTACH DATABASE ':memory:' AS wazuh")
         self.connection.execute("ATTACH DATABASE ':memory:' AS public")
         self.connection.create_function("split_part", 3, lambda s, d, n: (s or "").split(d)[n - 1] if s and len((s or "").split(d)) >= n else (s or ""))
+        self.connection.create_function(
+            "regexp", 2, lambda pat, val: 1 if (val is not None and re.search(pat, str(val), re.I)) else 0
+        )
         self.connection.executescript("""
         CREATE TABLE wazuh.alerts (
             id INTEGER PRIMARY KEY, alert_id TEXT, timestamp TEXT, tenant TEXT,
@@ -68,7 +71,11 @@ class SyntheticDB:
             duplicate_instances TEXT, parsed_details TEXT, is_reviewed INTEGER,
             reviewer_notes TEXT, reviewed_at TEXT, log_signature TEXT,
             status TEXT DEFAULT 'unread', claimed_by TEXT, claimed_at TEXT,
-            verdict TEXT, reviewed_by TEXT, imported_at TEXT DEFAULT '2026-01-01T00:00:00Z'
+            verdict TEXT, reviewed_by TEXT,
+            flag_color TEXT, flagged_by TEXT, flagged_at TEXT,
+            rule_status TEXT DEFAULT 'pending', custom_rule_id TEXT,
+            rule_notes TEXT DEFAULT '', rule_updated_by TEXT, rule_updated_at TEXT,
+            imported_at TEXT DEFAULT '2026-01-01T00:00:00Z'
         );
         CREATE TABLE wazuh.alert_raw (
             alert_pk INTEGER PRIMARY KEY, raw TEXT, duplicate_instances TEXT, created_at TEXT
@@ -143,6 +150,7 @@ class SyntheticDB:
     def execute(self, sql, params=()):
         self.calls.append((sql, list(params)))
         translated = re.sub(r"\bILIKE\b", "LIKE", sql)
+        translated = translated.replace("~*", "REGEXP")
         translated = translated.replace("now()", "CURRENT_TIMESTAMP")
         translated = re.sub(r"::(?:text|uuid|jsonb)", "", translated)
         translated = translated.replace("json_agg(", "json_group_array(").replace("json_build_object(", "json_object(")

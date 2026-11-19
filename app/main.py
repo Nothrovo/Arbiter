@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -273,6 +274,256 @@ def import_text(payload: dict[str, Any]):
 
 CLAIM_TIMEOUT_SECONDS = 30 * 60  # 30 minutes per PRD Section 3.B
 ALLOWED_VERDICTS = {"tp", "fp", "benign", "needs_review"}
+ALLOWED_FLAG_COLORS = {"green", "yellow", "red"}
+ALLOWED_RULE_STATUSES = {"pending", "done"}
+FLAG_TO_DEFAULT_VERDICT = {"green": "fp", "yellow": "needs_review", "red": "tp"}
+
+
+def _flag_counts(conn, tenant: str | list[str] | tuple[str, ...] | None = "all") -> dict[str, Any]:
+    t_sql, t_params = tenant_clause("a", tenant)
+    t_where = f"WHERE {t_sql}" if t_sql else ""
+    try:
+        row = conn.execute(
+            f"""SELECT
+                    COUNT(*) FILTER (WHERE a.flag_color = 'green') AS green_total,
+                    COUNT(*) FILTER (WHERE a.flag_color = 'green' AND COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done') AS green_pending,
+                    COUNT(*) FILTER (WHERE a.flag_color = 'green' AND a.rule_status = 'done') AS green_done,
+                    COUNT(*) FILTER (WHERE a.flag_color = 'yellow') AS yellow_total,
+                    COUNT(*) FILTER (WHERE a.flag_color = 'yellow' AND COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done') AS yellow_pending,
+                    COUNT(*) FILTER (WHERE a.flag_color = 'yellow' AND a.rule_status = 'done') AS yellow_done,
+                    COUNT(*) FILTER (WHERE a.flag_color = 'red') AS red_total
+                FROM wazuh.alerts a {t_where}""",
+            t_params,
+        ).fetchone()
+    except Exception:
+        row = None
+    g_tot = int((row or {}).get("green_total") or 0)
+    g_pen = int((row or {}).get("green_pending") or 0)
+    g_don = int((row or {}).get("green_done") or 0)
+    y_tot = int((row or {}).get("yellow_total") or 0)
+    y_pen = int((row or {}).get("yellow_pending") or 0)
+    y_don = int((row or {}).get("yellow_done") or 0)
+    r_tot = int((row or {}).get("red_total") or 0)
+    return {
+        "counts": {
+            "green": {"total": g_tot, "pending": g_pen, "done": g_don},
+            "yellow": {"total": y_tot, "pending": y_pen, "done": y_don},
+            "red": {"total": r_tot, "pending": 0, "done": 0},
+        },
+        "pending_tuning": g_pen + y_pen,
+        "total_flagged": g_tot + y_tot + r_tot,
+    }
+
+
+def _flag_pattern_predicate(pattern: str, pattern_mode: str) -> tuple[str, list[Any]]:
+    pat = str(pattern or "").strip()
+    if len(pat) > 120:
+        raise HTTPException(status_code=422, detail="Pola teks maksimal 120 karakter.")
+    mode = str(pattern_mode or "contains").strip().lower()
+    if mode not in {"contains", "regex"}:
+        raise HTTPException(status_code=422, detail="pattern_mode harus 'contains' atau 'regex'.")
+    if not pat:
+        return "", []
+    if mode == "regex":
+        try:
+            re.compile(pat)
+        except re.error as exc:
+            raise HTTPException(status_code=422, detail=f"Regex pola tidak valid: {exc}") from None
+        expr = (
+            "(a.description ~* %s OR COALESCE(a.raw->>'full_log', '') ~* %s "
+            "OR a.raw::text ~* %s OR a.parsed_details::text ~* %s)"
+        )
+        return expr, [pat] * 4
+    expr = (
+        "(a.description ILIKE %s OR COALESCE(a.raw->>'full_log', '') ILIKE %s "
+        "OR a.raw::text ILIKE %s OR a.parsed_details::text ILIKE %s)"
+    )
+    return expr, [f"%{pat}%"] * 4
+
+
+def _build_flag_scope_where(
+    *,
+    tenant: Any,
+    flag_color: str,
+    rule_status: str = "all",
+    q: str = "",
+    group_by: str | None = None,
+    group_key: str | None = None,
+    pattern: str = "",
+    pattern_mode: str = "contains",
+) -> tuple[str, list[Any]]:
+    color = str(flag_color or "").strip().lower()
+    if color not in ALLOWED_FLAG_COLORS:
+        raise HTTPException(status_code=422, detail="flag_color harus 'green', 'yellow', atau 'red'.")
+    r_status = str(rule_status or "all").strip().lower()
+    if r_status not in {"all", "pending", "done"}:
+        raise HTTPException(status_code=422, detail="rule_status harus 'all', 'pending', atau 'done'.")
+    clauses = ["a.flag_color = %s"]
+    params: list[Any] = [color]
+    t_sql, t_params = tenant_clause("a", tenant)
+    if t_sql:
+        clauses.append(t_sql)
+        params.extend(t_params)
+    if color != "red":
+        if r_status == "pending":
+            clauses.append("COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done'")
+        elif r_status == "done":
+            clauses.append("a.rule_status = 'done'")
+    search_q = str(q or "").strip()
+    if search_q:
+        cols = (
+            "a.alert_id", "a.agent_name", "a.rule_id", "a.description",
+            "a.source_ip", "a.custom_rule_id", "a.rule_notes", "a.raw::text",
+        )
+        clauses.append("(" + " OR ".join(f"{col} ILIKE %s" for col in cols) + ")")
+        params.extend([f"%{search_q}%"] * len(cols))
+    if group_by is not None and group_key is not None:
+        if group_by not in PIVOT_DEFINITIONS:
+            raise HTTPException(status_code=422, detail=f"Parameter pengelompokan '{group_by}' tidak didukung.")
+        if group_by == "pattern":
+            match_expr, match_params = _flag_pattern_predicate(pattern, pattern_mode)
+            if not match_expr:
+                clauses.append("1 = 0")
+            elif group_key == "Cocok pola":
+                clauses.append(match_expr)
+                params.extend(match_params)
+            elif group_key == "Tidak cocok pola":
+                clauses.append(f"NOT ({match_expr})")
+                params.extend(match_params)
+            else:
+                clauses.append("1 = 0")
+        else:
+            dim_sql = PIVOT_DEFINITIONS[group_by]["sql"]
+            clauses.append(f"({dim_sql}) = %s")
+            params.append(str(group_key))
+    return "WHERE " + " AND ".join(clauses), params
+
+
+def _apply_flag_update(
+    conn,
+    clean_pks: list[int],
+    *,
+    flag_color: str | None,
+    actor: str,
+    auto_review: bool,
+    reviewer_notes: str,
+    tenant: Any,
+) -> dict[str, Any]:
+    if not clean_pks:
+        raise HTTPException(status_code=400, detail="Pilih minimal satu alert.")
+    rows = conn.execute(
+        "SELECT id, tenant, is_reviewed, verdict, flag_color FROM wazuh.alerts WHERE id = ANY(%s)",
+        (clean_pks,),
+    ).fetchall()
+    if not flag_color:
+        conn.execute(
+            """UPDATE wazuh.alerts
+               SET flag_color = NULL,
+                   flagged_by = NULL,
+                   flagged_at = NULL,
+                   rule_status = 'pending',
+                   custom_rule_id = NULL,
+                   rule_notes = '',
+                   rule_updated_by = NULL,
+                   rule_updated_at = NULL
+               WHERE id = ANY(%s)""",
+            (clean_pks,),
+        )
+        return {
+            "status": "ok",
+            "count": len(clean_pks),
+            "flag_color": None,
+            "flagged_by": None,
+            "summary": _flag_counts(conn, tenant),
+        }
+
+    if not auto_review:
+        unreviewed = [
+            r for r in rows
+            if not r.get("is_reviewed") and not str(r.get("verdict") or "").strip()
+        ]
+        if unreviewed:
+            raise HTTPException(
+                status_code=400,
+                detail="Alert harus berstatus direview / dianalisa sebelum dapat diberikan Flag.",
+            )
+
+    mapped_verdict = FLAG_TO_DEFAULT_VERDICT[flag_color]
+    if auto_review:
+        conn.execute(
+            """UPDATE wazuh.alerts
+               SET is_reviewed = true,
+                   reviewed_at = COALESCE(reviewed_at, now()),
+                   status = 'reviewed',
+                   verdict = %s,
+                   reviewed_by = %s,
+                   claimed_by = COALESCE(claimed_by, %s),
+                   reviewer_notes = CASE WHEN %s != '' THEN %s ELSE reviewer_notes END,
+                   flag_color = %s,
+                   flagged_by = %s,
+                   flagged_at = now(),
+                   rule_status = CASE WHEN %s = 'red' THEN 'pending' ELSE COALESCE(NULLIF(rule_status, ''), 'pending') END,
+                   custom_rule_id = CASE WHEN %s = 'red' THEN NULL ELSE custom_rule_id END,
+                   rule_notes = CASE WHEN %s = 'red' THEN '' ELSE rule_notes END,
+                   rule_updated_by = CASE WHEN %s = 'red' THEN NULL ELSE rule_updated_by END,
+                   rule_updated_at = CASE WHEN %s = 'red' THEN NULL ELSE rule_updated_at END
+               WHERE id = ANY(%s)""",
+            (
+                mapped_verdict,
+                actor,
+                actor,
+                reviewer_notes,
+                reviewer_notes,
+                flag_color,
+                actor,
+                flag_color,
+                flag_color,
+                flag_color,
+                flag_color,
+                flag_color,
+                clean_pks,
+            ),
+        )
+        if hasattr(db_module, "bump_daily_metrics"):
+            per_tenant: dict[str, int] = {}
+            for r in rows:
+                if not r.get("is_reviewed"):
+                    t_key = str(r.get("tenant") or "Default")
+                    per_tenant[t_key] = per_tenant.get(t_key, 0) + 1
+            for t_key, cnt in per_tenant.items():
+                db_module.bump_daily_metrics(conn, t_key, reviewed_delta=cnt, verdict=mapped_verdict)
+    else:
+        conn.execute(
+            """UPDATE wazuh.alerts
+               SET flag_color = %s,
+                   flagged_by = %s,
+                   flagged_at = now(),
+                   rule_status = CASE WHEN %s = 'red' THEN 'pending' ELSE COALESCE(NULLIF(rule_status, ''), 'pending') END,
+                   custom_rule_id = CASE WHEN %s = 'red' THEN NULL ELSE custom_rule_id END,
+                   rule_notes = CASE WHEN %s = 'red' THEN '' ELSE rule_notes END,
+                   rule_updated_by = CASE WHEN %s = 'red' THEN NULL ELSE rule_updated_by END,
+                   rule_updated_at = CASE WHEN %s = 'red' THEN NULL ELSE rule_updated_at END
+               WHERE id = ANY(%s)""",
+            (
+                flag_color,
+                actor,
+                flag_color,
+                flag_color,
+                flag_color,
+                flag_color,
+                flag_color,
+                clean_pks,
+            ),
+        )
+
+    return {
+        "status": "ok",
+        "count": len(clean_pks),
+        "flag_color": flag_color,
+        "verdict": mapped_verdict,
+        "flagged_by": actor,
+        "summary": _flag_counts(conn, tenant),
+    }
 
 
 def _current_username(request: Request | None, fallback: str = "analyst") -> str:
@@ -356,7 +607,8 @@ def list_alerts(
     projection = """a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
         a.rule_id, a.rule_level, a.description, a.rule_groups, a.decoder, a.location,
         a.source_ip, a.mitre_ids, a.cve, a.hit_count, a.first_seen, a.last_seen, a.is_reviewed, a.reviewed_at,
-        a.status, a.claimed_by, a.claimed_at, a.verdict, a.reviewed_by"""
+        a.status, a.claimed_by, a.claimed_at, a.verdict, a.reviewed_by,
+        a.flag_color, a.flagged_by, a.flagged_at, a.rule_status, a.custom_rule_id, a.rule_notes, a.rule_updated_by, a.rule_updated_at"""
     if not summary:
         projection += """, a.data, a.raw, a.wazuh_ids, a.duplicate_instances,
         a.parsed_details, a.reviewer_notes,
@@ -394,7 +646,10 @@ def list_alerts(
         try:
             rows = conn.execute(sql, scoped_params + [limit, offset]).fetchall()
         except Exception:
-            fallback_proj = projection.replace(",\n        a.status, a.claimed_by, a.claimed_at, a.verdict, a.reviewed_by", "")
+            fallback_proj = projection.replace(
+                ",\n        a.status, a.claimed_by, a.claimed_at, a.verdict, a.reviewed_by,\n        a.flag_color, a.flagged_by, a.flagged_at, a.rule_status, a.custom_rule_id, a.rule_notes, a.rule_updated_by, a.rule_updated_at",
+                "",
+            )
             fallback_sql = sql.replace(projection, fallback_proj)
             rows = conn.execute(fallback_sql, scoped_params + [limit, offset]).fetchall()
         total = conn.execute(count_sql, scoped_params).fetchone()["n"]
@@ -584,6 +839,15 @@ def update_alert_review(
         if v_clean not in ALLOWED_VERDICTS:
             raise HTTPException(status_code=400, detail="Verdict harus berupa 'tp', 'fp', 'benign', atau 'needs_review'.")
         verdict = v_clean
+    raw_flag = payload.get("flag_color")
+    flag_color: str | None = None
+    if raw_flag is not None and str(raw_flag).strip() != "":
+        f_clean = str(raw_flag).strip().lower()
+        if f_clean not in ALLOWED_FLAG_COLORS:
+            raise HTTPException(status_code=400, detail="Flag harus berupa 'green', 'yellow', atau 'red'.")
+        flag_color = f_clean
+        if verdict is None:
+            verdict = FLAG_TO_DEFAULT_VERDICT[flag_color]
     reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
     new_status = "reviewed" if is_reviewed else "unread"
     with get_db() as conn:
@@ -598,7 +862,15 @@ def update_alert_review(
                        status = %s,
                        verdict = CASE WHEN %s THEN COALESCE(%s, verdict) ELSE NULL END,
                        reviewed_by = CASE WHEN %s THEN %s ELSE NULL END,
-                       claimed_by = CASE WHEN %s THEN COALESCE(claimed_by, %s) ELSE NULL END
+                       claimed_by = CASE WHEN %s THEN COALESCE(claimed_by, %s) ELSE NULL END,
+                       flag_color = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flag_color END,
+                       flagged_by = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flagged_by END,
+                       flagged_at = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN now() ELSE flagged_at END,
+                       rule_status = CASE WHEN NOT %s OR %s = 'red' THEN 'pending' ELSE rule_status END,
+                       custom_rule_id = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE custom_rule_id END,
+                       rule_notes = CASE WHEN NOT %s OR %s = 'red' THEN '' ELSE rule_notes END,
+                       rule_updated_by = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_by END,
+                       rule_updated_at = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_at END
                    WHERE id = %s""",
                 (
                     is_reviewed,
@@ -611,6 +883,14 @@ def update_alert_review(
                     reviewer,
                     is_reviewed,
                     reviewer,
+                    is_reviewed, flag_color, flag_color,
+                    is_reviewed, flag_color, reviewer,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
                     alert_id,
                 ),
             )
@@ -625,7 +905,7 @@ def update_alert_review(
             )
         if prev and is_reviewed and not prev.get("is_reviewed") and hasattr(db_module, "bump_daily_metrics"):
             db_module.bump_daily_metrics(conn, str(prev.get("tenant") or "Default"), reviewed_delta=1, verdict=verdict)
-    return {"status": "ok", "id": alert_id, "is_reviewed": is_reviewed, "verdict": verdict, "alert_status": new_status}
+    return {"status": "ok", "id": alert_id, "is_reviewed": is_reviewed, "verdict": verdict, "flag_color": flag_color if is_reviewed else None, "alert_status": new_status}
 
 
 @app.post("/api/alerts/batch-review")
@@ -644,6 +924,15 @@ def batch_update_review(
         if v_clean not in ALLOWED_VERDICTS:
             raise HTTPException(status_code=400, detail="Verdict harus berupa 'tp', 'fp', 'benign', atau 'needs_review'.")
         verdict = v_clean
+    raw_flag = payload.get("flag_color")
+    flag_color: str | None = None
+    if raw_flag is not None and str(raw_flag).strip() != "":
+        f_clean = str(raw_flag).strip().lower()
+        if f_clean not in ALLOWED_FLAG_COLORS:
+            raise HTTPException(status_code=400, detail="Flag harus berupa 'green', 'yellow', atau 'red'.")
+        flag_color = f_clean
+        if verdict is None:
+            verdict = FLAG_TO_DEFAULT_VERDICT[flag_color]
     notes = str(payload.get("reviewer_notes") or "").strip()
     reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
     new_status = "reviewed" if is_reviewed else "unread"
@@ -659,7 +948,15 @@ def batch_update_review(
                        status = %s,
                        verdict = CASE WHEN %s THEN COALESCE(%s, verdict) ELSE NULL END,
                        reviewed_by = CASE WHEN %s THEN %s ELSE NULL END,
-                       reviewer_notes = CASE WHEN %s != '' THEN %s ELSE reviewer_notes END
+                       reviewer_notes = CASE WHEN %s != '' THEN %s ELSE reviewer_notes END,
+                       flag_color = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flag_color END,
+                       flagged_by = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flagged_by END,
+                       flagged_at = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN now() ELSE flagged_at END,
+                       rule_status = CASE WHEN NOT %s OR %s = 'red' THEN 'pending' ELSE rule_status END,
+                       custom_rule_id = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE custom_rule_id END,
+                       rule_notes = CASE WHEN NOT %s OR %s = 'red' THEN '' ELSE rule_notes END,
+                       rule_updated_by = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_by END,
+                       rule_updated_at = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_at END
                    WHERE id = ANY(%s)""",
                 (
                     is_reviewed,
@@ -671,6 +968,14 @@ def batch_update_review(
                     reviewer,
                     notes,
                     notes,
+                    is_reviewed, flag_color, flag_color,
+                    is_reviewed, flag_color, reviewer,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
+                    is_reviewed, flag_color,
                     clean_pks,
                 ),
             )
@@ -684,7 +989,7 @@ def batch_update_review(
             )
         if is_reviewed and hasattr(db_module, "bump_daily_metrics"):
             db_module.bump_daily_metrics(conn, _tenant_label(tenant), reviewed_delta=len(clean_pks), verdict=verdict)
-    return {"status": "ok", "count": len(clean_pks), "is_reviewed": is_reviewed, "verdict": verdict, "alert_status": new_status}
+    return {"status": "ok", "count": len(clean_pks), "is_reviewed": is_reviewed, "verdict": verdict, "flag_color": flag_color if is_reviewed else None, "alert_status": new_status}
 
 
 @app.post("/api/alerts/bulk-verdict-pattern")
@@ -693,13 +998,21 @@ def bulk_verdict_by_pattern(
     request: Request,
     tenant: list[str] = Query(default=["all"]),
 ):
-    """PRD Section 3.B Bulk Actions & Pattern Grouping: apply verdict (TP/FP/Benign) across similar alerts matching pattern/rule/IP."""
+    """Bulk Actions & Pattern Grouping: apply Flag (green/yellow/red) or legacy verdict across matching alerts."""
     normalize_tenants(tenant)
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Payload bulk verdict tidak valid.")
+        raise HTTPException(status_code=400, detail="Payload bulk pola tidak valid.")
+    raw_flag = str(payload.get("flag_color") or "").strip().lower()
     raw_verdict = str(payload.get("verdict") or "").strip().lower()
-    if raw_verdict not in {"tp", "fp", "benign"}:
-        raise HTTPException(status_code=400, detail="Verdict wajib dipilih: 'tp', 'fp', atau 'benign'.")
+    flag_color: str | None = None
+    if raw_flag:
+        if raw_flag not in ALLOWED_FLAG_COLORS:
+            raise HTTPException(status_code=400, detail="Flag wajib dipilih: 'green', 'yellow', atau 'red'.")
+        flag_color = raw_flag
+        if raw_verdict not in {"tp", "fp", "benign"}:
+            raw_verdict = FLAG_TO_DEFAULT_VERDICT[flag_color]
+    elif raw_verdict not in {"tp", "fp", "benign"}:
+        raise HTTPException(status_code=400, detail="Pilih Flag ('green', 'yellow', 'red') atau verdict ('tp', 'fp', 'benign').")
 
     dry_run = bool(payload.get("dry_run", False))
     rule_id = str(payload.get("rule_id") or "").strip()
@@ -708,7 +1021,8 @@ def bulk_verdict_by_pattern(
     agent_name = str(payload.get("agent_name") or "").strip()
     q = str(payload.get("q") or "").strip()
     only_unreviewed = bool(payload.get("only_unreviewed", True))
-    notes = str(payload.get("reviewer_notes") or f"Bulk pattern verdict: {raw_verdict.upper()}").strip()
+    default_label = f"Flag {flag_color.upper()}" if flag_color else raw_verdict.upper()
+    notes = str(payload.get("reviewer_notes") or f"Bulk pattern: {default_label}").strip()
     reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
 
     if not any([rule_id, description, source_ip, agent_name, q]):
@@ -754,18 +1068,40 @@ def bulk_verdict_by_pattern(
                 "dry_run": dry_run,
                 "count": len(pks),
                 "verdict": raw_verdict,
+                "flag_color": flag_color,
             }
-        conn.execute(
-            """UPDATE wazuh.alerts
-               SET is_reviewed = true,
-                   reviewed_at = now(),
-                   status = 'reviewed',
-                   verdict = %s,
-                   reviewed_by = %s,
-                   reviewer_notes = %s
-               WHERE id = ANY(%s)""",
-            (raw_verdict, reviewer, notes, pks),
-        )
+        if flag_color:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = true,
+                       reviewed_at = now(),
+                       status = 'reviewed',
+                       verdict = %s,
+                       reviewed_by = %s,
+                       reviewer_notes = %s,
+                       flag_color = %s,
+                       flagged_by = %s,
+                       flagged_at = now(),
+                       rule_status = 'pending',
+                       custom_rule_id = NULL,
+                       rule_notes = '',
+                       rule_updated_by = NULL,
+                       rule_updated_at = NULL
+                   WHERE id = ANY(%s)""",
+                (raw_verdict, reviewer, notes, flag_color, reviewer, pks),
+            )
+        else:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = true,
+                       reviewed_at = now(),
+                       status = 'reviewed',
+                       verdict = %s,
+                       reviewed_by = %s,
+                       reviewer_notes = %s
+                   WHERE id = ANY(%s)""",
+                (raw_verdict, reviewer, notes, pks),
+            )
         if hasattr(db_module, "bump_daily_metrics"):
             per_tenant: dict[str, int] = {}
             for r in matching_rows:
@@ -778,6 +1114,7 @@ def bulk_verdict_by_pattern(
         "dry_run": False,
         "count": len(pks),
         "verdict": raw_verdict,
+        "flag_color": flag_color,
         "reviewed_by": reviewer,
     }
 
@@ -3945,3 +4282,345 @@ def api_delete_wazuh_query(query_id: str):
         data["items"] = filtered
         save_document(conn, WAZUH_QUERIES_STATE_KEY, data)
     return {"deleted": target, "items": filtered, "queries": filtered, "notepad": str(data.get("notepad") or "")}
+
+
+@app.post("/api/alerts/flag")
+def api_flag_alerts(
+    payload: dict[str, Any],
+    request: Request,
+    tenant: list[str] = Query(default=["all"]),
+):
+    normalize_tenants(tenant)
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload flag tidak valid.")
+    raw_flag = payload.get("flag_color")
+    flag_color: str | None = None
+    if raw_flag is not None and str(raw_flag).strip() != "":
+        f_clean = str(raw_flag).strip().lower()
+        if f_clean not in ALLOWED_FLAG_COLORS:
+            raise HTTPException(status_code=400, detail="Warna flag harus 'green', 'yellow', atau 'red'.")
+        flag_color = f_clean
+    alert_ids = payload.get("alert_ids") or []
+    if not isinstance(alert_ids, list) or not alert_ids:
+        raise HTTPException(status_code=400, detail="Pilih minimal satu alert.")
+    auto_review = bool(payload.get("auto_review", False))
+    notes = str(payload.get("reviewer_notes") or "").strip()
+    actor = str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst"
+    with get_db() as conn:
+        clean_pks = _validate_membership(conn, alert_ids, tenant)
+        return _apply_flag_update(
+            conn,
+            clean_pks,
+            flag_color=flag_color,
+            actor=actor,
+            auto_review=auto_review,
+            reviewer_notes=notes,
+            tenant=tenant,
+        )
+
+
+@app.put("/api/alerts/{alert_id}/flag")
+def api_flag_single_alert(
+    alert_id: int,
+    payload: dict[str, Any],
+    request: Request,
+    tenant: list[str] = Query(default=["all"]),
+):
+    normalize_tenants(tenant)
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload flag tidak valid.")
+    raw_flag = payload.get("flag_color")
+    flag_color: str | None = None
+    if raw_flag is not None and str(raw_flag).strip() != "":
+        f_clean = str(raw_flag).strip().lower()
+        if f_clean not in ALLOWED_FLAG_COLORS:
+            raise HTTPException(status_code=400, detail="Warna flag harus 'green', 'yellow', atau 'red'.")
+        flag_color = f_clean
+    auto_review = bool(payload.get("auto_review", False))
+    notes = str(payload.get("reviewer_notes") or "").strip()
+    actor = str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst"
+    with get_db() as conn:
+        clean_pks = _validate_membership(conn, [alert_id], tenant)
+        res = _apply_flag_update(
+            conn,
+            clean_pks,
+            flag_color=flag_color,
+            actor=actor,
+            auto_review=auto_review,
+            reviewer_notes=notes,
+            tenant=tenant,
+        )
+        res["id"] = alert_id
+        return res
+
+
+@app.get("/api/flags/summary")
+def api_flags_summary(tenant: list[str] = Query(default=["all"])):
+    normalize_tenants(tenant)
+    with get_db() as conn:
+        return _flag_counts(conn, tenant)
+
+
+@app.get("/api/flags/groups")
+def api_flags_groups(
+    tenant: list[str] = Query(default=["all"]),
+    flag_color: str = "green",
+    rule_status: str = "pending",
+    group_by: str = "rule_description",
+    pattern: str = "",
+    pattern_mode: str = "contains",
+    q: str = "",
+    limit: int = 200,
+):
+    normalize_tenants(tenant)
+    if group_by not in PIVOT_DEFINITIONS:
+        raise HTTPException(status_code=422, detail=f"Parameter pengelompokan '{group_by}' tidak didukung.")
+    limit = min(max(int(limit or 200), 1), 500)
+    color = str(flag_color or "green").strip().lower()
+    effective_rule_status = "all" if color == "red" else str(rule_status or "pending").strip().lower()
+    where_sql, params = _build_flag_scope_where(
+        tenant=tenant,
+        flag_color=color,
+        rule_status=effective_rule_status,
+        q=q,
+    )
+
+    dim_params: list[Any] = []
+    pattern_required = False
+    if group_by == "pattern":
+        match_expr, match_params = _flag_pattern_predicate(pattern, pattern_mode)
+        if not match_expr:
+            pattern_required = True
+            dim_sql = ""
+        else:
+            dim_sql = f"CASE WHEN {match_expr} THEN 'Cocok pola' ELSE 'Tidak cocok pola' END"
+            dim_params = match_params
+    else:
+        dim_sql = PIVOT_DEFINITIONS[group_by]["sql"]
+
+    with get_db() as conn:
+        summary = _flag_counts(conn, tenant)
+        if pattern_required:
+            return {
+                "flag_color": color,
+                "rule_status": effective_rule_status,
+                "group_by": group_by,
+                "group_by_label": PIVOT_DEFINITIONS[group_by]["label"],
+                "pattern": pattern.strip(),
+                "pattern_mode": str(pattern_mode or "contains").strip().lower(),
+                "pattern_required": True,
+                "total_alerts": 0,
+                "total_groups": 0,
+                "groups": [],
+                **summary,
+            }
+
+        tot_row = conn.execute(
+            f"SELECT COUNT(*) AS n FROM wazuh.alerts a {where_sql}",
+            params,
+        ).fetchone()
+        total_alerts = int((tot_row or {}).get("n") or 0)
+        rows = conn.execute(
+            f"""SELECT {dim_sql} AS k,
+                       COUNT(*) AS alert_count,
+                       COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS event_hits,
+                       COUNT(*) FILTER (WHERE COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done') AS pending_count,
+                       COUNT(*) FILTER (WHERE a.rule_status = 'done') AS done_count,
+                       MIN(NULLIF(a.timestamp, '')) AS earliest,
+                       MAX(NULLIF(a.timestamp, '')) AS latest,
+                       MAX(NULLIF(a.custom_rule_id, '')) AS custom_rule_id,
+                       MAX(NULLIF(a.rule_notes, '')) AS rule_notes,
+                       MAX(NULLIF(a.rule_updated_by, '')) AS rule_updated_by,
+                       MAX(a.rule_updated_at) AS rule_updated_at
+                FROM wazuh.alerts a {where_sql}
+                GROUP BY 1
+                ORDER BY 2 DESC, 1 ASC
+                LIMIT %s""",
+            dim_params + params + [limit],
+        ).fetchall()
+
+    groups: list[dict[str, Any]] = []
+    for r in rows:
+        pending_c = int(r.get("pending_count") or 0)
+        done_c = int(r.get("done_count") or 0)
+        if color == "red":
+            grp_status = "none"
+        elif pending_c == 0 and done_c > 0:
+            grp_status = "done"
+        elif done_c == 0:
+            grp_status = "pending"
+        else:
+            grp_status = "partial"
+        groups.append({
+            "key": str(r["k"] if r.get("k") is not None else "Tidak tersedia"),
+            "alert_count": int(r.get("alert_count") or 0),
+            "event_hits": int(r.get("event_hits") or 0),
+            "pending_count": pending_c,
+            "done_count": done_c,
+            "rule_status": grp_status,
+            "earliest": r.get("earliest") or "",
+            "latest": r.get("latest") or "",
+            "custom_rule_id": r.get("custom_rule_id") or "",
+            "rule_notes": r.get("rule_notes") or "",
+            "rule_updated_by": r.get("rule_updated_by") or "",
+            "rule_updated_at": str(r["rule_updated_at"]) if r.get("rule_updated_at") else "",
+        })
+
+    return {
+        "flag_color": color,
+        "rule_status": effective_rule_status,
+        "group_by": group_by,
+        "group_by_label": PIVOT_DEFINITIONS[group_by]["label"],
+        "pattern": pattern.strip(),
+        "pattern_mode": str(pattern_mode or "contains").strip().lower(),
+        "pattern_required": False,
+        "total_alerts": total_alerts,
+        "total_groups": len(groups),
+        "groups": groups,
+        **summary,
+    }
+
+
+@app.get("/api/flags/alerts")
+def api_flags_alerts(
+    tenant: list[str] = Query(default=["all"]),
+    flag_color: str = "green",
+    rule_status: str = "pending",
+    group_by: str = "rule_description",
+    group_key: str = "",
+    pattern: str = "",
+    pattern_mode: str = "contains",
+    q: str = "",
+    limit: int = 100,
+    offset: int = 0,
+):
+    normalize_tenants(tenant)
+    limit = min(max(int(limit or 100), 1), 1000)
+    offset = max(int(offset or 0), 0)
+    color = str(flag_color or "green").strip().lower()
+    effective_rule_status = "all" if color == "red" else str(rule_status or "pending").strip().lower()
+    where_sql, params = _build_flag_scope_where(
+        tenant=tenant,
+        flag_color=color,
+        rule_status=effective_rule_status,
+        q=q,
+        group_by=group_by,
+        group_key=group_key,
+        pattern=pattern,
+        pattern_mode=pattern_mode,
+    )
+    with get_db() as conn:
+        total_row = conn.execute(
+            f"SELECT COUNT(*) AS n FROM wazuh.alerts a {where_sql}",
+            params,
+        ).fetchone()
+        rows = conn.execute(
+            f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
+                       a.rule_id, a.rule_level, a.description, a.source_ip, a.hit_count,
+                       a.data, a.parsed_details, COALESCE(a.raw->>'full_log', '') AS full_log,
+                       a.flag_color, a.flagged_by, a.flagged_at,
+                       a.rule_status, a.custom_rule_id, a.rule_notes, a.rule_updated_by, a.rule_updated_at,
+                       a.verdict, a.reviewed_by, a.reviewed_at
+                FROM wazuh.alerts a {where_sql}
+                ORDER BY a.timestamp DESC NULLS LAST, a.id DESC
+                LIMIT %s OFFSET %s""",
+            [*params, limit, offset],
+        ).fetchall()
+    return {"items": rows, "total": int((total_row or {}).get("n") or 0)}
+
+
+@app.post("/api/flags/rule-status")
+def api_flags_rule_status(
+    payload: dict[str, Any],
+    request: Request,
+    tenant: list[str] = Query(default=["all"]),
+):
+    normalize_tenants(tenant)
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload status rule tidak valid.")
+    r_status = str(payload.get("rule_status") or "").strip().lower()
+    if r_status not in ALLOWED_RULE_STATUSES:
+        raise HTTPException(status_code=400, detail="rule_status harus 'pending' atau 'done'.")
+    custom_rule_id = str(payload.get("custom_rule_id") or "").strip()[:50]
+    rule_notes = str(payload.get("rule_notes") or "").strip()[:1000]
+    actor = str(payload.get("rule_updated_by") or _current_username(request)).strip() or "analyst"
+
+    raw_ids = payload.get("alert_ids")
+    with get_db() as conn:
+        if raw_ids is not None:
+            pks = _validate_membership(conn, raw_ids, tenant)
+            if not pks:
+                raise HTTPException(status_code=400, detail="Pilih minimal satu alert untuk diperbarui.")
+            rows = conn.execute(
+                "SELECT id, flag_color FROM wazuh.alerts WHERE id = ANY(%s)",
+                (pks,),
+            ).fetchall()
+        else:
+            color = str(payload.get("flag_color") or "").strip().lower()
+            if color == "red":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Alert dengan Flag Merah tidak boleh ditandai sebagai custom rule pengecualian.",
+                )
+            group_by = payload.get("group_by")
+            group_key = payload.get("group_key")
+            if not group_by or group_key is None:
+                raise HTTPException(status_code=400, detail="Tentukan alert_ids atau grup pola sasaran.")
+            where_sql, params = _build_flag_scope_where(
+                tenant=tenant,
+                flag_color=color,
+                rule_status=str(payload.get("current_rule_status") or "all").strip().lower(),
+                q=str(payload.get("q") or ""),
+                group_by=str(group_by),
+                group_key=str(group_key),
+                pattern=str(payload.get("pattern") or ""),
+                pattern_mode=str(payload.get("pattern_mode") or "contains"),
+            )
+            rows = conn.execute(
+                f"SELECT a.id, a.flag_color FROM wazuh.alerts a {where_sql}",
+                params,
+            ).fetchall()
+            pks = [int(r["id"]) for r in rows]
+
+        if not pks:
+            raise HTTPException(status_code=404, detail="Tidak ada alert yang cocok pada scope ini.")
+        if any((not r.get("flag_color")) or r.get("flag_color") == "red" for r in rows):
+            raise HTTPException(
+                status_code=400,
+                detail="Hanya alert dengan Flag Hijau atau Kuning yang dapat ditandai status custom rule-nya.",
+            )
+
+        if r_status == "done":
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET rule_status = 'done',
+                       custom_rule_id = %s,
+                       rule_notes = %s,
+                       rule_updated_by = %s,
+                       rule_updated_at = now()
+                   WHERE id = ANY(%s)""",
+                (custom_rule_id or None, rule_notes, actor, pks),
+            )
+        else:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET rule_status = 'pending',
+                       custom_rule_id = NULL,
+                       rule_notes = '',
+                       rule_updated_by = NULL,
+                       rule_updated_at = NULL
+                   WHERE id = ANY(%s)""",
+                (pks,),
+            )
+
+        summary = _flag_counts(conn, tenant)
+
+    return {
+        "status": "ok",
+        "updated": len(pks),
+        "rule_status": r_status,
+        "custom_rule_id": custom_rule_id or None if r_status == "done" else None,
+        "rule_notes": rule_notes if r_status == "done" else "",
+        "rule_updated_by": actor if r_status == "done" else None,
+        "summary": summary,
+    }

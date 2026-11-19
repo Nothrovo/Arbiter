@@ -9,9 +9,11 @@ test('application loads local modular shell with six real destinations and no CD
   assert.doesNotMatch(html, /fonts.googleapis|onclick=/);
   assert.match(html, /id="main-content"/);
   assert.match(html, /aria-live="polite"/);
+  assert.match(html, /data-page="flags" href="#\/flags"/);
   for (const file of [
     'app.js',
     'features/triage/view.js',
+    'features/flags/view.js',
     'features/monitoring/view.js',
     'features/stats/view.js',
     'features/incidents/view.js',
