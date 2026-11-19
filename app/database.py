@@ -139,8 +139,9 @@ CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_alert_id ON wazuh.alerts(tena
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_review_timestamp ON wazuh.alerts(is_reviewed, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_tenant_review_timestamp ON wazuh.alerts(tenant, is_reviewed, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_reviewed_at ON wazuh.alerts(reviewed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_claim_status ON wazuh.alerts(status, claimed_by, claimed_at);
 CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_imported_at ON wazuh.alerts(imported_at DESC);
+-- idx_wazuh_alerts_claim_status is created in init_database() AFTER the
+-- status/claimed_* columns are added, because existing databases predate them.
 -- Note: highly-cardinal user_agent, url_path, referer, and arbitrary text pattern
 -- dimensions intentionally do not carry broad btree indexes to prevent bloat on high-volume ingest.
 """
@@ -704,6 +705,11 @@ def init_database() -> None:
             "ALTER TABLE wazuh.alerts ADD COLUMN IF NOT EXISTS reviewed_by TEXT",
         ):
             conn.execute(col_sql)
+        # The index depends on columns that older databases only gain above.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wazuh_alerts_claim_status "
+            "ON wazuh.alerts(status, claimed_by, claimed_at)"
+        )
         _load_profile_overrides(conn)
 
 
