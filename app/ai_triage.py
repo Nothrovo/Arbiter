@@ -661,7 +661,33 @@ def _cluster_prompt(clusters: list[dict[str, Any]]) -> str:
     )
 
 
+def _parse_ai_json(text: Any) -> Any:
+    """Parse model output, tolerating code fences and list-shaped verdict responses."""
+    raw = str(text or "").strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1] if "\n" in raw else ""
+        if raw.rstrip().endswith("```"):
+            raw = raw.rstrip()[:-3]
+        raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        pass
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start, end = raw.find(opener), raw.rfind(closer)
+        if start != -1 and end > start:
+            try:
+                return json.loads(raw[start:end + 1])
+            except (ValueError, TypeError):
+                continue
+    raise LocalAIUnavailable("Model AI mengembalikan JSON yang tidak valid.")
+
+
 def _validate_cluster_verdicts(value: Any, clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        value = {"verdicts": value}
+    if isinstance(value, dict) and isinstance(value.get("verdict"), str) and "index" in value:
+        value = {"verdicts": [value]}
     if not isinstance(value, dict) or not isinstance(value.get("verdicts"), list):
         raise LocalAIUnavailable("Model AI tidak mengembalikan struktur verdict yang valid.")
     by_index = {index: cluster for index, cluster in enumerate(clusters)}
@@ -822,11 +848,7 @@ def ai_triage(
     if not clusters:
         return []
     text = ollama_request(_cluster_prompt(clusters), model=model, base_url=base_url, timeout=timeout)
-    try:
-        value = json.loads(text)
-    except (ValueError, TypeError) as error:
-        raise LocalAIUnavailable("Model AI mengembalikan JSON yang tidak valid.") from error
-    return _validate_cluster_verdicts(value, clusters)
+    return _validate_cluster_verdicts(_parse_ai_json(text), clusters)
 
 
 def triage_with_fallback(

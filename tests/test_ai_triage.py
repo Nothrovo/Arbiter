@@ -212,6 +212,17 @@ class AITriageAPITests(unittest.TestCase):
         ids = {aid for g in groups for aid in g["alert_ids"]}
         self.assertEqual(ids, {"1", "2", "3"})
 
+    def test_ai_triage_tolerates_fenced_and_list_shaped_model_output(self):
+        from app.ai_triage import ai_triage
+
+        def fenced_ollama(prompt, *, model, base_url, timeout):
+            return '```json\n[{"index":0,"verdict":"tp","reason":"x"},{"index":1,"verdict":"fp","reason":"y"}]\n```'
+
+        with patch("app.ai_triage.ollama_request", side_effect=fenced_ollama):
+            groups = ai_triage(self._sample_alerts(), model="m", base_url="http://127.0.0.1:11434")
+        self.assertEqual(len(groups), 2)
+        self.assertEqual({g["verdict"] for g in groups}, {"tp", "fp"})
+
     def test_ai_triage_sends_clusters_not_raw_alerts(self):
         from app.ai_triage import ai_triage
         captured = {}
@@ -614,6 +625,38 @@ class AITriageAPITests(unittest.TestCase):
         self.assertEqual(sorted(
             aid for group in done_again.json()["groups"] for aid in group["alert_ids"]
         ), ["90", "91", "92", "93", "94"])
+
+    def test_ai_triage_remove_drops_only_the_selected_correlation(self):
+        self.db.add_alert(100, "Remove", rule_level=10, description="Correlation A",
+                          source_ip="203.0.113.100", parsed_details='{"path":"/a"}', log_signature="sig-rm-a")
+        self.db.add_alert(101, "Remove", rule_level=11, description="Correlation B",
+                          source_ip="198.51.100.101", parsed_details='{"path":"/b"}', log_signature="sig-rm-b")
+        run = self.client.post("/api/ai/triage", json={
+            "tenant": ["Remove"], "limit": 100, "min_rule_level": 7,
+            "review_status": "all", "group_by": "indicator",
+        })
+        self.assertEqual(run.status_code, 200, run.text)
+        groups = run.json()["groups"]
+        self.assertEqual(len(groups), 2)
+        target, kept = groups[0], groups[1]
+
+        removed = self.client.post("/api/ai/triage/remove", json={
+            "tenant": ["Remove"], "group_keys": [target["group_key"]],
+        })
+        self.assertEqual(removed.status_code, 200, removed.text)
+        self.assertEqual(removed.json(), {"removed": 1, "group_count": 1})
+
+        reopen = self.client.get("/api/ai/triage", params={"tenant": "Remove"}).json()
+        reopened_groups = reopen["result"]["groups"]
+        self.assertEqual([g["group_key"] for g in reopened_groups], [kept["group_key"]])
+        self.assertNotIn(target["group_key"], [g["group_key"] for g in reopened_groups])
+        self.assertTrue(set(target["alert_ids"]).isdisjoint({a["id"] for a in reopen["result"]["alerts"]}))
+
+        # Unknown keys cannot silently remove anything.
+        missing = self.client.post("/api/ai/triage/remove", json={
+            "tenant": ["Remove"], "group_keys": ["does-not-exist"],
+        })
+        self.assertEqual(missing.status_code, 404)
 
     def test_ai_triage_save_rejects_multi_tenant_group(self):
         self.db.add_alert(30, "Alpha", rule_level=10, description="Shared rule", source_ip="1.2.3.4")

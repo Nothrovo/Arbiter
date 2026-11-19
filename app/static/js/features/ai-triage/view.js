@@ -72,7 +72,6 @@ export async function mount(ctx) {
   }
 
   function renderControls() {
-    const ai = settings.ai;
     return `
       <form class="ai-controls" id="ai-triage-form">
         <div class="field">
@@ -89,13 +88,11 @@ export async function mount(ctx) {
         </div>
         <div class="field">
           <label for="ai-limit">Maksimum alert</label>
-          <input class="input" id="ai-limit" name="limit" type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${esc(state.limit)}" placeholder="40" required>
-          <span class="meta">Maksimum 100.000. Volume besar diproses lebih lama dan memakai memori lebih banyak.</span>
+          <input class="input" id="ai-limit" name="limit" type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${esc(state.limit)}" placeholder="40" title="Maksimum 100.000 alert; volume besar diproses lebih lama." required>
         </div>
         <div class="field">
           <label for="ai-batch-size">Batch per permintaan</label>
-          <input class="input" id="ai-batch-size" name="batch_size" type="number" min="1" max="${MAX_BATCH}" step="1" value="${esc(state.batchSize)}" placeholder="${DEFAULT_BATCH}" required>
-          <span class="meta">1–${MAX_BATCH.toLocaleString('id-ID')} alert per permintaan. Alert yang sudah diproses ditandai dan dilewati saat dilanjutkan.</span>
+          <input class="input" id="ai-batch-size" name="batch_size" type="number" min="1" max="${MAX_BATCH}" step="1" value="${esc(state.batchSize)}" placeholder="${DEFAULT_BATCH}" title="1–5.000 alert per permintaan; alert yang sudah diproses dilewati saat dilanjutkan." required>
         </div>
         <div class="field">
           <label for="ai-review-status">Status review</label>
@@ -110,7 +107,6 @@ export async function mount(ctx) {
           </select>
         </div>
         <div class="field ai-run-field">
-          <span class="meta">${ai.enabled ? `Model ${esc(ai.model)}` : 'Mode heuristik lokal'}</span>
           <button class="button primary" type="submit" ${running ? 'disabled' : ''}>${icon('spark')} ${running ? 'Memproses…' : 'Jalankan AI Triage'}</button>
         </div>
       </form>`;
@@ -216,6 +212,7 @@ export async function mount(ctx) {
         <div class="ai-group-actions">
           <a class="button" href="${alertsHref}">${icon('arrow')} Buka di Triage</a>
           <button class="button" type="button" data-action="copy-group-logs" data-group-index="${position}">${icon('copy')} Salin full log (${records.length})</button>
+          <button class="button" type="button" data-action="remove-group" data-group-index="${position}">${icon('delete')} Hapus korelasi</button>
           ${incidentHref
             ? `<a class="button primary" href="${incidentHref}">${icon('plus')} Siapkan insiden (${incidentIds.length})</a>`
             : '<button class="button" type="button" disabled>Siapkan insiden</button>'}
@@ -464,6 +461,33 @@ export async function mount(ctx) {
     notify(`${chosen.length} grup digabung menjadi 1 kasus (${alertIds.length.toLocaleString('id-ID')} alert).`, 'success');
   }
 
+  async function removeGroup(group) {
+    if (!group || !result) return;
+    const label = group.title || 'grup korelasi';
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const ok = window.confirm(`Hapus korelasi "${label}" dari hasil AI Triage? Alert tetap tersimpan dan ditandai sudah diproses.`);
+      if (!ok) return;
+    }
+    const payload = {tenant: activeTenants()};
+    if (group.groupKey) payload.group_keys = [group.groupKey];
+    else payload.group_titles = [group.title];
+    try {
+      await json('/api/ai/triage/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+        signal,
+        timeout: 20000,
+      });
+      result = {...result, groups: result.groups.filter(item => item !== group)};
+      mergeSelection = new Set();
+      render();
+      notify('Korelasi dihapus dari hasil AI Triage.', 'success');
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  }
+
   async function save() {
     if (saving || !result?.groups?.length) return;
     saving = true;
@@ -565,6 +589,11 @@ export async function mount(ctx) {
     if (action === 'save') save();
     if (action === 'merge-selected') mergeSelected();
     if (action === 'clear-merge') { mergeSelection = new Set(); render(); }
+    if (action === 'remove-group') {
+      const position = Number(event.target.closest('[data-action=remove-group]')?.dataset.groupIndex);
+      const group = result?.groups?.[position];
+      if (group) removeGroup(group);
+    }
     if (action === 'copy-group-logs') {
       const position = Number(event.target.closest('[data-action=copy-group-logs]')?.dataset.groupIndex);
       const group = result?.groups?.[position];

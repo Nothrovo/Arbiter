@@ -183,6 +183,10 @@ test('ai-triage page sends only sanitized fields and offers TP/FP actions', () =
   assert.match(view, /resume: resume \|\| batch > 1/);
   assert.match(view, /Lanjutkan sisa/);
   assert.match(view, /progress\.remaining/);
+  // Analyst can dismiss an AI correlation group.
+  assert.match(view, /data-action="remove-group"/);
+  assert.match(view, /Hapus korelasi/);
+  assert.match(view, /\/api\/ai\/triage\/remove/);
   // Fallback is clearly labelled, never presented as AI.
   assert.match(view, /local_rules_fallback/);
   assert.match(view, /heuristik/i);

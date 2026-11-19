@@ -2571,6 +2571,62 @@ def api_ai_triage(payload: dict[str, Any]):
     }
 
 
+@app.post("/api/ai/triage/remove")
+def api_ai_triage_remove(payload: dict[str, Any]):
+    """Dismiss one or more AI correlation groups from the persisted triage result.
+
+    Removed alerts stay marked as processed so a resume does not recreate the
+    dismissed correlation; a fresh triage run will group them again.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload hapus korelasi tidak valid.")
+    raw_keys = payload.get("group_keys")
+    if isinstance(raw_keys, str):
+        raw_keys = [raw_keys]
+    clean_keys = {
+        str(key).strip() for key in raw_keys
+        if str(key).strip()
+    } if isinstance(raw_keys, list) else set()
+    raw_titles = payload.get("group_titles")
+    if isinstance(raw_titles, str):
+        raw_titles = [raw_titles]
+    clean_titles = {
+        str(title).strip() for title in raw_titles
+        if str(title).strip()
+    } if isinstance(raw_titles, list) else set()
+    if not clean_keys and not clean_titles:
+        raise HTTPException(status_code=400, detail="group_keys atau group_titles harus berisi minimal satu grup.")
+
+    tenant = payload.get("tenant") or ["all"]
+    norm_tenants = list(normalize_tenants(tenant)) or ["all"]
+    state_key = get_triage_state_key(norm_tenants)
+    removed = 0
+    with get_db() as conn:
+        state = load_document(conn, state_key, None)
+        if state is None and state_key != AI_TRIAGE_STATE_KEY:
+            state = load_document(conn, AI_TRIAGE_STATE_KEY, None)
+        if not isinstance(state, dict) or not isinstance(state.get("groups"), list):
+            raise HTTPException(status_code=404, detail="Belum ada hasil AI Triage yang bisa diubah.")
+        kept: list[dict[str, Any]] = []
+        for group in state["groups"]:
+            if not isinstance(group, dict):
+                continue
+            key = str(group.get("group_key") or "").strip()
+            title = str(group.get("title") or "").strip()
+            if (key and key in clean_keys) or (title and title in clean_titles):
+                removed += 1
+                continue
+            kept.append(group)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Grup korelasi tidak ditemukan pada hasil tersimpan.")
+        final_ids = [aid for group in kept for aid in (group.get("alert_ids") or [])]
+        state["groups"] = kept
+        state["alert_ids"] = list(dict.fromkeys(final_ids))
+        state["saved_at"] = datetime.now(timezone.utc).isoformat()
+        save_document(conn, state_key, state)
+    return {"removed": removed, "group_count": len(kept)}
+
+
 @app.post("/api/ai/triage/save")
 def api_ai_triage_save(payload: dict[str, Any]):
     """Persist an AI triage result as editable incident groups (source='ai').
