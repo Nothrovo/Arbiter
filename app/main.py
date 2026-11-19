@@ -362,12 +362,11 @@ def list_alerts(
         COALESCE(a.raw->>'full_log', '') AS full_log,
         COALESCE(a.raw->>'previous_output', '') AS previous_output"""
 
-    explicit_selection = alert_ids is not None and str(alert_ids).strip() != ""
     with get_db() as conn:
         _expire_stale_claims(conn)
-        scoped_sql, scoped_params = where_sql, params
-        if not explicit_selection:
-            scoped_sql, scoped_params = with_exclusions(where_sql, params, _exclusion_document(conn))
+        # Exclusions apply to every Triage read, including explicit alert_ids from
+        # a saved AI Triage correlation. Otherwise excluded alerts reappear.
+        scoped_sql, scoped_params = with_exclusions(where_sql, params, _exclusion_document(conn))
         sql = f"""
         SELECT {projection},
             ipc.abuse_score,
@@ -1522,8 +1521,8 @@ def triage_summary(
     )
 
     with get_db() as conn:
-        if not (alert_ids and str(alert_ids).strip()):
-            where_sql, params = with_exclusions(where_sql, params, _exclusion_document(conn))
+        # Global exclusions must hide excluded alerts even for explicit alert_ids.
+        where_sql, params = with_exclusions(where_sql, params, _exclusion_document(conn))
         counts = conn.execute(
             f"""SELECT COUNT(*) AS alerts,
                        COALESCE(SUM(COALESCE(a.hit_count, 1)), 0) AS events,

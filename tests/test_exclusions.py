@@ -116,6 +116,23 @@ class ExclusionAPITests(unittest.TestCase):
         self.assertNotIn(23, self.alpha_ids())
         self.assertNotIn(24, self.alpha_ids())
 
+    def test_excluded_alerts_stay_hidden_for_explicit_alert_ids(self):
+        self.add_rule()
+        # "Buka di Triage" from AI Triage opens Triage with explicit alert_ids.
+        opened = self.client.get("/api/alerts", params={"tenant": "Alpha", "alert_ids": "20,22"})
+        self.assertEqual(opened.status_code, 200, opened.text)
+        self.assertEqual({item["id"] for item in opened.json()["items"]}, {22})
+        self.assertEqual(opened.json()["total"], 1)
+
+        summary = self.client.get("/api/triage/summary", params={"tenant": "Alpha", "alert_ids": "20,22"})
+        self.assertEqual(summary.status_code, 200, summary.text)
+        self.assertEqual(summary.json()["alerts"], 1)
+
+        only_excluded = self.client.get("/api/alerts", params={"tenant": "Alpha", "alert_ids": "20"})
+        self.assertEqual(only_excluded.status_code, 200, only_excluded.text)
+        self.assertEqual(only_excluded.json()["items"], [])
+        self.assertEqual(only_excluded.json()["total"], 0)
+
     def test_explicit_export_keeps_excluded_evidence(self):
         self.add_rule()
         exported = self.client.get("/api/export.csv", params={"tenant": "Alpha", "alert_ids": "20"})

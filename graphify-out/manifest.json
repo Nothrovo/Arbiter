@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "app/main.py": {
-    "mtime": 1795070665.5858388,
-    "seen": 1795070687.3281727,
-    "ast_hash": "cedb4002a9f6f9cebc8d92f6cba0a1bb",
+    "mtime": 1795071507.8380506,
+    "seen": 1795071542.026808,
+    "ast_hash": "f8fe80b846ad0c1ec9ef8b5a53b9b71f",
     "semantic_hash": ""
   },
   "app/parser.py": {
@@ -942,9 +942,9 @@
     "semantic_hash": ""
   },
   "tests/test_exclusions.py": {
-    "mtime": 1794881976.232953,
-    "seen": 1794882111.8786755,
-    "ast_hash": "b371ae2e2fc434ceb02d7d0b1c0fd5af",
+    "mtime": 1795071523.4901388,
+    "seen": 1795071542.0292003,
+    "ast_hash": "43841db9f7ae7fa2a7f2ad833b2be625",
     "semantic_hash": ""
   },
   "docs/ARSITEKTUR.md": {
