@@ -2048,6 +2048,67 @@ def _build_ai_triage_where(
     return where, list(params) + level_params
 
 
+AI_TRIAGE_DEFAULT_BATCH = 500
+AI_TRIAGE_MAX_BATCH = 5000
+
+
+def _ai_triage_scope_signature(
+    tenant: Any,
+    review_status: str,
+    min_rule_level: int,
+    max_rule_level: int | None,
+    group_by: str,
+) -> str:
+    """Stable identity for one triage scope; progress is only reused within it."""
+    return json.dumps({
+        "tenant": sorted(str(item) for item in (tenant or ["all"])),
+        "review_status": review_status,
+        "min_rule_level": min_rule_level,
+        "max_rule_level": max_rule_level,
+        "group_by": group_by,
+    }, sort_keys=True)
+
+
+def _ai_triage_batch_size(value: Any, fallback: int = AI_TRIAGE_DEFAULT_BATCH) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(1, min(AI_TRIAGE_MAX_BATCH, number))
+
+
+def _ai_triage_progress(state: Any, scope_signature: str) -> tuple[list[int], dict[str, Any] | None]:
+    """Return processed alert pks for this exact scope, plus the stored progress."""
+    if not isinstance(state, dict):
+        return [], None
+    progress = state.get("progress")
+    if not isinstance(progress, dict) or progress.get("scope") != scope_signature:
+        return [], None
+    processed = sorted({
+        int(aid) for aid in (progress.get("processed_ids") or [])
+        if str(aid).isdigit()
+    })
+    return processed, progress
+
+
+def _ai_triage_exclude_ids(
+    where: str,
+    params: list[Any],
+    excluded: list[int],
+) -> tuple[str, list[Any]]:
+    """Add a NOT IN guard so a batch only sees alerts not processed yet."""
+    if not excluded:
+        return where, params
+    clause = "NOT (a.id = ANY(%s))"
+    where = f"{where} AND {clause}" if where else f"WHERE {clause}"
+    return where, [*params, excluded]
+
+
+def _ai_triage_candidate_count(conn, where: str, params: list[Any]) -> int:
+    row = conn.execute(f"SELECT count(*) AS n FROM wazuh.alerts a {where}", params).fetchone()
+    return int(row["n"]) if row else 0
+
+
 def _find_matching_open_ai_group(
     conn,
     *,
@@ -2148,6 +2209,11 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
         group_by = str(options.get("group_by") or "rule_description")
         if group_by not in {"host_rule", "rule_description", "indicator"}:
             group_by = "rule_description"
+        batch_size = _ai_triage_batch_size(options.get("batch_size"))
+        scope_sig = _ai_triage_scope_signature(
+            options.get("tenant") or ["all"], review_status, min_rule_level, max_rule_level, group_by,
+        )
+        processed_ids, progress_state = _ai_triage_progress(state, scope_sig)
 
         saved_ids = [int(aid) for aid in (state.get("alert_ids") or []) if str(aid).isdigit()]
         existing_rows: list[dict[str, Any]] = []
@@ -2164,17 +2230,24 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
                 [saved_ids, *t_params],
             ).fetchall()
 
-        where, where_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
-        where, where_params = with_exclusions(where, where_params, _exclusion_document(conn))
+        base_where, base_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
+        base_where, base_params = with_exclusions(base_where, base_params, _exclusion_document(conn))
+        total = int(progress_state.get("total") or 0) if progress_state else 0
+        if total <= 0:
+            total = _ai_triage_candidate_count(conn, base_where, base_params)
+        chunk = max(1, min(limit, batch_size))
+        candidate_where, candidate_params = _ai_triage_exclude_ids(
+            base_where, base_params, sorted(set(processed_ids) | set(saved_ids)),
+        )
         candidate_rows = conn.execute(
             f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
                        a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
                        a.mitre_ids, a.cve, a.hit_count, a.log_signature, a.parsed_details,
                        a.data, COALESCE(a.raw->>'full_log', '') AS full_log
-                FROM wazuh.alerts a {where}
+                FROM wazuh.alerts a {candidate_where}
                 ORDER BY a.rule_level DESC NULLS LAST, a.timestamp DESC NULLS LAST, a.id DESC
                 LIMIT %s""",
-            [*where_params, limit],
+            [*candidate_params, chunk],
         ).fetchall()
 
         existing_map = {str(r["id"]): {**r, "id": str(r["id"])} for r in existing_rows}
@@ -2209,9 +2282,26 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             groups = merge_triage_groups(saved_groups, [], existing_map)
 
         _sync_triage_groups_with_saved_incidents(conn, groups, existing_map)
-        final_ids = [aid for g in groups for aid in (g.get("alert_ids") or []) if aid in existing_map]
+        final_ids = list(dict.fromkeys(
+            aid for g in groups for aid in (g.get("alert_ids") or []) if aid in existing_map
+        ))
         final_ids_set = set(final_ids)
         final_alerts = [a for a in all_alerts if a["id"] in final_ids_set] or all_alerts
+        processed_new = sorted({
+            *processed_ids,
+            *saved_ids,
+            *(int(aid) for aid in final_ids if str(aid).isdigit()),
+        })
+        total = max(total, len(processed_new))
+        remaining = max(0, total - len(processed_new))
+        done = len(new_alerts) < chunk or remaining <= 0
+        progress_payload = {
+            "processed": len(processed_new),
+            "total": total,
+            "remaining": remaining,
+            "done": done,
+            "batch_size": chunk,
+        }
 
         updated_state = {
             "saved_at": datetime.now(timezone.utc).isoformat(),
@@ -2219,6 +2309,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             "options": {
                 "tenant": list(normalize_tenants(tenant)) or ["all"],
                 "limit": limit,
+                "batch_size": batch_size,
                 "min_rule_level": min_rule_level,
                 "max_rule_level": max_rule_level,
                 "review_status": review_status,
@@ -2229,12 +2320,19 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             "model": ai.get("model"),
             "alert_ids": list(dict.fromkeys(a["id"] for a in final_alerts)),
             "groups": groups,
+            "progress": {
+                "scope": scope_sig,
+                "processed_ids": processed_new,
+                "total": total,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
         }
         save_document(conn, get_triage_state_key(norm_tenants), updated_state)
 
     return {
         "saved": True,
         "options": updated_state["options"],
+        "progress": progress_payload,
         "result": {
             "mode": mode,
             "warning": warning,
@@ -2245,6 +2343,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             "group_by": group_by,
             "saved_at": updated_state["saved_at"],
             "window_key": updated_state["window_key"],
+            "progress": progress_payload,
             "alerts": safe_alerts(final_alerts, limit=max(limit, len(final_alerts))),
             "groups": groups,
         },
@@ -2284,30 +2383,39 @@ def api_ai_triage(payload: dict[str, Any]):
     tenant = payload.get("tenant") or ["all"]
     review_status = str(payload.get("review_status") or "unreviewed")
     norm_tenants = list(normalize_tenants(tenant)) or ["all"]
-    where, where_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
-    with get_db() as conn:
-        where, where_params = with_exclusions(where, where_params, _exclusion_document(conn))
-        query_params = list(where_params) + [limit]
-        rows = conn.execute(
-            f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
-                       a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
-                       a.mitre_ids, a.cve, a.hit_count, a.log_signature, a.parsed_details,
-                       a.data, COALESCE(a.raw->>'full_log', '') AS full_log
-                FROM wazuh.alerts a {where}
-                ORDER BY a.rule_level DESC NULLS LAST, a.timestamp DESC NULLS LAST, a.id DESC
-                LIMIT %s""",
-            query_params,
-        ).fetchall()
-        stored = load_settings(conn)
-        prev_state = load_document(conn, AI_TRIAGE_STATE_KEY, None)
 
-        alerts_map = {str(row["id"]): {**row, "id": str(row["id"])} for row in rows}
+    raw_batch = payload.get("batch_size")
+    batch_size: int | None = None
+    if raw_batch is not None and str(raw_batch).strip() != "":
+        try:
+            batch_size = int(raw_batch)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="batch_size harus berupa angka.") from None
+        if not 1 <= batch_size <= AI_TRIAGE_MAX_BATCH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"batch_size harus antara 1 dan {AI_TRIAGE_MAX_BATCH}.",
+            )
+    resume = bool(payload.get("resume"))
+
+    scope_sig = _ai_triage_scope_signature(
+        norm_tenants, review_status, min_rule_level, max_rule_level, group_by,
+    )
+    chunk = limit if batch_size is None else min(batch_size, limit)
+    with get_db() as conn:
+        state_key = get_triage_state_key(norm_tenants)
+        prev_state = load_document(conn, state_key, None)
+        if prev_state is None and state_key != AI_TRIAGE_STATE_KEY:
+            prev_state = load_document(conn, AI_TRIAGE_STATE_KEY, None)
+
         same_scope = False
         prev_groups: list[dict[str, Any]] = []
+        processed_ids: list[int] = []
+        progress_state: dict[str, Any] | None = None
         if isinstance(prev_state, dict) and isinstance(prev_state.get("options"), dict):
             prev_opts = prev_state["options"]
             same_scope = (
-                (prev_opts.get("tenant") or ["all"]) == norm_tenants
+                sorted(str(t) for t in (prev_opts.get("tenant") or ["all"])) == sorted(norm_tenants)
                 and prev_opts.get("min_rule_level") == min_rule_level
                 and prev_opts.get("max_rule_level") == max_rule_level
                 and str(prev_opts.get("review_status") or "unreviewed") == review_status
@@ -2315,34 +2423,71 @@ def api_ai_triage(payload: dict[str, Any]):
             )
             if same_scope:
                 prev_groups = prev_state.get("groups") if isinstance(prev_state.get("groups"), list) else []
-                missing_pks = [
-                    int(aid) for aid in (prev_state.get("alert_ids") or [])
-                    if str(aid).isdigit() and str(aid) not in alerts_map
-                ]
-                if missing_pks:
-                    extra_rows = conn.execute(
-                        f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
-                                   a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
-                                   a.mitre_ids, a.cve, a.hit_count, a.log_signature, a.parsed_details,
-                                   a.data, COALESCE(a.raw->>'full_log', '') AS full_log
-                            FROM wazuh.alerts a {where} AND a.id = ANY(%s)""",
-                        [*where_params, missing_pks],
-                    ).fetchall()
-                    for r in extra_rows:
-                        alerts_map[str(r["id"])] = {**r, "id": str(r["id"])}
+                if resume:
+                    processed_ids, progress_state = _ai_triage_progress(prev_state, scope_sig)
 
-        alerts = list(alerts_map.values())
+        base_where, base_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
+        base_where, base_params = with_exclusions(base_where, base_params, _exclusion_document(conn))
+        total = int(progress_state.get("total") or 0) if progress_state else 0
+        if total <= 0:
+            total = _ai_triage_candidate_count(conn, base_where, base_params)
+
+        chunk_where, chunk_params = _ai_triage_exclude_ids(base_where, base_params, processed_ids)
+        rows = conn.execute(
+            f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
+                       a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
+                       a.mitre_ids, a.cve, a.hit_count, a.log_signature, a.parsed_details,
+                       a.data, COALESCE(a.raw->>'full_log', '') AS full_log
+                FROM wazuh.alerts a {chunk_where}
+                ORDER BY a.rule_level DESC NULLS LAST, a.timestamp DESC NULLS LAST, a.id DESC
+                LIMIT %s""",
+            [*chunk_params, chunk],
+        ).fetchall()
+        stored = load_settings(conn)
+
+        rows_map = {str(row["id"]): {**row, "id": str(row["id"])} for row in rows}
+        new_alerts = list(rows_map.values())
+        alerts_map = dict(rows_map)
+
+        if same_scope:
+            needed: set[int] = {
+                int(aid) for aid in (prev_state.get("alert_ids") or [])
+                if str(aid).isdigit()
+            }
+            for group in prev_groups:
+                needed.update(
+                    int(aid) for aid in (group.get("alert_ids") or []) if str(aid).isdigit()
+                )
+            missing_pks = sorted(needed - {int(aid) for aid in alerts_map})
+            if missing_pks:
+                extra_rows = conn.execute(
+                    f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
+                               a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
+                               a.mitre_ids, a.cve, a.hit_count, a.log_signature, a.parsed_details,
+                               a.data, COALESCE(a.raw->>'full_log', '') AS full_log
+                        FROM wazuh.alerts a {base_where} AND a.id = ANY(%s)""",
+                    [*base_params, missing_pks],
+                ).fetchall()
+                for r in extra_rows:
+                    alerts_map[str(r["id"])] = {**r, "id": str(r["id"])}
+
         ai = stored.get("ai", {})
-        fresh_groups, mode, warning = triage_with_fallback(
-            alerts,
-            enabled=bool(ai.get("enabled")),
-            model=str(ai.get("model") or ""),
-            base_url=str(ai.get("base_url") or "http://127.0.0.1:11434"),
-            timeout=float(ai.get("timeout_seconds") or 90),
-            group_by=group_by,
-        )
-        if same_scope and prev_groups and mode == prev_state.get("mode"):
+        if new_alerts:
+            fresh_groups, mode, warning = triage_with_fallback(
+                new_alerts,
+                enabled=bool(ai.get("enabled")),
+                model=str(ai.get("model") or ""),
+                base_url=str(ai.get("base_url") or "http://127.0.0.1:11434"),
+                timeout=float(ai.get("timeout_seconds") or 90),
+                group_by=group_by,
+            )
+        else:
+            fresh_groups, mode, warning = [], str(prev_state.get("mode") or "local_rules"), None
+        if same_scope and prev_groups and (not new_alerts or mode == prev_state.get("mode")):
             groups = merge_triage_groups(prev_groups, fresh_groups, alerts_map)
+            if not new_alerts:
+                mode = str(prev_state.get("mode") or mode)
+                warning = prev_state.get("warning")
         else:
             groups = fresh_groups
 
@@ -2351,12 +2496,46 @@ def api_ai_triage(payload: dict[str, Any]):
         if not ai.get("enabled") and not warning:
             warning = "AI Triage belum diaktifkan di Pengaturan; hasil memakai heuristik lokal."
 
+        final_ids = list(dict.fromkeys(
+            aid for g in groups for aid in (g.get("alert_ids") or []) if aid in alerts_map
+        ))
+        missing_final = [int(aid) for aid in final_ids if aid not in alerts_map]
+        if missing_final:
+            extra_rows = conn.execute(
+                f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
+                           a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
+                           a.mitre_ids, a.cve, a.hit_count, a.log_signature, a.parsed_details,
+                           a.data, COALESCE(a.raw->>'full_log', '') AS full_log
+                    FROM wazuh.alerts a {base_where} AND a.id = ANY(%s)""",
+                [*base_params, missing_final],
+            ).fetchall()
+            for r in extra_rows:
+                alerts_map[str(r["id"])] = {**r, "id": str(r["id"])}
+        final_alerts = [alerts_map[aid] for aid in final_ids if aid in alerts_map]
+
+        processed_new = sorted({
+            *processed_ids,
+            *(int(aid) for aid in final_ids if str(aid).isdigit()),
+            *(int(a["id"]) for a in new_alerts if str(a["id"]).isdigit()),
+        })
+        total = max(total, len(processed_new))
+        remaining = max(0, total - len(processed_new))
+        done = len(rows) < chunk or remaining <= 0
+        progress_payload = {
+            "processed": len(processed_new),
+            "total": total,
+            "remaining": remaining,
+            "done": done,
+            "batch_size": chunk,
+        }
+
         saved_state = {
             "saved_at": datetime.now(timezone.utc).isoformat(),
             "window_key": current_wib_window_key(),
             "options": {
                 "tenant": norm_tenants,
                 "limit": limit,
+                "batch_size": batch_size or AI_TRIAGE_DEFAULT_BATCH,
                 "min_rule_level": min_rule_level,
                 "max_rule_level": max_rule_level,
                 "review_status": review_status,
@@ -2365,22 +2544,29 @@ def api_ai_triage(payload: dict[str, Any]):
             "mode": mode,
             "warning": warning,
             "model": ai.get("model"),
-            "alert_ids": [a["id"] for a in alerts],
+            "alert_ids": list(dict.fromkeys(a["id"] for a in final_alerts)),
             "groups": groups,
+            "progress": {
+                "scope": scope_sig,
+                "processed_ids": processed_new,
+                "total": total,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
         }
-        save_document(conn, get_triage_state_key(norm_tenants), saved_state)
+        save_document(conn, state_key, saved_state)
 
     return {
         "mode": mode,
         "warning": warning,
         "model": ai.get("model"),
-        "alert_count": len(alerts),
+        "alert_count": len(final_alerts),
         "min_rule_level": min_rule_level,
         "max_rule_level": max_rule_level,
         "group_by": group_by,
         "saved_at": saved_state["saved_at"],
         "window_key": saved_state["window_key"],
-        "alerts": safe_alerts(alerts, limit=max(limit, len(alerts))),
+        "progress": progress_payload,
+        "alerts": safe_alerts(final_alerts, limit=max(limit, len(final_alerts))),
         "groups": groups,
     }
 

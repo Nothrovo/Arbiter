@@ -577,6 +577,44 @@ class AITriageAPITests(unittest.TestCase):
         for group in body["groups"]:
             self.assertEqual({alerts_by_id[aid]["tenant"] for aid in group["alert_ids"]}, {"Alpha"})
 
+    def test_ai_triage_batches_mark_progress_and_resume_remaining_alerts(self):
+        for pk in range(90, 95):
+            self.db.add_alert(
+                pk, "Batch", rule_level=10, description=f"Batch event {pk}",
+                source_ip=f"203.0.113.{pk}", parsed_details=json.dumps({"path": f"/p{pk}"}),
+                log_signature=f"sig-batch-{pk}",
+            )
+        payload = {
+            "tenant": ["Batch"], "limit": 100, "batch_size": 2,
+            "min_rule_level": 7, "review_status": "all", "group_by": "indicator",
+        }
+        first = self.client.post("/api/ai/triage", json=payload)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["progress"], {
+            "processed": 2, "total": 5, "remaining": 3, "done": False, "batch_size": 2,
+        })
+
+        second = self.client.post("/api/ai/triage", json={**payload, "resume": True})
+        self.assertEqual(second.json()["progress"], {
+            "processed": 4, "total": 5, "remaining": 1, "done": False, "batch_size": 2,
+        })
+
+        third = self.client.post("/api/ai/triage", json={**payload, "resume": True})
+        body = third.json()
+        self.assertEqual(body["progress"], {
+            "processed": 5, "total": 5, "remaining": 0, "done": True, "batch_size": 2,
+        })
+        grouped_ids = [aid for group in body["groups"] for aid in group["alert_ids"]]
+        self.assertEqual(sorted(grouped_ids), ["90", "91", "92", "93", "94"])
+        self.assertEqual({a["id"] for a in body["alerts"]}, {"90", "91", "92", "93", "94"})
+
+        # Resuming after completion never re-processes or duplicates alerts.
+        done_again = self.client.post("/api/ai/triage", json={**payload, "resume": True})
+        self.assertTrue(done_again.json()["progress"]["done"])
+        self.assertEqual(sorted(
+            aid for group in done_again.json()["groups"] for aid in group["alert_ids"]
+        ), ["90", "91", "92", "93", "94"])
+
     def test_ai_triage_save_rejects_multi_tenant_group(self):
         self.db.add_alert(30, "Alpha", rule_level=10, description="Shared rule", source_ip="1.2.3.4")
         self.db.add_alert(31, "Beta", rule_level=10, description="Shared rule", source_ip="1.2.3.4")

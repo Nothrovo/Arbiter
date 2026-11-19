@@ -41,11 +41,15 @@ test('ai-triage model normalizes verdicts, modes, and bounded controls', async (
 
   const options = triageOptions(new URLSearchParams('limit=20&min_rule_level=10&review_status=all&group_by=host_rule'));
   assert.equal(options.limit, 20);
+  assert.equal(options.batchSize, 500);
   assert.equal(options.minRuleLevel, 10);
   assert.equal(options.reviewStatus, 'all');
   assert.equal(options.groupBy, 'host_rule');
+  const batchOptions = triageOptions(new URLSearchParams('batch_size=2000'));
+  assert.equal(batchOptions.batchSize, 2000);
   const defaults = triageOptions(new URLSearchParams(''));
   assert.equal(defaults.limit, 40);
+  assert.equal(defaults.batchSize, 500);
   assert.equal(defaults.minRuleLevel, 7);
   assert.equal(defaults.reviewStatus, 'unreviewed');
   assert.equal(defaults.groupBy, 'rule_description');
@@ -63,6 +67,7 @@ test('ai-triage model normalizes verdicts, modes, and bounded controls', async (
     model: 'hf.co/XHToken/Spark-X2.6-4B-GGUF:Q4_K_M',
     alert_count: 2,
     min_rule_level: 7,
+    progress: {processed: 1, total: 3, remaining: 2, done: false, batch_size: 500},
     alerts: [
       {id: '1', rule_level: 12, description: 'brute force', source_ip: '1.2.3.4', hit_count: 9},
       {id: '2', rule_level: 7, description: 'routine', agent_name: 'host-a', hit_count: 1},
@@ -78,6 +83,7 @@ test('ai-triage model normalizes verdicts, modes, and bounded controls', async (
   assert.equal(result.groups[0].verdict, 'tp');
   assert.deepEqual(result.groups[0].alertIds, ['1'], 'duplicate ids collapse');
   assert.equal(result.groups[1].verdict, 'needs_review', 'unknown verdict normalizes');
+  assert.deepEqual(result.progress, {processed: 1, total: 3, remaining: 2, done: false, batchSize: 500});
 
   const index = alertIndex(result.alerts);
   assert.equal(index.get('1').description, 'brute force');
@@ -171,6 +177,12 @@ test('ai-triage page sends only sanitized fields and offers TP/FP actions', () =
   assert.match(view, /Gabungkan terpilih/);
   assert.match(view, /data-merge-index/);
   assert.match(view, /Salin full log/);
+  // Batch marking + resumable processing of unprocessed alerts.
+  assert.match(view, /name="batch_size"/);
+  assert.match(view, /batch_size: batchSize/);
+  assert.match(view, /resume: resume \|\| batch > 1/);
+  assert.match(view, /Lanjutkan sisa/);
+  assert.match(view, /progress\.remaining/);
   // Fallback is clearly labelled, never presented as AI.
   assert.match(view, /local_rules_fallback/);
   assert.match(view, /heuristik/i);

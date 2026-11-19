@@ -19,6 +19,8 @@ export const MIN_LEVELS = [
 
 export const MIN_LIMIT = 1;
 export const MAX_LIMIT = 100000;
+export const DEFAULT_BATCH = 500;
+export const MAX_BATCH = 5000;
 export const LIMITS = [10, 20, 40, 60, 100];
 
 export const REVIEW_STATUSES = [
@@ -98,6 +100,7 @@ export function boundedInteger(value, fallback, min, max) {
 export function triageOptions(params) {
   const get = key => params?.get ? params.get(key) : params?.[key];
   const limit = boundedInteger(get('limit'), 40, MIN_LIMIT, MAX_LIMIT);
+  const batchSize = boundedInteger(get('batch_size'), DEFAULT_BATCH, 1, MAX_BATCH);
   const rawLevel = get('min_rule_level');
   const rawMax = get('max_rule_level');
   const parsed = parseSeveritySelection(rawLevel);
@@ -115,6 +118,7 @@ export function triageOptions(params) {
   const groupBy = String(get('group_by') || 'rule_description');
   return {
     limit,
+    batchSize,
     minRuleLevel: parsed.minRuleLevel,
     maxRuleLevel,
     severitySelection: selection,
@@ -178,6 +182,16 @@ export function normalizeTriageResult(value) {
     }
   }
   const groupBy = GROUP_BY_OPTIONS.some(([mode]) => mode === source.group_by) ? source.group_by : 'host_rule';
+  const rawProgress = source.progress && typeof source.progress === 'object' ? source.progress : null;
+  const progress = rawProgress
+    ? {
+        processed: Math.max(0, Number(rawProgress.processed) || 0),
+        total: Math.max(0, Number(rawProgress.total) || 0),
+        remaining: Math.max(0, Number(rawProgress.remaining) || 0),
+        done: Boolean(rawProgress.done),
+        batchSize: Math.max(0, Number(rawProgress.batch_size) || 0),
+      }
+    : null;
   return {
     mode: typeof source.mode === 'string' ? source.mode : 'local_rules',
     warning: typeof source.warning === 'string' && source.warning ? source.warning : null,
@@ -188,6 +202,7 @@ export function normalizeTriageResult(value) {
     groupBy,
     savedAt: typeof source.saved_at === 'string' ? source.saved_at : '',
     windowKey: typeof source.window_key === 'string' ? source.window_key : '',
+    progress,
     alerts,
     groups,
   };

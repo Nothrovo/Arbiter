@@ -4,7 +4,7 @@ import {queryFrom, tenantValues} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {normalizeSettings} from '../settings/model.js';
 import {
-  GROUP_BY_OPTIONS, MIN_LIMIT, MAX_LIMIT, MIN_LEVELS, REVIEW_STATUSES,
+  GROUP_BY_OPTIONS, MIN_LIMIT, MAX_LIMIT, DEFAULT_BATCH, MAX_BATCH, MIN_LEVELS, REVIEW_STATUSES,
   aiSeverityKey, alertFacts, alertIndex, boundedInteger, formatWibWindowLabel, groupAlerts, modeMeta,
   normalizeTriageResult, numericAlertIds, parseSeveritySelection, summarizeGroups, triageOptions, verdictMeta,
 } from './model.js';
@@ -18,6 +18,7 @@ export async function mount(ctx) {
     tenantValue: routeQuery.tenantScope.all ? 'all' : initialTenants.join(','),
     severitySelection: initial.severitySelection,
     limit: initial.limit,
+    batchSize: initial.batchSize,
     reviewStatus: initial.reviewStatus,
     groupBy: initial.groupBy,
   };
@@ -92,6 +93,11 @@ export async function mount(ctx) {
           <span class="meta">Maksimum 100.000. Volume besar diproses lebih lama dan memakai memori lebih banyak.</span>
         </div>
         <div class="field">
+          <label for="ai-batch-size">Batch per permintaan</label>
+          <input class="input" id="ai-batch-size" name="batch_size" type="number" min="1" max="${MAX_BATCH}" step="1" value="${esc(state.batchSize)}" placeholder="${DEFAULT_BATCH}" required>
+          <span class="meta">1–${MAX_BATCH.toLocaleString('id-ID')} alert per permintaan. Alert yang sudah diproses ditandai dan dilewati saat dilanjutkan.</span>
+        </div>
+        <div class="field">
           <label for="ai-review-status">Status review</label>
           <select class="select" id="ai-review-status" name="review_status">
             ${REVIEW_STATUSES.map(([value, label]) => `<option value="${value}" ${state.reviewStatus === value ? 'selected' : ''}>${esc(label)}</option>`).join('')}
@@ -129,6 +135,9 @@ export async function mount(ctx) {
           <div>
             <span class="badge ${meta.badge}">${esc(meta.label)}</span>
             <span class="meta">${data.alertCount.toLocaleString('id-ID')} alert · rule.level ${levelLabel}</span>
+            ${data.progress
+              ? `<span class="meta">${data.progress.processed.toLocaleString('id-ID')}/${data.progress.total.toLocaleString('id-ID')} diproses${data.progress.remaining > 0 ? ` · sisa ${data.progress.remaining.toLocaleString('id-ID')}` : ' · selesai'}</span>`
+              : ''}
           </div>
           <span class="meta">${data.model ? `Model ${esc(data.model)}` : 'Tanpa model eksternal'}</span>
         </div>
@@ -227,7 +236,7 @@ export async function mount(ctx) {
       ${result.warning ? `<div class="notice" data-kind="warning"><p>${esc(result.warning)}</p></div>` : ''}
       ${renderSummary(result, counts, result.mode)}
       ${result.groups.length
-        ? `<div class="ai-save-bar"><button class="button primary" type="button" data-action="save" ${saving ? 'disabled' : ''}>${icon('cases')} ${saving ? 'Menyimpan…' : 'Simpan ke Insiden'}</button><button class="button" type="button" data-action="merge-selected" ${mergeSelection.size < 2 ? 'disabled' : ''}>${icon('plus')} Gabungkan terpilih (<span data-merge-count>${mergeSelection.size}</span>)</button><button class="button" type="button" data-action="clear-merge" ${mergeSelection.size ? '' : 'disabled'}>Reset pilihan</button><span class="inline-status" id="ai-save-status" role="status"></span></div>
+        ? `<div class="ai-save-bar">${result.progress && !result.progress.done && result.progress.remaining > 0 ? `<button class="button" type="button" data-action="resume">${icon('spark')} Lanjutkan sisa (${result.progress.remaining.toLocaleString('id-ID')})</button>` : ''}<button class="button primary" type="button" data-action="save" ${saving ? 'disabled' : ''}>${icon('cases')} ${saving ? 'Menyimpan…' : 'Simpan ke Insiden'}</button><button class="button" type="button" data-action="merge-selected" ${mergeSelection.size < 2 ? 'disabled' : ''}>${icon('plus')} Gabungkan terpilih (<span data-merge-count>${mergeSelection.size}</span>)</button><button class="button" type="button" data-action="clear-merge" ${mergeSelection.size ? '' : 'disabled'}>Reset pilihan</button><span class="inline-status" id="ai-save-status" role="status"></span></div>
            <div class="ai-groups">${result.groups.map((group, index) => renderGroup(group, alertIndex(result.alerts), index)).join('')}</div>`
         : emptyState('Tidak ada alert pada scope ini', 'Ubah status review, ambang severity, atau scope tenant lalu jalankan ulang.')}`;
   }
@@ -265,12 +274,13 @@ export async function mount(ctx) {
       </div>`;
   }
 
-  async function run() {
+  async function run(resume = false) {
     if (running) return;
     const form = root.querySelector('#ai-triage-form');
     if (!form) return;
     const tenantField = form.elements.tenant?.value || state.tenantValue || 'all';
     const limit = boundedInteger(form.elements.limit.value, 40, MIN_LIMIT, MAX_LIMIT);
+    const batchSize = boundedInteger(form.elements.batch_size?.value, DEFAULT_BATCH, 1, MAX_BATCH);
     const parsedLevel = parseSeveritySelection(form.elements.min_rule_level.value);
     const minRuleLevel = parsedLevel.minRuleLevel;
     const maxRuleLevel = parsedLevel.maxRuleLevel;
@@ -278,36 +288,70 @@ export async function mount(ctx) {
     const groupBy = form.elements.group_by?.value || state.groupBy || 'rule_description';
     state.tenantValue = tenantField;
     state.limit = limit;
+    state.batchSize = batchSize;
     state.severitySelection = parsedLevel.selection;
     state.reviewStatus = reviewStatus;
     state.groupBy = groupBy;
     running = true;
+    let batch = 0;
+    let previousProcessed = -1;
     const button = form.querySelector('button[type=submit]');
     const status = root.querySelector('#ai-status');
     if (button) button.disabled = true;
     if (button) button.innerHTML = `${icon('spark')} Memproses…`;
-    if (status) { status.textContent = 'Mengelompokkan alert dan menghitung klasifikasi…'; status.dataset.kind = 'info'; }
+    if (status) { status.textContent = resume ? 'Melanjutkan alert yang belum diproses…' : 'Mengelompokkan alert dan menghitung klasifikasi…'; status.dataset.kind = 'info'; }
+    const requestTimeout = Math.max(
+      120000,
+      (Number(settings.ai.timeout_seconds) || 90) * 1000,
+      Math.min(1800000, batchSize * 200),
+    );
     try {
-      const body = await json('/api/ai/triage', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          tenant: activeTenants(),
-          limit,
-          min_rule_level: minRuleLevel,
-          max_rule_level: maxRuleLevel,
-          review_status: reviewStatus,
-          group_by: groupBy,
-        }),
-        signal,
-        timeout: Math.max(120000, (Number(settings.ai.timeout_seconds) || 90) * 1000, Math.min(1800000, limit * 100)),
-      });
-      result = normalizeTriageResult(body);
-      mergeSelection = new Set();
+      while (true) {
+        batch += 1;
+        if (status) {
+          status.textContent = batch === 1 && !resume
+            ? 'Mengelompokkan alert dan menghitung klasifikasi…'
+            : `Memproses batch ${batch} (${batchSize.toLocaleString('id-ID')} alert per permintaan)…`;
+          status.dataset.kind = 'info';
+        }
+        const body = await json('/api/ai/triage', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            tenant: activeTenants(),
+            limit,
+            batch_size: batchSize,
+            resume: resume || batch > 1,
+            min_rule_level: minRuleLevel,
+            max_rule_level: maxRuleLevel,
+            review_status: reviewStatus,
+            group_by: groupBy,
+          }),
+          signal,
+          timeout: requestTimeout,
+        });
+        result = normalizeTriageResult(body);
+        mergeSelection = new Set();
+        const progress = result.progress;
+        if (!progress) break;
+        if (status) {
+          status.textContent = progress.remaining > 0
+            ? `Batch ${batch} · ${progress.processed.toLocaleString('id-ID')}/${progress.total.toLocaleString('id-ID')} alert ditandai diproses · sisa ${progress.remaining.toLocaleString('id-ID')}`
+            : `Batch ${batch} · ${progress.processed.toLocaleString('id-ID')}/${progress.total.toLocaleString('id-ID')} alert diproses · selesai`;
+          status.dataset.kind = 'info';
+        }
+        if (progress.done || progress.remaining <= 0) break;
+        if (progress.processed <= previousProcessed) break;
+        previousProcessed = progress.processed;
+      }
       running = false;
       render();
       const counts = summarizeGroups(result.groups);
-      notify(`${result.alertCount} alert diproses · ${counts.tp} TP · ${counts.fp} FP · ${counts.needs_review} perlu ditinjau.`, result.mode === 'local_rules_fallback' ? 'warning' : 'success');
+      const remaining = result.progress ? result.progress.remaining : 0;
+      notify(
+        `${result.alertCount.toLocaleString('id-ID')} alert tergrup · ${counts.tp} TP · ${counts.fp} FP · ${counts.needs_review} perlu ditinjau${remaining > 0 ? ` · sisa ${remaining.toLocaleString('id-ID')} alert bisa dilanjutkan` : ''}.`,
+        result.mode === 'local_rules_fallback' ? 'warning' : 'success',
+      );
     } catch (error) {
       if (error.name === 'AbortError') return;
       running = false;
@@ -315,7 +359,17 @@ export async function mount(ctx) {
         const currentButton = root.querySelector('#ai-triage-form button[type=submit]');
         if (currentButton) { currentButton.disabled = false; currentButton.innerHTML = `${icon('spark')} Jalankan AI Triage`; }
       }
-      if (status) { status.textContent = error.message; status.dataset.kind = 'error'; }
+      if (result) {
+        render();
+        const progress = result.progress;
+        notify(
+          `Batch ${batch} berhenti: ${error.message}${progress ? ` ${progress.processed.toLocaleString('id-ID')} alert sudah ditandai, sisa ${progress.remaining.toLocaleString('id-ID')}.` : ''} Progress tersimpan; klik "Lanjutkan sisa" untuk meneruskan.`,
+          'error',
+        );
+      } else if (status) {
+        status.textContent = error.message;
+        status.dataset.kind = 'error';
+      }
     }
   }
 
@@ -467,6 +521,7 @@ export async function mount(ctx) {
             const savedOpts = triageOptions(savedTriage.options || {});
             state.severitySelection = savedOpts.severitySelection;
             state.limit = savedOpts.limit;
+            state.batchSize = savedOpts.batchSize;
             state.reviewStatus = savedOpts.reviewStatus;
             state.groupBy = savedOpts.groupBy;
           } else {
@@ -506,6 +561,7 @@ export async function mount(ctx) {
   root.addEventListener('click', event => {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'run-inline') run();
+    if (action === 'resume') run(true);
     if (action === 'save') save();
     if (action === 'merge-selected') mergeSelected();
     if (action === 'clear-merge') { mergeSelection = new Set(); render(); }
@@ -534,6 +590,7 @@ export async function mount(ctx) {
       }
       if (!getParam('min_rule_level')) state.severitySelection = savedOpts.severitySelection;
       if (!getParam('limit')) state.limit = savedOpts.limit;
+      if (!getParam('batch_size')) state.batchSize = savedOpts.batchSize;
       if (!getParam('review_status')) state.reviewStatus = savedOpts.reviewStatus;
       if (!getParam('group_by')) state.groupBy = savedOpts.groupBy;
     }
