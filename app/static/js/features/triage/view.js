@@ -5,7 +5,7 @@ import {withParams} from '../../router.js';
 import {createTriageSession} from '../../state/triage.js';
 import {intelSummary, intelBadge, renderQueue, renderTriageSummary, summaryRequestParams} from './model.js';
 import {openExclusionDialog} from '../../ui/exclusion-dialog.js';
-import {renderFilterChips, filterBuilderHTML, readFilterBuilder, syncFilterBuilder, filtersValue} from '../../state/filters.js';
+import {renderFilterChips, filterBuilderHTML, readFilterBuilder, syncFilterBuilder, hasFilterBuilderDraft, filtersValue} from '../../state/filters.js';
 
 const presets = [['','Semua jenis'],['403','403 Forbidden'],['404','404 Probes'],['repeating','Berulang'],['non_http','Non-HTTP'],['bot','Bot traffic'],['curl','Curl requests']];
 const verdictLabels = {tp:'True Positive',fp:'False Positive',needs_review:'Perlu ditinjau'};
@@ -83,7 +83,7 @@ export function mount(ctx) {
     <div id="queue-options" class="toolbar" hidden><label class="checkbox-label"><input type="checkbox" id="show-intel" checked>Kolom source / intel</label><button class="button" data-action="correlation">Korelasi</button><button class="button" data-action="report-query">Laporan hasil filter</button></div>
     <div id="applied-filters" class="applied-filters"></div><div id="triage-summary-slot"></div><div id="correlation-slot"></div>
     <div class="triage-workspace" id="triage-workspace"><section class="queue-region" aria-label="Antrean kerja"><div id="selection-actions"></div><div id="queue-results">${loadingRows()}</div><div class="pagination" id="queue-pagination"></div></section><aside id="alert-inspector" class="inspector" aria-label="Detail alert" hidden></aside></div>
-    <dialog class="filter-dialog" id="triage-filter-dialog" aria-labelledby="filter-title"><div class="dialog-header"><h2 id="filter-title">Filter &amp; urutan</h2><button class="button icon-button" data-close-filter aria-label="Tutup filter">${icon('close')}</button></div><form id="triage-filter-form" class="filter-form"><div class="field"><label for="filter-preset">Jenis event</label><select id="filter-preset" name="filter_preset">${presets.map(([v,l])=>`<option value="${v}" ${v===query.filter_preset?'selected':''}>${l}</option>`).join('')}</select></div><div class="field"><label for="filter-membership">Keanggotaan insiden</label><select id="filter-membership" name="status"><option value="all">Semua</option><option value="ungrouped">Belum masuk insiden</option><option value="grouped">Sudah masuk insiden</option></select></div><div class="field"><label for="filter-time-preset">Rentang waktu telemetri</label><select id="filter-time-preset" name="time_preset"><option value="" ${!query.time_preset?'selected':''}>Semua waktu</option><option value="1h" ${query.time_preset==='1h'?'selected':''}>1 jam terakhir</option><option value="24h" ${query.time_preset==='24h'?'selected':''}>24 jam terakhir</option><option value="7d" ${query.time_preset==='7d'?'selected':''}>7 hari terakhir</option><option value="30d" ${query.time_preset==='30d'?'selected':''}>30 hari terakhir</option><option value="custom" ${query.time_preset==='custom'||(query.time_from&&!query.time_preset)?'selected':''}>Rentang kustom…</option></select></div><div id="filter-custom-time" style="display:${query.time_preset==='custom'||(query.time_from&&!query.time_preset)?'grid':'none'}; grid-template-columns:1fr 1fr; gap:8px;"><div class="field"><label for="filter-time-from">Dari</label><input class="input" type="datetime-local" id="filter-time-from" name="time_from" value="${esc(query.time_from)}"></div><div class="field"><label for="filter-time-to">Sampai</label><input class="input" type="datetime-local" id="filter-time-to" name="time_to" value="${esc(query.time_to)}"></div></div><div class="field"><label for="filter-sort">Urutan</label><select id="filter-sort" name="ordering"><option value="timestamp:desc">Terbaru</option><option value="timestamp:asc">Kronologis</option><option value="severity:desc">Severity tertinggi</option><option value="hits:desc">Hits terbanyak</option></select></div><p class="meta">Tenant mengikuti workspace. Pilihan alert tetap tersimpan saat filter berubah.</p>${filterBuilderHTML(query.filters,{prefix:'triage-flt'})}<div class="dialog-actions"><button type="button" class="button" data-action="reset">Reset filter</button><button class="button primary" type="submit">Terapkan</button></div></form></dialog>
+    <dialog class="filter-dialog" id="triage-filter-dialog" aria-labelledby="filter-title"><div class="dialog-header"><h2 id="filter-title">Filter &amp; urutan</h2><button class="button icon-button" data-close-filter aria-label="Tutup filter">${icon('close')}</button></div><form id="triage-filter-form" class="filter-form"><div class="field"><label for="filter-preset">Jenis event</label><select id="filter-preset" name="filter_preset">${presets.map(([v,l])=>`<option value="${v}" ${v===query.filter_preset?'selected':''}>${l}</option>`).join('')}</select></div><div class="field"><label for="filter-membership">Keanggotaan insiden</label><select id="filter-membership" name="status"><option value="all">Semua</option><option value="ungrouped">Belum masuk insiden</option><option value="grouped">Sudah masuk insiden</option></select></div><div class="field"><label for="filter-time-preset">Rentang waktu telemetri</label><select id="filter-time-preset" name="time_preset"><option value="" ${!query.time_preset?'selected':''}>Semua waktu</option><option value="1h" ${query.time_preset==='1h'?'selected':''}>1 jam terakhir</option><option value="24h" ${query.time_preset==='24h'?'selected':''}>24 jam terakhir</option><option value="7d" ${query.time_preset==='7d'?'selected':''}>7 hari terakhir</option><option value="30d" ${query.time_preset==='30d'?'selected':''}>30 hari terakhir</option><option value="custom" ${query.time_preset==='custom'||(query.time_from&&!query.time_preset)?'selected':''}>Rentang kustom…</option></select></div><div id="filter-custom-time" style="display:${query.time_preset==='custom'||(query.time_from&&!query.time_preset)?'grid':'none'}; grid-template-columns:1fr 1fr; gap:8px;"><div class="field"><label for="filter-time-from">Dari</label><input class="input" type="datetime-local" id="filter-time-from" name="time_from" value="${esc(query.time_from)}"></div><div class="field"><label for="filter-time-to">Sampai</label><input class="input" type="datetime-local" id="filter-time-to" name="time_to" value="${esc(query.time_to)}"></div></div><div class="field"><label for="filter-sort">Urutan</label><select id="filter-sort" name="ordering"><option value="timestamp:desc">Terbaru</option><option value="timestamp:asc">Kronologis</option><option value="severity:desc">Severity tertinggi</option><option value="hits:desc">Hits terbanyak</option></select></div><p class="meta">Tenant mengikuti workspace. Pilihan alert tetap tersimpan saat filter berubah.</p>${filterBuilderHTML(query.filters,{prefix:'triage-flt'})}<p class="inline-status" id="triage-filter-status" role="status" aria-live="polite"></p><div class="dialog-actions"><button type="button" class="button" data-action="reset">Reset filter</button><button class="button primary" type="submit">Terapkan</button></div></form></dialog>
     <dialog class="app-dialog" id="batch-add-incident-dialog" aria-labelledby="batch-incident-title"><div class="dialog-header"><h2 id="batch-incident-title">Masukkan Bukti ke Insiden</h2><button class="button icon-button" data-close-batch-incident aria-label="Tutup dialog">${icon('close')}</button></div><form id="batch-add-incident-form" class="stack"><p class="muted"><span id="batch-incident-count">0</span> alert terpilih akan ditautkan ke kasus insiden di bawah ini.</p><div class="field"><label for="batch-incident-select">Pilih Insiden Sasaran</label><select class="select" id="batch-incident-select" name="group_id" required><option value="">Memuat daftar insiden…</option></select></div><div class="dialog-actions" style="margin-top:20px; display:flex; justify-content:flex-end; gap:8px;"><button type="button" class="button" data-close-batch-incident>Batal</button><button class="button primary" type="submit">Tautkan ke Insiden</button></div></form></dialog>
     <dialog class="app-dialog" id="pattern-verdict-dialog" aria-labelledby="pattern-verdict-title"><div class="dialog-header"><h2 id="pattern-verdict-title">Pembersihan Backlog Berbasis Pola (Bulk Pattern Verdict)</h2><button class="button icon-button" type="button" data-close-pattern-verdict aria-label="Tutup dialog">${icon('close')}</button></div><form id="pattern-verdict-form" class="stack"><p class="meta">Saring alert serupa (misal: "Web server 400 error code" pada IP atau Rule yang sama) dan berikan verdict final (TP / FP / Benign) sekaligus untuk membersihkan backlog dengan cepat.</p><div class="form-grid"><div class="field"><label for="pv-description">Deskripsi Rule (mengandung teks)</label><input class="input" id="pv-description" name="description" type="text" placeholder="Contoh: Web server 400 error code"></div><div class="field"><label for="pv-rule-id">Rule ID (persis)</label><input class="input mono" id="pv-rule-id" name="rule_id" type="text" placeholder="Contoh: 31101"></div><div class="field"><label for="pv-source-ip">Source IP (persis)</label><input class="input mono" id="pv-source-ip" name="source_ip" type="text" placeholder="Contoh: 192.0.2.1"></div><div class="field"><label for="pv-agent">Target Asset / Agent</label><input class="input" id="pv-agent" name="agent_name" type="text" placeholder="Contoh: web-server-01"></div><div class="field"><label for="pv-verdict">Verdict Final</label><select class="select" id="pv-verdict" name="verdict" required><option value="fp" selected>False Positive (FP)</option><option value="benign">Benign / Normal Traffic</option><option value="tp">True Positive (TP)</option></select></div><div class="field"><label for="pv-notes">Catatan Analis</label><input class="input" id="pv-notes" name="reviewer_notes" type="text" placeholder="Alasan pembersihan backlog pola ini…"></div></div><label class="checkbox-label"><input type="checkbox" name="only_unreviewed" checked> Hanya terapkan pada alert yang belum direview (Unreviewed Backlog)</label><p class="inline-status" id="pattern-verdict-preview" role="status"></p><div class="dialog-actions" style="display:flex; justify-content:flex-end; gap:8px;"><button type="button" class="button" data-action="preview-pattern-verdict">Hitung Alert Cocok</button><button type="submit" class="button primary">Terapkan Verdict Massal</button></div></form></dialog>`;
   const results = root.querySelector('#queue-results'), inspector = root.querySelector('#alert-inspector');
@@ -94,6 +94,12 @@ export function mount(ctx) {
   root.querySelector('#filter-sort').value = `${query.sort_by}:${query.sort}`;
   root.querySelector('#filter-membership').value = query.status;
   const on = (el,type,fn) => el.addEventListener(type,fn,{signal});
+  function setFilterStatus(message = '', kind = 'error') {
+    const el = root.querySelector('#triage-filter-status');
+    if (!el) return;
+    el.textContent = message;
+    if (el.dataset) el.dataset.kind = message ? kind : '';
+  }
   function updateQuery(changes, {replace=false}={}) {
     const p = new URLSearchParams(route.params);
     for (const [k,v] of Object.entries(changes)) v===null||v===''?p.delete(k):p.set(k,String(v));
@@ -167,7 +173,7 @@ ${rawLog}`;
     slot.innerHTML=ids.length?`<div class="selection-toolbar" aria-label="Tindakan pilihan"><strong>${ids.length.toLocaleString('id-ID')} alert dipilih</strong><button class="button primary" data-action="create-incident">${icon('plus')}Buat insiden</button><button class="button" data-action="add-selected-to-incident">${icon('cases')}Masukkan ke insiden</button><button class="button" data-action="batch-verdict" data-verdict="tp">Verdict TP</button><button class="button" data-action="batch-verdict" data-verdict="fp">Verdict FP</button><button class="button" data-action="batch-verdict" data-verdict="benign">Verdict Benign</button><button class="button" data-action="batch-enrich-intel">${icon('refresh')}Live Enrich IP</button><button class="button" data-action="copy-selected-logs">${icon('copy')}Salin log</button><button class="button" data-action="copy-selected-redacted">Tersamarkan</button><button class="button" data-action="batch-review">Tandai direview</button><button class="button" data-action="batch-unreview">Belum direview</button><button class="button" data-action="report-selected">Laporan</button><button class="button icon-button" data-action="clear-selection" aria-label="Batalkan pilihan">${icon('close')}</button>${ids.length>visible?`<span class="selection-note">${ids.length-visible} pilihan berada di luar halaman/filter ini. Tindakan memakai seluruh pilihan pada tenant ini.</span>`:''}</div>`:'';
   }
   function renderResults() {
-    if (!items.length) results.innerHTML=emptyState('Tidak ada alert pada antrean ini',query.q||query.filter_preset||query.group_id||query.review_status!=='all'?'Coba reset filter atau lihat antrean Semua. Pilihan sebelumnya tetap tersimpan.':'Impor export Wazuh untuk memulai triage.',`<button class="button" data-action="reset">Reset filter</button><a class="button primary" href="${scopedRoute('/imports')}">Impor alert</a>`);
+    if (!items.length) results.innerHTML=emptyState('Tidak ada alert pada antrean ini',query.q||query.filter_preset||query.group_id||query.filters?.length||query.review_status!=='all'?'Coba reset filter atau lihat antrean Semua. Pilihan sebelumnya tetap tersimpan.':'Impor export Wazuh untuk memulai triage.',`<button class="button" data-action="reset">Reset filter</button><a class="button primary" href="${scopedRoute('/imports')}">Impor alert</a>`);
     else results.innerHTML=renderQueue(items,{selectedIds:selection.ids(),activeId,query,showIntel,showAllLogs,expandedLogIds,wrapLog});
     const standardSizes = [25, 50, 100, 200, 500, 1000];
     const isCustom = !standardSizes.includes(query.limit);
@@ -200,6 +206,7 @@ ${rawLog}`;
     try {
       const params=new URLSearchParams(route.params);
       for(const key of new Set(scopeParams(query).keys()))params.delete(key);
+      params.delete('filters');
       for(const [key,value] of scopeParams(query))params.append(key,value);
       params.set('limit',String(query.limit));params.set('offset',String(query.offset));
       params.set('summary',String(!showAllLogs));
@@ -351,6 +358,7 @@ ${rawLog}`;
       const index=Number(button.dataset.removeFilter);
       if(button.closest('[data-filter-builder]')){
         pendingFilters.splice(index,1);
+        setFilterStatus('');
         const list=dialog.querySelector('[data-filter-chips]');
         if(list)list.innerHTML=renderFilterChips(pendingFilters);
       }else{
@@ -361,14 +369,15 @@ ${rawLog}`;
     }
     if(button.dataset.addFilter!==undefined){
       const added=readFilterBuilder(root,'triage-flt');
-      if(!added){notify('Isi field, operator, dan nilai filter terlebih dahulu.','error');return;}
+      if(!added){setFilterStatus('Isi field, operator, dan nilai filter yang valid terlebih dahulu.');return;}
+      setFilterStatus('');
       pendingFilters.push(added);
       const list=dialog.querySelector('[data-filter-chips]');
       if(list)list.innerHTML=renderFilterChips(pendingFilters);
       return;
     }
     const action=button.dataset.action;
-    if(action==='filters'){pendingFilters=[...query.filters];const list=dialog.querySelector('[data-filter-chips]');if(list)list.innerHTML=renderFilterChips(pendingFilters);dialog.showModal();return;}
+    if(action==='filters'){pendingFilters=[...query.filters];setFilterStatus('');const list=dialog.querySelector('[data-filter-chips]');if(list)list.innerHTML=renderFilterChips(pendingFilters);dialog.showModal();return;}
     if(action==='more'){const opts=root.querySelector('#queue-options');opts.hidden=!opts.hidden;button.setAttribute('aria-expanded',String(!opts.hidden));return;}
     if(action==='reset'){dialog.close();navigate(scopedRoute('/triage',{review_status:'all'}));return;}
     if(action==='retry'){if(button.closest('#alert-inspector'))openInspector(activeId);else load();return;}
@@ -543,8 +552,8 @@ ${rawLog}`;
     if(el.id==='triage-sort'){const [sort_by,sort]=el.value.split(':');updateQuery({sort_by,sort});}
     if(el.id==='show-intel'){showIntel=el.checked;renderResults();}
     if(el.id==='filter-time-preset'){const custom=root.querySelector('#filter-custom-time');if(custom)custom.style.display=el.value==='custom'?'grid':'none';}
-    if(el.matches('[data-filter-field]'))syncFilterBuilder(root,'triage-flt');
-    if(el.matches('[data-filter-op]')){const value2=root.querySelector('[data-filter-value2]');if(value2)value2.hidden=el.value!=='range';}
+    if(el.matches('[data-filter-field]')){syncFilterBuilder(root,'triage-flt');setFilterStatus('');}
+    if(el.matches('[data-filter-op]')){const value2=root.querySelector('[data-filter-value2]');if(value2)value2.hidden=el.value!=='range';setFilterStatus('');}
     if(el.id==='page-size-select'){
       if(el.value==='custom'){
         const wrap=root.querySelector('#custom-limit-wrap');
@@ -579,12 +588,24 @@ ${rawLog}`;
   });
   on(root.querySelector('#triage-search'),'input',e=>{clearTimeout(searchTimer);const q=e.target.value;searchTimer=setTimeout(()=>updateQuery({q},{replace:true}),350);});
   on(root.querySelector('#triage-filter-form'),'submit',e=>{
-    e.preventDefault();const form=new FormData(e.target);const [sort_by,sort]=form.get('ordering').split(':');dialog.close();
+    e.preventDefault();
+    if(hasFilterBuilderDraft(root,'triage-flt')){
+      const added=readFilterBuilder(root,'triage-flt');
+      if(!added){
+        setFilterStatus('Filter yang sedang diketik belum valid (lengkapi nilai/rentang) sebelum menerapkan.');
+        return;
+      }
+      pendingFilters.push(added);
+      const list=dialog.querySelector('[data-filter-chips]');
+      if(list)list.innerHTML=renderFilterChips(pendingFilters);
+    }
+    setFilterStatus('');
+    const form=new FormData(e.target);const [sort_by,sort]=(form.get('ordering')||`${query.sort_by}:${query.sort}`).split(':');dialog.close();
     const preset=form.get('time_preset')||'';let time_from=form.get('time_from')||'',time_to=form.get('time_to')||'';
     if(preset&&preset!=='custom'){const ms={'1h':3600000,'24h':86400000,'7d':604800000,'30d':2592000000}[preset];if(ms)time_from=new Date(Date.now()-ms).toISOString();}
     else if(time_from){try{time_from=new Date(time_from).toISOString();}catch{}}
     if(time_to){try{time_to=new Date(time_to).toISOString();}catch{}}
-    updateQuery({filter_preset:form.get('filter_preset'),status:form.get('status'),time_preset:preset,time_from,time_to,sort_by,sort,filters:filtersValue(pendingFilters)});
+    updateQuery({filter_preset:form.get('filter_preset')??'',status:form.get('status')||'all',time_preset:preset,time_from,time_to,sort_by,sort,filters:filtersValue(pendingFilters)});
   });
   on(root.querySelector('#batch-add-incident-form'),'submit',async e=>{
     e.preventDefault();const form=new FormData(e.target);const groupId=form.get('group_id');

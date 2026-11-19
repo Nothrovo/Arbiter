@@ -55,11 +55,18 @@ export function normalizeFilter(raw) {
   const allowed = filterOpOptions(field).map(([op]) => op);
   const requested = raw.op ? String(raw.op) : 'is';
   if (!allowed.includes(requested)) return null;
-  const op = requested;
-  const value = String(raw.value ?? '').slice(0, 500);
-  if (!value.trim()) return null;
-  const value2 = String(raw.value2 ?? '').slice(0, 500);
-  if (['range'].includes(op) && !value2.trim()) return null;
+  const value = String(raw.value ?? '').trim().slice(0, 500);
+  if (!value) return null;
+  const value2 = String(raw.value2 ?? '').trim().slice(0, 500);
+  if (requested === 'range' && !value2) return null;
+  if (isNumericField(field)) {
+    if (!/^-?\d+$/.test(value)) return null;
+    if (requested === 'range' && !/^-?\d+$/.test(value2)) return null;
+  }
+  let op = requested;
+  if (!isNumericField(field) && (op === 'is' || op === 'is_not') && (value.includes('*') || value.includes('?'))) {
+    op = op === 'is' ? 'glob' : 'not_glob';
+  }
   return {field, op, value, value2};
 }
 
@@ -114,8 +121,14 @@ export function filterBuilderHTML(filters = [], {prefix = 'flt'} = {}) {
       <button type="button" class="button" data-add-filter>+ Tambah filter</button>
     </div>
     <div class="filter-chip-list" data-filter-chips>${renderFilterChips(filters)}</div>
-    <p class="meta">Contoh: <code>rule.description does not contain mhs</code>, <code>data.url matches glob */mhs/*</code>, <code>rule.level in range 7..12</code>. Filter memakai AND dan ikut tersimpan di URL.</p>
+    <p class="meta">Contoh: <code>rule.description does not contain mhs</code>, <code>data.url matches glob */mhs/*</code>, <code>rule.level in range 7..12</code>. Pola dengan <code>*</code> atau <code>?</code> pada operator <code>is</code>/<code>is not</code> otomatis dicocokkan sebagai glob. Filter memakai AND dan ikut tersimpan di URL.</p>
   </div>`;
+}
+
+export function hasFilterBuilderDraft(root, prefix = 'flt') {
+  const value = root.querySelector(`[data-filter-builder="${prefix}"] [data-filter-value]`);
+  const value2 = root.querySelector(`[data-filter-builder="${prefix}"] [data-filter-value2]`);
+  return Boolean(String(value?.value ?? '').trim() || String(value2?.value ?? '').trim());
 }
 
 export function readFilterBuilder(root, prefix = 'flt') {
@@ -129,7 +142,7 @@ export function readFilterBuilder(root, prefix = 'flt') {
   value.value = '';
   if (value2) {
     value2.value = '';
-    value2.hidden = true;
+    value2.hidden = op.value !== 'range';
   }
   return candidate;
 }

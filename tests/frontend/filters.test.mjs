@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {filtersValue, normalizeFilter, parseFilters, renderFilterChips, filterBuilderHTML} from '../../app/static/js/state/filters.js';
+import {filtersValue, normalizeFilter, parseFilters, renderFilterChips, filterBuilderHTML, readFilterBuilder, hasFilterBuilderDraft} from '../../app/static/js/state/filters.js';
 import {queryFrom, scopeParams} from '../../app/static/js/state/scope.js';
 
 test('filter model normalizes known fields and drops malformed chips', () => {
@@ -52,4 +52,38 @@ test('filter builder offers numeric operators only for rule.level', () => {
   assert.match(html, /data-add-filter/);
   assert.match(html, /triage-flt-value/);
   assert.match(html, /matches glob/);
+});
+
+test('wildcard promotion normalizes is/is_not on text fields while numeric fields require integers', () => {
+  const promoted = normalizeFilter({field: 'full_log', op: 'is_not', value: '*/lib/minigalnano/createthumb.php?*'});
+  assert.deepEqual(promoted, {
+    field: 'full_log',
+    op: 'not_glob',
+    value: '*/lib/minigalnano/createthumb.php?*',
+    value2: '',
+  });
+  assert.equal(normalizeFilter({field: 'full_log', op: 'is', value: '*createthumb*'}).op, 'glob');
+  assert.equal(normalizeFilter({field: 'rule.level', op: 'is', value: 'abc'}), null);
+  assert.equal(normalizeFilter({field: 'rule.level', op: 'range', value: '7', value2: 'high'}), null);
+});
+
+test('hasFilterBuilderDraft and readFilterBuilder preserve range visibility cleanly', () => {
+  const field = {value: 'rule.level'};
+  const op = {value: 'range'};
+  const value = {value: '7'};
+  const value2 = {value: '12', hidden: false};
+  const map = {
+    '[data-filter-builder="triage-flt"] [data-filter-field]': field,
+    '[data-filter-builder="triage-flt"] [data-filter-op]': op,
+    '[data-filter-builder="triage-flt"] [data-filter-value]': value,
+    '[data-filter-builder="triage-flt"] [data-filter-value2]': value2,
+  };
+  const root = {querySelector: selector => map[selector] || null};
+  assert.equal(hasFilterBuilderDraft(root, 'triage-flt'), true);
+  const parsed = readFilterBuilder(root, 'triage-flt');
+  assert.deepEqual(parsed, {field: 'rule.level', op: 'range', value: '7', value2: '12'});
+  assert.equal(value.value, '');
+  assert.equal(value2.value, '');
+  assert.equal(value2.hidden, false);
+  assert.equal(hasFilterBuilderDraft(root, 'triage-flt'), false);
 });

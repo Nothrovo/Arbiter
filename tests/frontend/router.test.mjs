@@ -19,4 +19,9 @@ test('hash router preserves query and case identity and identifies unknown desti
   assert.equal(parseRoute('').path, '/triage');
   assert.equal(parseRoute('#/unknown').page, 'not-found');
   assert.equal(withParams('/triage', new URLSearchParams('tenant=lab')), '#/triage?tenant=lab');
+
+  const rawFilters = '[{"field":"full_log","op":"is_not","value":"*/lib/minigalnano/createthumb.php?*","value2":""}]';
+  const withLiteralQuestion = parseRoute(`#/triage?tenant=all&filters=${rawFilters}`);
+  assert.equal(withLiteralQuestion.page, 'triage');
+  assert.equal(withLiteralQuestion.params.get('filters'), rawFilters);
 });

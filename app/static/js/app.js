@@ -1,4 +1,4 @@
-import {createRouter, withParams} from './router.js';
+import {createRouter, parseRoute, withParams} from './router.js';
 import {importFeature} from './feature-loader.js';
 import {json} from './api/client.js';
 import {createSelection} from './state/selection.js';
@@ -15,7 +15,7 @@ const tenantForm=document.querySelector('#tenant-scope-form');
 const tenantOptions=document.querySelector('#tenant-scope-options');
 const routeScope=params=>tenantScope(params);
 const scopeParams=scope=>{const params=new URLSearchParams();for(const tenant of tenantValues(scope))params.append('tenant',tenant);return params;};
-const selection=createSelection(routeScope(new URLSearchParams(location.hash.split('?')[1]||'')).key);
+const selection=createSelection(routeScope(parseRoute(location.hash).params).key);
 let currentRoute, controller, cleanup, guard=null, notifyTimer, healthPending=false, lastHealth=null, routeVersion=0;
 const scrollPositions=new Map();
 let navigationMemory=createNavigationMemory();

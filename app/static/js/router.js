@@ -1,6 +1,8 @@
 export function parseRoute(hash = '') {
   const raw = hash.replace(/^#/, '') || '/triage';
-  const [pathPart, search = ''] = raw.split('?');
+  const qIdx = raw.indexOf('?');
+  const pathPart = qIdx === -1 ? raw : raw.slice(0, qIdx);
+  const search = qIdx === -1 ? '' : raw.slice(qIdx + 1);
   const path = pathPart.startsWith('/') ? pathPart : '/triage';
   const first = path.split('/')[1];
   return {path, params: new URLSearchParams(search), page: ['triage', 'monitoring', 'stats', 'incidents', 'imports', 'reports', 'realtime', 'pull', 'ai-triage', 'wazuh-queries', 'error-codes', 'database', 'settings'].includes(first) ? first : 'not-found'};

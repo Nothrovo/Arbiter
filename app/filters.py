@@ -24,8 +24,8 @@ MAX_FILTER_FIELD = 60
 _URL_EXPR = (
     "COALESCE(NULLIF(a.data->>'url', ''), "
     "NULLIF(a.data->>'uri', ''), "
-    "NULLIF(a.parsed_details->>'path', ''), "
     "NULLIF(a.parsed_details->>'uri', ''), "
+    "NULLIF(a.parsed_details->>'path', ''), "
     "NULLIF(a.parsed_details->>'url_path', ''), '')"
 )
 _STATUS_EXPR = (
@@ -160,6 +160,12 @@ def normalize_filter(raw: Any) -> dict[str, str]:
         value, value2 = bound
     if op in {"is", "is_not", "contains", "not_contains", "glob", "not_glob", "regex", "not_regex", "gte", "lte"} and not value:
         raise _error("Nilai filter tidak boleh kosong.")
+    # Operators "is"/"is not" are exact comparisons. When the value carries glob
+    # wildcards, honour them as glob so a chip like
+    # "Full log is not */lib/x.php*" actually filters instead of doing a no-op
+    # exact comparison. Numeric fields keep exact semantics.
+    if kind != "int" and op in {"is", "is_not"} and ("*" in value or "?" in value):
+        op = "glob" if op == "is" else "not_glob"
     if op == "range" and not (value and value2):
         raise _error("Rentang filter membutuhkan nilai awal dan akhir.")
     if op in {"regex", "not_regex"}:
@@ -235,7 +241,7 @@ def _predicate(item: dict[str, str]) -> tuple[str, list[Any]]:
     elif base == "contains":
         sql, params = f"{expression} ILIKE %s ESCAPE '\\'", [f"%{_escape_like(value)}%"]
     elif base == "glob":
-        sql, params = f"{expression} LIKE %s ESCAPE '\\'", [_glob_to_like(value)]
+        sql, params = f"{expression} ILIKE %s ESCAPE '\\'", [_glob_to_like(value)]
     elif base == "regex":
         sql, params = f"{expression} ~* %s", [value]
     else:  # pragma: no cover - normalize_filter rejects unknown ops

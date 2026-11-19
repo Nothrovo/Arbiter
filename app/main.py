@@ -57,6 +57,7 @@ from app.exports import (
     generate_tsv_table,
     generate_xlsx_workbook,
 )
+from app.filters import build_filter_sql, parse_filters
 from app.parser import parse_export
 from app.privacy import sanitize_text
 from app.pull_jobs import cancel_job, get_job, list_jobs, start_pull_job
@@ -2029,13 +2030,22 @@ def api_ai_test(payload: dict[str, Any]):
         raise HTTPException(status_code=502, detail=str(error)) from None
 
 
+def _safe_saved_filters(raw: Any) -> list[dict[str, str]]:
+    """Decode persisted AI triage filters without failing on legacy state."""
+    try:
+        return parse_filters(raw)
+    except HTTPException:
+        return []
+
+
 def _build_ai_triage_where(
     tenant: Any,
     review_status: str,
     min_rule_level: int,
     max_rule_level: int | None,
+    filters: Any = None,
 ) -> tuple[str, list[Any]]:
-    where, params = alert_where(tenant=tenant, review_status=review_status)
+    where, params = alert_where(tenant=tenant, review_status=review_status, filters=filters)
     level_clause = "a.rule_level >= %s"
     level_params: list[Any] = [min_rule_level]
     if max_rule_level is not None:
@@ -2058,6 +2068,7 @@ def _ai_triage_scope_signature(
     min_rule_level: int,
     max_rule_level: int | None,
     group_by: str,
+    filters: list[dict[str, str]] | None = None,
 ) -> str:
     """Stable identity for one triage scope; progress is only reused within it."""
     return json.dumps({
@@ -2066,6 +2077,7 @@ def _ai_triage_scope_signature(
         "min_rule_level": min_rule_level,
         "max_rule_level": max_rule_level,
         "group_by": group_by,
+        "filters": filters or [],
     }, sort_keys=True)
 
 
@@ -2168,6 +2180,8 @@ def _ai_triage_read_only(conn, state: dict[str, Any], norm_tenants: list[str]) -
     all-tenant run shows that tenant's share of the same saved result.
     """
     options = state.get("options") or {}
+    saved_filters = _safe_saved_filters(options.get("filters"))
+    options_out = {**options, "filters": saved_filters}
     group_list = state.get("groups") if isinstance(state.get("groups"), list) else []
     saved_ids = [int(aid) for aid in (state.get("alert_ids") or []) if str(aid).isdigit()]
     wanted_ids = {int(aid) for g in group_list for aid in (g.get("alert_ids") or []) if str(aid).isdigit()}
@@ -2176,6 +2190,12 @@ def _ai_triage_read_only(conn, state: dict[str, Any], norm_tenants: list[str]) -
     if wanted_ids:
         t_clause, t_params = tenant_clause("a", norm_tenants)
         id_where = f"WHERE a.id = ANY(%s){f' AND {t_clause}' if t_clause else ''}"
+        id_params: list[Any] = [sorted(wanted_ids), *t_params]
+        filter_sql, filter_params = build_filter_sql(saved_filters)
+        if filter_sql:
+            id_where += f" AND {filter_sql}"
+            id_params.extend(filter_params)
+        id_where, id_params = with_exclusions(id_where, id_params, _exclusion_document(conn))
         rows = conn.execute(
             f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
                        a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
@@ -2183,7 +2203,7 @@ def _ai_triage_read_only(conn, state: dict[str, Any], norm_tenants: list[str]) -
                        a.data, COALESCE(a.raw->>'full_log', '') AS full_log
                 FROM wazuh.alerts a {id_where}
                 ORDER BY a.rule_level DESC NULLS LAST, a.timestamp DESC NULLS LAST, a.id DESC""",
-            [sorted(wanted_ids), *t_params],
+            id_params,
         ).fetchall()
     by_id = {str(r["id"]): {**r, "id": str(r["id"])} for r in rows}
     groups: list[dict[str, Any]] = []
@@ -2200,7 +2220,7 @@ def _ai_triage_read_only(conn, state: dict[str, Any], norm_tenants: list[str]) -
     return {
         "saved": True,
         "read_only": True,
-        "options": options,
+        "options": options_out,
         "progress": None,
         "result": {
             "mode": str(state.get("mode") or "local_rules"),
@@ -2210,6 +2230,7 @@ def _ai_triage_read_only(conn, state: dict[str, Any], norm_tenants: list[str]) -
             "min_rule_level": int(options.get("min_rule_level") or 7),
             "max_rule_level": options.get("max_rule_level"),
             "group_by": group_by,
+            "filters": saved_filters,
             "saved_at": state.get("saved_at"),
             "window_key": state.get("window_key"),
             "progress": None,
@@ -2317,17 +2338,26 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
         group_by = str(options.get("group_by") or "rule_description")
         if group_by not in {"host_rule", "rule_description", "indicator"}:
             group_by = "rule_description"
+        saved_filters = _safe_saved_filters(options.get("filters"))
         batch_size = _ai_triage_batch_size(options.get("batch_size"))
         scope_sig = _ai_triage_scope_signature(
             options.get("tenant") or ["all"], review_status, min_rule_level, max_rule_level, group_by,
+            filters=saved_filters,
         )
         processed_ids, progress_state = _ai_triage_progress(state, scope_sig)
 
+        excl_doc = _exclusion_document(conn)
         saved_ids = [int(aid) for aid in (state.get("alert_ids") or []) if str(aid).isdigit()]
         existing_rows: list[dict[str, Any]] = []
         if saved_ids:
             t_clause, t_params = tenant_clause("a", tenant)
             id_where = f"WHERE a.id = ANY(%s){f' AND {t_clause}' if t_clause else ''}"
+            id_params: list[Any] = [saved_ids, *t_params]
+            filter_sql, filter_params = build_filter_sql(saved_filters)
+            if filter_sql:
+                id_where += f" AND {filter_sql}"
+                id_params.extend(filter_params)
+            id_where, id_params = with_exclusions(id_where, id_params, excl_doc)
             existing_rows = conn.execute(
                 f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
                            a.rule_id, a.rule_level, a.description, a.rule_groups, a.source_ip,
@@ -2335,11 +2365,13 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
                            a.data, COALESCE(a.raw->>'full_log', '') AS full_log
                     FROM wazuh.alerts a {id_where}
                     ORDER BY a.rule_level DESC NULLS LAST, a.timestamp DESC NULLS LAST, a.id DESC""",
-                [saved_ids, *t_params],
+                id_params,
             ).fetchall()
 
-        base_where, base_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
-        base_where, base_params = with_exclusions(base_where, base_params, _exclusion_document(conn))
+        base_where, base_params = _build_ai_triage_where(
+            tenant, review_status, min_rule_level, max_rule_level, filters=saved_filters,
+        )
+        base_where, base_params = with_exclusions(base_where, base_params, excl_doc)
         total = int(progress_state.get("total") or 0) if progress_state else 0
         if total <= 0:
             total = _ai_triage_candidate_count(conn, base_where, base_params)
@@ -2422,6 +2454,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
                 "max_rule_level": max_rule_level,
                 "review_status": review_status,
                 "group_by": group_by,
+                "filters": saved_filters,
             },
             "mode": mode,
             "warning": warning,
@@ -2450,6 +2483,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             "min_rule_level": min_rule_level,
             "max_rule_level": max_rule_level,
             "group_by": group_by,
+            "filters": saved_filters,
             "saved_at": updated_state["saved_at"],
             "window_key": updated_state["window_key"],
             "progress": progress_payload,
@@ -2492,6 +2526,7 @@ def api_ai_triage(payload: dict[str, Any]):
     tenant = payload.get("tenant") or ["all"]
     review_status = str(payload.get("review_status") or "unreviewed")
     norm_tenants = list(normalize_tenants(tenant)) or ["all"]
+    parsed_filters = parse_filters(payload.get("filters"))
 
     raw_batch = payload.get("batch_size")
     batch_size: int | None = None
@@ -2509,6 +2544,7 @@ def api_ai_triage(payload: dict[str, Any]):
 
     scope_sig = _ai_triage_scope_signature(
         norm_tenants, review_status, min_rule_level, max_rule_level, group_by,
+        filters=parsed_filters,
     )
     chunk = limit if batch_size is None else min(batch_size, limit)
     with get_db() as conn:
@@ -2529,13 +2565,16 @@ def api_ai_triage(payload: dict[str, Any]):
                 and prev_opts.get("max_rule_level") == max_rule_level
                 and str(prev_opts.get("review_status") or "unreviewed") == review_status
                 and str(prev_opts.get("group_by") or "host_rule") == group_by
+                and _safe_saved_filters(prev_opts.get("filters")) == parsed_filters
             )
             if same_scope:
                 prev_groups = prev_state.get("groups") if isinstance(prev_state.get("groups"), list) else []
                 if resume:
                     processed_ids, progress_state = _ai_triage_progress(prev_state, scope_sig)
 
-        base_where, base_params = _build_ai_triage_where(tenant, review_status, min_rule_level, max_rule_level)
+        base_where, base_params = _build_ai_triage_where(
+            tenant, review_status, min_rule_level, max_rule_level, filters=parsed_filters,
+        )
         base_where, base_params = with_exclusions(base_where, base_params, _exclusion_document(conn))
         total = int(progress_state.get("total") or 0) if progress_state else 0
         if total <= 0:
@@ -2649,6 +2688,7 @@ def api_ai_triage(payload: dict[str, Any]):
                 "max_rule_level": max_rule_level,
                 "review_status": review_status,
                 "group_by": group_by,
+                "filters": parsed_filters,
             },
             "mode": mode,
             "warning": warning,
@@ -2673,6 +2713,7 @@ def api_ai_triage(payload: dict[str, Any]):
         "min_rule_level": min_rule_level,
         "max_rule_level": max_rule_level,
         "group_by": group_by,
+        "filters": parsed_filters,
         "saved_at": saved_state["saved_at"],
         "window_key": saved_state["window_key"],
         "progress": progress_payload,

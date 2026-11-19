@@ -809,6 +809,16 @@ export function mount(ctx) {
   });
 
   on(root, 'keydown', e => {
+    if (e.key === 'Enter' && e.target.matches('[data-filter-builder="stats-flt"] [data-filter-value], [data-filter-builder="stats-flt"] [data-filter-value2]')) {
+      e.preventDefault();
+      const added = readFilterBuilder(root, 'stats-flt');
+      if (!added) {
+        notify('Isi field, operator, dan nilai filter terlebih dahulu.', 'error');
+        return;
+      }
+      updateRoute({filters: filtersValue([...(query.filters || []), added])});
+      return;
+    }
     if (e.target.id === 'stats-pattern-input' && e.key === 'Enter') {
       e.preventDefault();
       const val = e.target.value?.trim() || '';

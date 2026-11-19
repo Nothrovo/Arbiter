@@ -61,12 +61,19 @@ test('ai-triage model normalizes verdicts, modes, and bounded controls', async (
   const indicatorOptions = triageOptions(new URLSearchParams('group_by=indicator&limit=100000'));
   assert.equal(indicatorOptions.groupBy, 'indicator');
   assert.equal(indicatorOptions.limit, 100000, '100k alerts are allowed');
+  const filteredOptions = triageOptions(new URLSearchParams({
+    filters: JSON.stringify([{field: 'full_log', op: 'is_not', value: '*/lib/minigalnano/createthumb.php?*'}]),
+  }));
+  assert.deepEqual(filteredOptions.filters, [
+    {field: 'full_log', op: 'not_glob', value: '*/lib/minigalnano/createthumb.php?*', value2: ''},
+  ]);
 
   const result = normalizeTriageResult({
     mode: 'local_ai',
     model: 'hf.co/XHToken/Spark-X2.6-4B-GGUF:Q4_K_M',
     alert_count: 2,
     min_rule_level: 7,
+    filters: [{field: 'full_log', op: 'is_not', value: '*/lib/minigalnano/createthumb.php?*'}],
     progress: {processed: 1, total: 3, remaining: 2, done: false, batch_size: 500},
     alerts: [
       {id: '1', rule_level: 12, description: 'brute force', source_ip: '1.2.3.4', hit_count: 9},
@@ -83,6 +90,9 @@ test('ai-triage model normalizes verdicts, modes, and bounded controls', async (
   assert.equal(result.groups[0].verdict, 'tp');
   assert.deepEqual(result.groups[0].alertIds, ['1'], 'duplicate ids collapse');
   assert.equal(result.groups[1].verdict, 'needs_review', 'unknown verdict normalizes');
+  assert.deepEqual(result.filters, [
+    {field: 'full_log', op: 'not_glob', value: '*/lib/minigalnano/createthumb.php?*', value2: ''},
+  ]);
   assert.deepEqual(result.progress, {processed: 1, total: 3, remaining: 2, done: false, batchSize: 500});
 
   const index = alertIndex(result.alerts);
@@ -195,6 +205,10 @@ test('ai-triage page sends only sanitized fields and offers TP/FP actions', () =
   // Fallback is clearly labelled, never presented as AI.
   assert.match(view, /local_rules_fallback/);
   assert.match(view, /heuristik/i);
+  // Filter-chip builder and forwarding to POST body and Buka di Triage link.
+  assert.match(view, /filterBuilderHTML\(state\.filters/);
+  assert.match(view, /filters: state\.filters \|\| \[\]/);
+  assert.match(view, /activeFilters = filtersValue/);
 });
 
 test('ai-triage markup lives behind a dedicated route and sidebar link', () => {

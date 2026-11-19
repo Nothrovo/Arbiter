@@ -926,6 +926,87 @@ class AITriageAPITests(unittest.TestCase):
         self.assertEqual(pull_resp.json()["min_rule_level"], 15)
         self.assertIsNone(pull_resp.json()["max_rule_level"])
 
+    def test_ai_triage_supports_filter_chips_persists_state_and_enforces_exclusions_on_saved_rows(self):
+        createthumb_log = (
+            '192.0.2.50 - - [19/Nov/2026:12:00:00 +0700] '
+            '"GET /lib/minigalnano/createthumb.php?filename=images%2Fdocs%2Fcreatethumb_%281%29.jpg.jpg&width=120 HTTP/1.1" '
+            '200 1234'
+        )
+        other_log = '192.0.2.51 - - [19/Nov/2026:12:00:01 +0700] "GET /admin/config.php HTTP/1.1" 403 310'
+        self.db.add_alert(
+            80, "Alpha",
+            rule_level=9,
+            description="Synthetic web request",
+            raw=json.dumps({"full_log": createthumb_log}),
+        )
+        self.db.add_alert(
+            81, "Alpha",
+            rule_level=9,
+            description="Synthetic admin probe",
+            raw=json.dumps({"full_log": other_log}),
+        )
+        filters = [{
+            "field": "full_log",
+            "op": "is_not",
+            "value": "*/lib/minigalnano/createthumb.php?*",
+            "value2": "",
+        }]
+
+        # 1. Invalid filter fails with 422 instead of silently running unfiltered.
+        bad = self.client.post("/api/ai/triage", json={
+            "tenant": ["Alpha"], "limit": 40, "min_rule_level": 7, "filters": "not-json",
+        })
+        self.assertEqual(bad.status_code, 422, bad.text)
+
+        # 2. Valid filter excludes alert 80 while keeping alert 81.
+        filtered = self.client.post("/api/ai/triage", json={
+            "tenant": ["Alpha"],
+            "limit": 40,
+            "min_rule_level": 7,
+            "review_status": "all",
+            "group_by": "rule_description",
+            "filters": filters,
+        })
+        self.assertEqual(filtered.status_code, 200, filtered.text)
+        body = filtered.json()
+        filtered_ids = {str(a["id"]) for a in body["alerts"]}
+        self.assertNotIn("80", filtered_ids)
+        self.assertIn("81", filtered_ids)
+        self.assertEqual(body["filters"], [{
+            "field": "full_log",
+            "op": "not_glob",
+            "value": "*/lib/minigalnano/createthumb.php?*",
+            "value2": "",
+        }])
+
+        # 3. GET /api/ai/triage reloads persisted filtered state without reintroducing 80.
+        reloaded = self.client.get("/api/ai/triage", params={"tenant": "Alpha"})
+        self.assertEqual(reloaded.status_code, 200, reloaded.text)
+        reloaded_body = reloaded.json()
+        self.assertTrue(reloaded_body["saved"])
+        reloaded_ids = {str(a["id"]) for a in reloaded_body["result"]["alerts"]}
+        self.assertNotIn("80", reloaded_ids)
+        self.assertIn("81", reloaded_ids)
+        self.assertEqual(reloaded_body["options"]["filters"], body["filters"])
+
+        # 4. Adding a global exclusion later hides matching saved alert 81 on GET reload too.
+        excl = self.client.put("/api/settings", json={
+            "exclusions": {
+                "enabled": True,
+                "rules": [{
+                    "field": "rule_description",
+                    "match": "exact",
+                    "pattern": "Synthetic admin probe",
+                    "enabled": True,
+                }],
+            },
+        })
+        self.assertEqual(excl.status_code, 200, excl.text)
+        after_excl = self.client.get("/api/ai/triage", params={"tenant": "Alpha"})
+        self.assertEqual(after_excl.status_code, 200, after_excl.text)
+        after_ids = {str(a["id"]) for a in after_excl.json()["result"]["alerts"]}
+        self.assertNotIn("81", after_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

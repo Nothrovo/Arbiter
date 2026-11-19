@@ -398,6 +398,7 @@
 .ai-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:start; }
 .ai-controls { display:flex; flex-wrap:wrap; gap:12px 16px; align-items:flex-end; }
 .ai-controls .field { flex:1 1 180px; min-width:0; }
+.ai-controls .ai-filter-field { flex:1 1 100%; min-width:0; }
 .ai-controls .ai-run-field { flex:1 1 auto; min-width:220px; display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
 .ai-summary { display:grid; gap:16px; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-panel); }
 .ai-summary-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }

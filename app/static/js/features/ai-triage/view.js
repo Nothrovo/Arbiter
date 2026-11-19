@@ -3,6 +3,7 @@ import {esc, icon, severity, formatTime, emptyState, errorState, loadingRows} fr
 import {queryFrom, tenantValues} from '../../state/scope.js';
 import {withParams} from '../../router.js';
 import {normalizeSettings} from '../settings/model.js';
+import {filterBuilderHTML, renderFilterChips, readFilterBuilder, syncFilterBuilder, hasFilterBuilderDraft, filtersValue} from '../../state/filters.js';
 import {
   GROUP_BY_OPTIONS, MIN_LIMIT, MAX_LIMIT, DEFAULT_BATCH, MAX_BATCH, MIN_LEVELS, REVIEW_STATUSES,
   aiSeverityKey, alertFacts, alertIndex, boundedInteger, formatWibWindowLabel, groupAlerts, modeMeta,
@@ -21,6 +22,7 @@ export async function mount(ctx) {
     batchSize: initial.batchSize,
     reviewStatus: initial.reviewStatus,
     groupBy: initial.groupBy,
+    filters: initial.filters,
   };
   let tenantList = [];
   let settings = normalizeSettings(null);
@@ -71,6 +73,18 @@ export async function mount(ctx) {
     return `<option value="all" ${state.tenantValue === 'all' ? 'selected' : ''}>Semua tenant</option>${multiScopeOption}${options}`;
   }
 
+  function setFilterStatus(message = '', kind = 'error') {
+    const el = root.querySelector('#ai-filter-status');
+    if (!el) return;
+    el.textContent = message;
+    if (el.dataset) el.dataset.kind = message ? kind : '';
+  }
+
+  function refreshFilterChips() {
+    const list = root.querySelector('[data-filter-builder="ai-flt"] [data-filter-chips]');
+    if (list) list.innerHTML = renderFilterChips(state.filters || []);
+  }
+
   function renderControls() {
     return `
       <form class="ai-controls" id="ai-triage-form">
@@ -106,6 +120,11 @@ export async function mount(ctx) {
             ${GROUP_BY_OPTIONS.map(([value, label]) => `<option value="${esc(value)}" ${state.groupBy === value ? 'selected' : ''}>${esc(label)}</option>`).join('')}
           </select>
         </div>
+        <div class="field ai-filter-field">
+          <label for="ai-flt-value">Filter tambahan (opsional)</label>
+          ${filterBuilderHTML(state.filters, {prefix: 'ai-flt'})}
+          <p class="inline-status" id="ai-filter-status" role="status" aria-live="polite"></p>
+        </div>
         <div class="field ai-run-field">
           <button class="button primary" type="submit" ${running ? 'disabled' : ''}>${icon('spark')} ${running ? 'Memproses…' : 'Jalankan AI Triage'}</button>
         </div>
@@ -131,6 +150,7 @@ export async function mount(ctx) {
           <div>
             <span class="badge ${meta.badge}">${esc(meta.label)}</span>
             <span class="meta">${data.alertCount.toLocaleString('id-ID')} alert · rule.level ${levelLabel}</span>
+            ${data.filters?.length ? `<span class="meta">· ${data.filters.length} filter aktif</span>` : ''}
             ${data.progress
               ? `<span class="meta">${data.progress.processed.toLocaleString('id-ID')}/${data.progress.total.toLocaleString('id-ID')} diproses${data.progress.remaining > 0 ? ` · sisa ${data.progress.remaining.toLocaleString('id-ID')}` : ' · selesai'}</span>`
               : ''}
@@ -178,11 +198,12 @@ export async function mount(ctx) {
     const winLabel = formatWibWindowLabel(group.windowKey);
     const newCount = Array.isArray(group.newAlertIds) ? group.newAlertIds.length : 0;
     const incidentIds = numericAlertIds(group, index);
+    const activeFilters = filtersValue(state.filters || result?.filters || []);
     const alertsHref = incidentIds.length
-      ? scopedRoute('/triage', {alert_ids: incidentIds.join(','), review_status: 'all', alert: first?.id}, groupTenant)
+      ? scopedRoute('/triage', {alert_ids: incidentIds.join(','), review_status: 'all', alert: first?.id, filters: activeFilters}, groupTenant)
       : first
-        ? scopedRoute('/triage', {alert: first.id}, groupTenant)
-        : scopedRoute('/triage', {}, groupTenant);
+        ? scopedRoute('/triage', {alert: first.id, filters: activeFilters}, groupTenant)
+        : scopedRoute('/triage', {filters: activeFilters}, groupTenant);
     const incidentHref = incidentIds.length ? scopedRoute('/incidents/new', {alert_ids: incidentIds.join(',')}, groupTenant) : '';
     return `
       <article class="ai-group" aria-labelledby="ai-group-${position}">
@@ -276,6 +297,16 @@ export async function mount(ctx) {
     if (running) return;
     const form = root.querySelector('#ai-triage-form');
     if (!form) return;
+    if (hasFilterBuilderDraft(root, 'ai-flt')) {
+      const added = readFilterBuilder(root, 'ai-flt');
+      if (!added) {
+        setFilterStatus('Filter yang sedang diketik belum valid (lengkapi nilai/rentang) sebelum menjalankan.');
+        return;
+      }
+      state.filters = [...(state.filters || []), added];
+      refreshFilterChips();
+    }
+    setFilterStatus('');
     const tenantField = form.elements.tenant?.value || state.tenantValue || 'all';
     const limit = boundedInteger(form.elements.limit.value, 40, MIN_LIMIT, MAX_LIMIT);
     const batchSize = boundedInteger(form.elements.batch_size?.value, DEFAULT_BATCH, 1, MAX_BATCH);
@@ -324,6 +355,7 @@ export async function mount(ctx) {
             max_rule_level: maxRuleLevel,
             review_status: reviewStatus,
             group_by: groupBy,
+            filters: state.filters || [],
           }),
           signal,
           timeout: requestTimeout,
@@ -586,6 +618,17 @@ export async function mount(ctx) {
   root.addEventListener('change', event => {
     const form = root.querySelector('#ai-triage-form');
     if (!form || !form.contains(event.target)) return;
+    if (event.target.matches('[data-filter-field]')) {
+      syncFilterBuilder(root, 'ai-flt');
+      setFilterStatus('');
+      return;
+    }
+    if (event.target.matches('[data-filter-op]')) {
+      const value2 = root.querySelector('[data-filter-builder="ai-flt"] [data-filter-value2]');
+      if (value2) value2.hidden = event.target.value !== 'range';
+      setFilterStatus('');
+      return;
+    }
     if (event.target.name === 'tenant') {
       state.tenantValue = event.target.value || 'all';
       const label = root.querySelector('#ai-tenant-label');
@@ -606,6 +649,7 @@ export async function mount(ctx) {
             state.batchSize = savedOpts.batchSize;
             state.reviewStatus = savedOpts.reviewStatus;
             state.groupBy = savedOpts.groupBy;
+            state.filters = savedOpts.filters;
           } else {
             // Keep the last result visible; tenant selection only changes the next run.
             notify('Belum ada hasil tersimpan untuk scope ini. Hasil sebelumnya tetap ditampilkan; jalankan triage untuk scope baru.', 'info');
@@ -642,6 +686,28 @@ export async function mount(ctx) {
   }, {signal});
 
   root.addEventListener('click', event => {
+    const addBtn = event.target.closest('[data-add-filter]');
+    if (addBtn) {
+      const added = readFilterBuilder(root, 'ai-flt');
+      if (!added) {
+        setFilterStatus('Isi field, operator, dan nilai filter yang valid terlebih dahulu.');
+        return;
+      }
+      setFilterStatus('');
+      state.filters = [...(state.filters || []), added];
+      refreshFilterChips();
+      return;
+    }
+    const removeBtn = event.target.closest('[data-remove-filter]');
+    if (removeBtn) {
+      const index = Number(removeBtn.dataset.removeFilter);
+      if (Number.isInteger(index) && index >= 0) {
+        state.filters = (state.filters || []).filter((_, i) => i !== index);
+        setFilterStatus('');
+        refreshFilterChips();
+      }
+      return;
+    }
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'run-inline') run();
     if (action === 'resume') run(true);
@@ -689,6 +755,7 @@ export async function mount(ctx) {
       if (!getParam('batch_size')) state.batchSize = savedOpts.batchSize;
       if (!getParam('review_status')) state.reviewStatus = savedOpts.reviewStatus;
       if (!getParam('group_by')) state.groupBy = savedOpts.groupBy;
+      if (!getParam('filters')) state.filters = savedOpts.filters;
     }
     render();
   } catch (error) {

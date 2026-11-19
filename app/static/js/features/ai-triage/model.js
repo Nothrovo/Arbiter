@@ -1,3 +1,5 @@
+import {parseFilters} from '../../state/filters.js';
+
 export const VERDICT_META = {
   tp: {label: 'True Positive', badge: 'high', description: 'Indikasi aktivitas nyata yang perlu ditindaklanjuti.'},
   fp: {label: 'False Positive', badge: 'neutral', description: 'Aktivitas rutin atau administratif; tetap tinjau buktinya.'},
@@ -124,6 +126,7 @@ export function triageOptions(params) {
     severitySelection: selection,
     reviewStatus: REVIEW_STATUSES.some(([value]) => value === status) ? status : 'unreviewed',
     groupBy: GROUP_BY_OPTIONS.some(([value]) => value === groupBy) ? groupBy : 'rule_description',
+    filters: parseFilters(get('filters')),
   };
 }
 
@@ -200,6 +203,7 @@ export function normalizeTriageResult(value) {
     minRuleLevel: Number.isInteger(source.min_rule_level) ? source.min_rule_level : 7,
     maxRuleLevel: Number.isInteger(source.max_rule_level) ? source.max_rule_level : null,
     groupBy,
+    filters: parseFilters(source.filters),
     savedAt: typeof source.saved_at === 'string' ? source.saved_at : '',
     windowKey: typeof source.window_key === 'string' ? source.window_key : '',
     progress,
