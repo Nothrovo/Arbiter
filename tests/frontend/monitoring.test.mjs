@@ -8,6 +8,15 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   const html = renderMonitoringDashboard(
     {
       checked_at: '2026-11-18T10:00:00Z',
+      review_activity: {
+        days: [
+          {date: '2026-11-18', count: 12},
+          {date: '2026-11-17', count: 4},
+        ],
+        today: 12,
+        last_7_days: 16,
+        total_reviewed: 342,
+      },
       metrics: {
         total_pull_today: 1450,
         outstanding_backlog: 98550,
@@ -56,6 +65,9 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   );
 
   assert.match(html, /Total Pull Hari Ini/);
+  assert.match(html, /Aktivitas review/);
+  assert.match(html, /data-review-day="2026-11-18"/);
+  assert.match(html, /Hari ini <strong class="num">12<\/strong> alert/);
   assert.match(html, /Outstanding Backlog/);
   assert.match(html, /Global Review Count/);
   assert.match(html, /Leaderboard &amp; Akuntabilitas Analis/);

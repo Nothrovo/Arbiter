@@ -30,31 +30,6 @@ export function summaryRequestParams(query) {
   return p;
 }
 
-export function renderReviewActivity(data) {
-  if (!data) return '';
-  const days = Array.isArray(data.days) ? data.days : [];
-  const max = Math.max(1, ...days.map(day => Number(day.count) || 0));
-  const today = days[0]?.date || '';
-  const bars = days.slice().reverse().map(day => {
-    const count = Number(day.count) || 0;
-    const height = count ? Math.max(8, Math.round(count / max * 100)) : 2;
-    const label = day.date === today ? 'Hari ini' : day.date.slice(8, 10) + '/' + day.date.slice(5, 7);
-    return `<button type="button" class="review-bar${day.date === today ? ' is-today' : ''}${count ? '' : ' is-empty'}" data-review-day="${esc(day.date)}" title="${esc(day.date)}: ${count} alert direview" aria-label="${esc(day.date)}: ${count} alert direview">
-      <span class="review-bar-track"><span class="review-bar-fill" style="height:${height}%"></span></span>
-      <span class="review-bar-count num">${count || ''}</span>
-      <span class="review-bar-day">${esc(label)}</span>
-    </button>`;
-  }).join('');
-  return `<section class="review-activity" aria-label="Aktivitas review">
-    <div class="review-activity-head">
-      <h2>Aktivitas review</h2>
-      <span class="review-activity-stats">Hari ini <strong class="num">${Number(data.today || 0).toLocaleString('id-ID')}</strong> alert · 7 hari <strong class="num">${Number(data.last_7_days || 0).toLocaleString('id-ID')}</strong> · total <strong class="num">${Number(data.total_reviewed || 0).toLocaleString('id-ID')}</strong></span>
-    </div>
-    <div class="review-bars" role="group" aria-label="Jumlah alert direview per hari">${bars}</div>
-    <p class="meta">Klik satu hari untuk menampilkan alert yang direview pada hari itu. Tanggal mengikuti zona waktu perangkat ini.</p>
-  </section>`;
-}
-
 export function renderTriageSummary(data, query, {collapsed = false} = {}) {
   if (!data) return '';
   const statsUrl = withParams('/stats', summaryRequestParams(query));

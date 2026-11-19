@@ -1589,20 +1589,8 @@ def triage_summary(
     }
 
 
-@app.get("/api/reviews/activity")
-def review_activity(
-    tenant: list[str] = Query(default=["all"]),
-    days: int = 14,
-    tz_offset_minutes: int = 0,
-):
-    """Reviewed-alert counts per local calendar day for the Triage activity panel.
-
-    ``tz_offset_minutes`` is the client's UTC offset in minutes (WIB = 420), so
-    "today" follows the analyst's wall clock rather than the server's UTC date.
-    """
-    if not (1 <= days <= 90):
-        raise HTTPException(status_code=422, detail="days must be between 1 and 90.")
-    offset = max(-840, min(840, int(tz_offset_minutes or 0)))
+def _review_activity_payload(conn, tenant: list[str], offset: int, days: int = 14) -> dict[str, Any]:
+    """Count reviewed alerts per local calendar day for a connection."""
     window = max(days, 30)
     now_local = datetime.now(timezone.utc) + timedelta(minutes=offset)
     today = now_local.date()
@@ -1617,16 +1605,15 @@ def review_activity(
         where += " AND " + tenant_sql
         params.extend(tenant_params)
 
-    with get_db() as conn:
-        rows = conn.execute(
-            f"SELECT a.reviewed_at FROM wazuh.alerts a WHERE {where}",
-            params,
-        ).fetchall()
-        reviewed_row = conn.execute(
-            f"SELECT COUNT(*) AS n FROM wazuh.alerts a WHERE a.reviewed_at IS NOT NULL"
-            + (f" AND {tenant_sql}" if tenant_sql else ""),
-            tenant_params,
-        ).fetchone()
+    rows = conn.execute(
+        f"SELECT a.reviewed_at FROM wazuh.alerts a WHERE {where}",
+        params,
+    ).fetchall()
+    reviewed_row = conn.execute(
+        f"SELECT COUNT(*) AS n FROM wazuh.alerts a WHERE a.reviewed_at IS NOT NULL"
+        + (f" AND {tenant_sql}" if tenant_sql else ""),
+        tenant_params,
+    ).fetchone()
     total_reviewed = int(reviewed_row["n"] or 0) if reviewed_row else 0
 
     counts: dict[str, int] = {}
@@ -1649,6 +1636,24 @@ def review_activity(
         "total_reviewed": total_reviewed,
         "tz_offset_minutes": offset,
     }
+
+
+@app.get("/api/reviews/activity")
+def review_activity(
+    tenant: list[str] = Query(default=["all"]),
+    days: int = 14,
+    tz_offset_minutes: int = 0,
+):
+    """Reviewed-alert counts per local calendar day.
+
+    ``tz_offset_minutes`` is the client's UTC offset in minutes (WIB = 420), so
+    "today" follows the analyst's wall clock rather than the server's UTC date.
+    """
+    if not (1 <= days <= 90):
+        raise HTTPException(status_code=422, detail="days must be between 1 and 90.")
+    offset = max(-840, min(840, int(tz_offset_minutes or 0)))
+    with get_db() as conn:
+        return _review_activity_payload(conn, tenant, offset, days)
 
 
 def _review_local_date(value: Any, offset_minutes: int) -> str | None:
@@ -3238,7 +3243,13 @@ def api_get_monitoring(
 
         audit_logs.sort(key=lambda x: x.get("created_at") or "", reverse=True)
 
+        try:
+            review_activity = _review_activity_payload(conn, tenant, offset, 14)
+        except Exception:
+            review_activity = None
+
     return {
+        "review_activity": review_activity,
         "metrics": {
             "total_pull_today": pulled_today,
             "outstanding_backlog": outstanding_backlog,

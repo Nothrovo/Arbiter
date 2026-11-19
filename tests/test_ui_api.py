@@ -574,6 +574,10 @@ class UIAPIContractTests(unittest.TestCase):
     def test_monitoring_dashboard_returns_metrics_leaderboard_and_audit_logs(self):
         # Export a report to generate an audit log entry
         self.client.get("/api/export/markdown", params={"tenant": "Alpha"})
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET reviewed_at = ? WHERE id = 3",
+            ("2026-01-01T12:00:00Z",),
+        )
         res = self.client.get("/api/monitoring", params={"tenant": "Alpha"})
         self.assertEqual(res.status_code, 200, res.text)
         body = res.json()
@@ -584,6 +588,10 @@ class UIAPIContractTests(unittest.TestCase):
         self.assertIsInstance(body["leaderboard"], list)
         self.assertIsInstance(body["audit_logs"], list)
         self.assertTrue(any("Laporan" in item["title"] or "Synthetic" in item["title"] for item in body["audit_logs"]))
+        # Review activity now belongs to the User Review page payload.
+        self.assertIn("review_activity", body)
+        self.assertIsInstance(body["review_activity"]["days"], list)
+        self.assertEqual(body["review_activity"]["total_reviewed"], 1)
 
     def test_alert_detail_recovers_decoupled_raw_payload_from_alert_raw_table(self):
         self.db.add_alert(60, "Alpha", raw="{}")
