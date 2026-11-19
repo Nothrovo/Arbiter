@@ -7,7 +7,7 @@ import io
 import json
 import re
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -175,7 +175,8 @@ def health_check():
         groups_n = conn.execute("SELECT count(*) AS n FROM wazuh.analysis_groups").fetchone()["n"]
         intel_n = 0
         try:
-            intel_n = conn.execute("SELECT count(*) AS n FROM public.ip_intel_cache").fetchone()["n"]
+            with _savepoint(conn):
+                intel_n = conn.execute("SELECT count(*) AS n FROM public.ip_intel_cache").fetchone()["n"]
         except Exception:
             pass
 
@@ -279,22 +280,34 @@ ALLOWED_RULE_STATUSES = {"pending", "done"}
 FLAG_TO_DEFAULT_VERDICT = {"green": "fp", "yellow": "needs_review", "red": "tp"}
 
 
+@contextmanager
+def _savepoint(conn):
+    """Wrap optional/fallback SQL in a SAVEPOINT on psycopg so caught errors never abort the outer transaction."""
+    tx = getattr(conn, "transaction", None)
+    if callable(tx):
+        with tx():
+            yield
+    else:
+        yield
+
+
 def _flag_counts(conn, tenant: str | list[str] | tuple[str, ...] | None = "all") -> dict[str, Any]:
     t_sql, t_params = tenant_clause("a", tenant)
     t_where = f"WHERE {t_sql}" if t_sql else ""
     try:
-        row = conn.execute(
-            f"""SELECT
-                    COUNT(*) FILTER (WHERE a.flag_color = 'green') AS green_total,
-                    COUNT(*) FILTER (WHERE a.flag_color = 'green' AND COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done') AS green_pending,
-                    COUNT(*) FILTER (WHERE a.flag_color = 'green' AND a.rule_status = 'done') AS green_done,
-                    COUNT(*) FILTER (WHERE a.flag_color = 'yellow') AS yellow_total,
-                    COUNT(*) FILTER (WHERE a.flag_color = 'yellow' AND COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done') AS yellow_pending,
-                    COUNT(*) FILTER (WHERE a.flag_color = 'yellow' AND a.rule_status = 'done') AS yellow_done,
-                    COUNT(*) FILTER (WHERE a.flag_color = 'red') AS red_total
-                FROM wazuh.alerts a {t_where}""",
-            t_params,
-        ).fetchone()
+        with _savepoint(conn):
+            row = conn.execute(
+                f"""SELECT
+                        COUNT(*) FILTER (WHERE a.flag_color = 'green') AS green_total,
+                        COUNT(*) FILTER (WHERE a.flag_color = 'green' AND COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done') AS green_pending,
+                        COUNT(*) FILTER (WHERE a.flag_color = 'green' AND a.rule_status = 'done') AS green_done,
+                        COUNT(*) FILTER (WHERE a.flag_color = 'yellow') AS yellow_total,
+                        COUNT(*) FILTER (WHERE a.flag_color = 'yellow' AND COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done') AS yellow_pending,
+                        COUNT(*) FILTER (WHERE a.flag_color = 'yellow' AND a.rule_status = 'done') AS yellow_done,
+                        COUNT(*) FILTER (WHERE a.flag_color = 'red') AS red_total
+                    FROM wazuh.alerts a {t_where}""",
+                t_params,
+            ).fetchone()
     except Exception:
         row = None
     g_tot = int((row or {}).get("green_total") or 0)
@@ -538,13 +551,14 @@ def _expire_stale_claims(conn) -> int:
     """PRD Section 3.B Graceful Auto-Release: release claims older than 30 minutes without heartbeat."""
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=CLAIM_TIMEOUT_SECONDS)).isoformat()
     try:
-        cur = conn.execute(
-            """UPDATE wazuh.alerts
-               SET status = 'claimed_expired'
-               WHERE status = 'claimed' AND claimed_at IS NOT NULL AND claimed_at < %s""",
-            (cutoff,),
-        )
-        return cur.rowcount if (cur and hasattr(cur, "rowcount") and cur.rowcount is not None and cur.rowcount >= 0) else 0
+        with _savepoint(conn):
+            cur = conn.execute(
+                """UPDATE wazuh.alerts
+                   SET status = 'claimed_expired'
+                   WHERE status = 'claimed' AND claimed_at IS NOT NULL AND claimed_at < %s""",
+                (cutoff,),
+            )
+            return cur.rowcount if (cur and hasattr(cur, "rowcount") and cur.rowcount is not None and cur.rowcount >= 0) else 0
     except Exception:
         return 0
 
@@ -644,7 +658,8 @@ def list_alerts(
         """
         count_sql = f"SELECT count(*) AS n FROM wazuh.alerts a {scoped_sql}"
         try:
-            rows = conn.execute(sql, scoped_params + [limit, offset]).fetchall()
+            with _savepoint(conn):
+                rows = conn.execute(sql, scoped_params + [limit, offset]).fetchall()
         except Exception:
             fallback_proj = projection.replace(
                 ",\n        a.status, a.claimed_by, a.claimed_at, a.verdict, a.reviewed_by,\n        a.flag_color, a.flagged_by, a.flagged_at, a.rule_status, a.custom_rule_id, a.rule_notes, a.rule_updated_by, a.rule_updated_at",
@@ -693,17 +708,18 @@ def get_alert_detail(alert_id: int, tenant: list[str] = Query(default=["all"])):
             raw_obj = record.get("raw")
             if not raw_obj or (isinstance(raw_obj, dict) and not raw_obj):
                 try:
-                    ext = conn.execute(
-                        "SELECT raw, duplicate_instances FROM wazuh.alert_raw WHERE alert_pk = %s",
-                        (alert_id,),
-                    ).fetchone()
-                    if ext and ext.get("raw"):
-                        record["raw"] = ext["raw"]
-                        if isinstance(ext["raw"], dict):
-                            record["full_log"] = record.get("full_log") or ext["raw"].get("full_log") or ""
-                            record["previous_output"] = record.get("previous_output") or ext["raw"].get("previous_output") or ""
-                        if ext.get("duplicate_instances") and not record.get("duplicate_instances"):
-                            record["duplicate_instances"] = ext["duplicate_instances"]
+                    with _savepoint(conn):
+                        ext = conn.execute(
+                            "SELECT raw, duplicate_instances FROM wazuh.alert_raw WHERE alert_pk = %s",
+                            (alert_id,),
+                        ).fetchone()
+                        if ext and ext.get("raw"):
+                            record["raw"] = ext["raw"]
+                            if isinstance(ext["raw"], dict):
+                                record["full_log"] = record.get("full_log") or ext["raw"].get("full_log") or ""
+                                record["previous_output"] = record.get("previous_output") or ext["raw"].get("previous_output") or ""
+                            if ext.get("duplicate_instances") and not record.get("duplicate_instances"):
+                                record["duplicate_instances"] = ext["duplicate_instances"]
                 except Exception:
                     pass
             row = record
@@ -823,6 +839,126 @@ def release_alert_claim(
     return {"status": "unread", "id": alert_id}
 
 
+def _update_alerts_review_state(
+    conn,
+    target_pks: list[int],
+    *,
+    is_reviewed: bool,
+    notes: str,
+    overwrite_notes: bool,
+    verdict: str | None,
+    flag_color: str | None,
+    reviewer: str,
+) -> None:
+    """Update alert review/flag state without binding untyped NULL parameters on PostgreSQL."""
+    if not target_pks:
+        return
+
+    if not is_reviewed:
+        set_clauses = [
+            "is_reviewed = false",
+            "reviewed_at = NULL",
+            "status = 'unread'",
+            "verdict = NULL",
+            "reviewed_by = NULL",
+            "claimed_by = NULL",
+            "claimed_at = NULL",
+            "flag_color = NULL",
+            "flagged_by = NULL",
+            "flagged_at = NULL",
+            "rule_status = 'pending'",
+            "custom_rule_id = NULL",
+            "rule_notes = ''",
+            "rule_updated_by = NULL",
+            "rule_updated_at = NULL",
+        ]
+        sql_params: list[Any] = []
+        if overwrite_notes or notes:
+            set_clauses.append("reviewer_notes = %s")
+            sql_params.append(notes)
+        sql_params.append(target_pks)
+        try:
+            with _savepoint(conn):
+                conn.execute(
+                    f"UPDATE wazuh.alerts SET {', '.join(set_clauses)} WHERE id = ANY(%s)",
+                    tuple(sql_params),
+                )
+        except Exception:
+            if overwrite_notes:
+                conn.execute(
+                    """UPDATE wazuh.alerts
+                       SET is_reviewed = false,
+                           reviewed_at = NULL,
+                           reviewer_notes = %s
+                       WHERE id = ANY(%s)""",
+                    (notes, target_pks),
+                )
+            else:
+                conn.execute(
+                    """UPDATE wazuh.alerts
+                       SET is_reviewed = false,
+                           reviewed_at = NULL
+                       WHERE id = ANY(%s)""",
+                    (target_pks,),
+                )
+        return
+
+    set_clauses = [
+        "is_reviewed = true",
+        "reviewed_at = now()",
+        "status = 'reviewed'",
+        "reviewed_by = %s",
+        "claimed_by = COALESCE(claimed_by, %s)",
+    ]
+    sql_params = [reviewer, reviewer]
+    if overwrite_notes or notes:
+        set_clauses.append("reviewer_notes = %s")
+        sql_params.append(notes)
+    if verdict is not None:
+        set_clauses.append("verdict = %s")
+        sql_params.append(verdict)
+    if flag_color is not None:
+        set_clauses.extend([
+            "flag_color = %s",
+            "flagged_by = %s",
+            "flagged_at = now()",
+        ])
+        sql_params.extend([flag_color, reviewer])
+        if flag_color == "red":
+            set_clauses.extend([
+                "rule_status = 'pending'",
+                "custom_rule_id = NULL",
+                "rule_notes = ''",
+                "rule_updated_by = NULL",
+                "rule_updated_at = NULL",
+            ])
+    sql_params.append(target_pks)
+    try:
+        with _savepoint(conn):
+            conn.execute(
+                f"UPDATE wazuh.alerts SET {', '.join(set_clauses)} WHERE id = ANY(%s)",
+                tuple(sql_params),
+            )
+    except Exception:
+        if overwrite_notes:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = true,
+                       reviewed_at = now(),
+                       reviewer_notes = %s
+                   WHERE id = ANY(%s)""",
+                (notes, target_pks),
+            )
+        else:
+            conn.execute(
+                """UPDATE wazuh.alerts
+                   SET is_reviewed = true,
+                       reviewed_at = now()
+                   WHERE id = ANY(%s)""",
+                (target_pks,),
+            )
+
+
 @app.put("/api/alerts/{alert_id}/review")
 def update_alert_review(
     alert_id: int,
@@ -853,59 +989,19 @@ def update_alert_review(
     with get_db() as conn:
         _validate_membership(conn, [alert_id], tenant)
         prev = conn.execute("SELECT tenant, is_reviewed FROM wazuh.alerts WHERE id = %s", (alert_id,)).fetchone()
-        try:
-            conn.execute(
-                """UPDATE wazuh.alerts
-                   SET is_reviewed = %s,
-                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END,
-                       reviewer_notes = %s,
-                       status = %s,
-                       verdict = CASE WHEN %s THEN COALESCE(%s, verdict) ELSE NULL END,
-                       reviewed_by = CASE WHEN %s THEN %s ELSE NULL END,
-                       claimed_by = CASE WHEN %s THEN COALESCE(claimed_by, %s) ELSE NULL END,
-                       flag_color = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flag_color END,
-                       flagged_by = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flagged_by END,
-                       flagged_at = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN now() ELSE flagged_at END,
-                       rule_status = CASE WHEN NOT %s OR %s = 'red' THEN 'pending' ELSE rule_status END,
-                       custom_rule_id = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE custom_rule_id END,
-                       rule_notes = CASE WHEN NOT %s OR %s = 'red' THEN '' ELSE rule_notes END,
-                       rule_updated_by = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_by END,
-                       rule_updated_at = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_at END
-                   WHERE id = %s""",
-                (
-                    is_reviewed,
-                    is_reviewed,
-                    notes,
-                    new_status,
-                    is_reviewed,
-                    verdict,
-                    is_reviewed,
-                    reviewer,
-                    is_reviewed,
-                    reviewer,
-                    is_reviewed, flag_color, flag_color,
-                    is_reviewed, flag_color, reviewer,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    alert_id,
-                ),
-            )
-        except Exception:
-            conn.execute(
-                """UPDATE wazuh.alerts
-                   SET is_reviewed = %s,
-                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END,
-                       reviewer_notes = %s
-                   WHERE id = %s""",
-                (is_reviewed, is_reviewed, notes, alert_id),
-            )
+        _update_alerts_review_state(
+            conn,
+            [alert_id],
+            is_reviewed=is_reviewed,
+            notes=notes,
+            overwrite_notes=True,
+            verdict=verdict,
+            flag_color=flag_color,
+            reviewer=reviewer,
+        )
         if prev and is_reviewed and not prev.get("is_reviewed") and hasattr(db_module, "bump_daily_metrics"):
             db_module.bump_daily_metrics(conn, str(prev.get("tenant") or "Default"), reviewed_delta=1, verdict=verdict)
-    return {"status": "ok", "id": alert_id, "is_reviewed": is_reviewed, "verdict": verdict, "flag_color": flag_color if is_reviewed else None, "alert_status": new_status}
+    return {"status": "ok", "id": alert_id, "is_reviewed": is_reviewed, "verdict": verdict if is_reviewed else None, "flag_color": flag_color if is_reviewed else None, "alert_status": new_status}
 
 
 @app.post("/api/alerts/batch-review")
@@ -940,56 +1036,19 @@ def batch_update_review(
         raise HTTPException(status_code=400, detail="No valid alert IDs provided.")
     with get_db() as conn:
         clean_pks = _validate_membership(conn, alert_ids, tenant)
-        try:
-            conn.execute(
-                """UPDATE wazuh.alerts
-                   SET is_reviewed = %s,
-                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END,
-                       status = %s,
-                       verdict = CASE WHEN %s THEN COALESCE(%s, verdict) ELSE NULL END,
-                       reviewed_by = CASE WHEN %s THEN %s ELSE NULL END,
-                       reviewer_notes = CASE WHEN %s != '' THEN %s ELSE reviewer_notes END,
-                       flag_color = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flag_color END,
-                       flagged_by = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN %s ELSE flagged_by END,
-                       flagged_at = CASE WHEN NOT %s THEN NULL WHEN %s IS NOT NULL THEN now() ELSE flagged_at END,
-                       rule_status = CASE WHEN NOT %s OR %s = 'red' THEN 'pending' ELSE rule_status END,
-                       custom_rule_id = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE custom_rule_id END,
-                       rule_notes = CASE WHEN NOT %s OR %s = 'red' THEN '' ELSE rule_notes END,
-                       rule_updated_by = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_by END,
-                       rule_updated_at = CASE WHEN NOT %s OR %s = 'red' THEN NULL ELSE rule_updated_at END
-                   WHERE id = ANY(%s)""",
-                (
-                    is_reviewed,
-                    is_reviewed,
-                    new_status,
-                    is_reviewed,
-                    verdict,
-                    is_reviewed,
-                    reviewer,
-                    notes,
-                    notes,
-                    is_reviewed, flag_color, flag_color,
-                    is_reviewed, flag_color, reviewer,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    is_reviewed, flag_color,
-                    clean_pks,
-                ),
-            )
-        except Exception:
-            conn.execute(
-                """UPDATE wazuh.alerts
-                   SET is_reviewed = %s,
-                       reviewed_at = CASE WHEN %s THEN now() ELSE NULL END
-                   WHERE id = ANY(%s)""",
-                (is_reviewed, is_reviewed, clean_pks),
-            )
+        _update_alerts_review_state(
+            conn,
+            clean_pks,
+            is_reviewed=is_reviewed,
+            notes=notes,
+            overwrite_notes=False,
+            verdict=verdict,
+            flag_color=flag_color,
+            reviewer=reviewer,
+        )
         if is_reviewed and hasattr(db_module, "bump_daily_metrics"):
             db_module.bump_daily_metrics(conn, _tenant_label(tenant), reviewed_delta=len(clean_pks), verdict=verdict)
-    return {"status": "ok", "count": len(clean_pks), "is_reviewed": is_reviewed, "verdict": verdict, "flag_color": flag_color if is_reviewed else None, "alert_status": new_status}
+    return {"status": "ok", "count": len(clean_pks), "is_reviewed": is_reviewed, "verdict": verdict if is_reviewed else None, "flag_color": flag_color if is_reviewed else None, "alert_status": new_status}
 
 
 @app.post("/api/alerts/bulk-verdict-pattern")
@@ -3651,7 +3710,8 @@ def api_database_status():
         groups_n = conn.execute("SELECT count(*) AS n FROM wazuh.analysis_groups").fetchone()["n"]
         intel_n = 0
         try:
-            intel_n = conn.execute("SELECT count(*) AS n FROM public.ip_intel_cache").fetchone()["n"]
+            with _savepoint(conn):
+                intel_n = conn.execute("SELECT count(*) AS n FROM public.ip_intel_cache").fetchone()["n"]
         except Exception:
             pass
         tenants = conn.execute("SELECT tenant, count(*) AS count FROM wazuh.alerts GROUP BY tenant").fetchall()
@@ -3869,33 +3929,38 @@ def api_get_monitoring(
         # 1. Check daily_metrics_cache first (PRD Section 4 Query Optimization)
         cached_pull_today = 0
         try:
-            cache_t_sql, cache_t_params = tenant_clause("c", tenant)
-            cache_where = f"WHERE c.metric_date = %s{f' AND {cache_t_sql}' if cache_t_sql else ''}"
-            c_row = conn.execute(
-                f"SELECT COALESCE(SUM(c.pulled_count), 0) AS pulled FROM wazuh.daily_metrics_cache c {cache_where}",
-                [today_iso, *cache_t_params],
-            ).fetchone()
-            cached_pull_today = int((c_row or {}).get("pulled") or 0)
+            with _savepoint(conn):
+                cache_t_sql, cache_t_params = tenant_clause("c", tenant)
+                cache_where = f"WHERE c.metric_date = %s{f' AND {cache_t_sql}' if cache_t_sql else ''}"
+                c_row = conn.execute(
+                    f"SELECT COALESCE(SUM(c.pulled_count), 0) AS pulled FROM wazuh.daily_metrics_cache c {cache_where}",
+                    [today_iso, *cache_t_params],
+                ).fetchone()
+                cached_pull_today = int((c_row or {}).get("pulled") or 0)
         except Exception:
             cached_pull_today = 0
 
         # Indexed metrics query using idx_wazuh_alerts_reviewed, idx_wazuh_alerts_imported_at, idx_wazuh_alerts_timestamp
         try:
-            m_row = conn.execute(
-                f"""SELECT
-                        COUNT(*) FILTER (WHERE a.imported_at >= %s OR a.timestamp >= %s) AS pulled_today,
-                        COUNT(*) FILTER (WHERE a.is_reviewed = false AND (a.imported_at < %s AND (a.timestamp IS NULL OR a.timestamp < %s))) AS outstanding_backlog,
-                        COUNT(*) FILTER (WHERE a.is_reviewed = false) AS total_unreviewed,
-                        COUNT(*) FILTER (WHERE a.is_reviewed = true) AS global_review_count,
-                        COUNT(*) FILTER (WHERE a.status = 'claimed') AS active_claims,
-                        COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_total,
-                        COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_total,
-                        COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_total
-                    FROM wazuh.alerts a {t_where}""",
-                [today_start_utc, today_iso, today_start_utc, today_iso, *t_params],
-            ).fetchone()
+            with _savepoint(conn):
+                m_row = conn.execute(
+                    f"""SELECT
+                            COUNT(*) FILTER (WHERE a.imported_at >= %s OR a.timestamp >= %s) AS pulled_today,
+                            COUNT(*) FILTER (WHERE a.is_reviewed = false AND (a.imported_at < %s AND (a.timestamp IS NULL OR a.timestamp < %s))) AS outstanding_backlog,
+                            COUNT(*) FILTER (WHERE a.is_reviewed = false) AS total_unreviewed,
+                            COUNT(*) FILTER (WHERE a.is_reviewed = true) AS global_review_count,
+                            COUNT(*) FILTER (WHERE a.status = 'claimed') AS active_claims,
+                            COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_total,
+                            COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_total,
+                            COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_total,
+                            COUNT(*) FILTER (WHERE a.flag_color = 'green') AS flag_green_total,
+                            COUNT(*) FILTER (WHERE a.flag_color = 'yellow') AS flag_yellow_total,
+                            COUNT(*) FILTER (WHERE a.flag_color = 'red') AS flag_red_total
+                        FROM wazuh.alerts a {t_where}""",
+                    [today_start_utc, today_iso, today_start_utc, today_iso, *t_params],
+                ).fetchone()
         except Exception:
-            # Fallback if imported_at or status/verdict not present in minimal synthetic table
+            # Fallback if imported_at or status/verdict/flag_color not present in minimal synthetic table
             m_row = conn.execute(
                 f"""SELECT
                         COUNT(*) FILTER (WHERE a.timestamp >= %s) AS pulled_today,
@@ -3905,7 +3970,10 @@ def api_get_monitoring(
                         0 AS active_claims,
                         0 AS tp_total,
                         0 AS fp_total,
-                        0 AS benign_total
+                        0 AS benign_total,
+                        0 AS flag_green_total,
+                        0 AS flag_yellow_total,
+                        0 AS flag_red_total
                     FROM wazuh.alerts a {t_where}""",
                 [today_iso, today_iso, *t_params],
             ).fetchone()
@@ -3918,7 +3986,8 @@ def api_get_monitoring(
 
         # 2. Analyst Leaderboard & Accountability
         try:
-            known_users = {u["username"]: u for u in list_users(conn)}
+            with _savepoint(conn):
+                known_users = {u["username"]: u for u in list_users(conn)}
         except Exception:
             known_users = {"admin": {"username": "admin", "display_name": "Administrator", "role": "admin"}}
         leaderboard_map: dict[str, dict[str, Any]] = {}
@@ -3933,49 +4002,80 @@ def api_get_monitoring(
                 "tp_count": 0,
                 "fp_count": 0,
                 "benign_count": 0,
+                "green_count": 0,
+                "yellow_count": 0,
+                "red_count": 0,
             }
 
         try:
-            claimed_rows = conn.execute(
-                f"""SELECT a.claimed_by AS username, COUNT(*) AS n
-                    FROM wazuh.alerts a
-                    WHERE a.status = 'claimed' AND a.claimed_by IS NOT NULL AND a.claimed_by != '' {t_and}
-                    GROUP BY a.claimed_by""",
-                t_params,
-            ).fetchall()
+            with _savepoint(conn):
+                claimed_rows = conn.execute(
+                    f"""SELECT a.claimed_by AS username, COUNT(*) AS n
+                        FROM wazuh.alerts a
+                        WHERE a.status = 'claimed' AND a.claimed_by IS NOT NULL AND a.claimed_by != '' {t_and}
+                        GROUP BY a.claimed_by""",
+                    t_params,
+                ).fetchall()
             for r in claimed_rows:
                 uname = str(r["username"])
                 entry = leaderboard_map.setdefault(uname, {
                     "username": uname, "display_name": uname, "role": "analyst",
                     "currently_claimed": 0, "completed_today": 0, "total_contributions": 0,
                     "tp_count": 0, "fp_count": 0, "benign_count": 0,
+                    "green_count": 0, "yellow_count": 0, "red_count": 0,
                 })
                 entry["currently_claimed"] = int(r["n"] or 0)
 
-            reviewed_rows = conn.execute(
-                f"""SELECT COALESCE(NULLIF(a.reviewed_by, ''), NULLIF(a.claimed_by, ''), 'admin') AS username,
-                           COUNT(*) AS total_n,
-                           COUNT(*) FILTER (WHERE a.reviewed_at >= %s) AS today_n,
-                           COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_n,
-                           COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_n,
-                           COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_n
-                    FROM wazuh.alerts a
-                    WHERE a.is_reviewed = true {t_and}
-                    GROUP BY 1""",
-                [today_start_utc, *t_params],
-            ).fetchall()
+            try:
+                with _savepoint(conn):
+                    reviewed_rows = conn.execute(
+                        f"""SELECT COALESCE(NULLIF(a.reviewed_by, ''), NULLIF(a.flagged_by, ''), NULLIF(a.claimed_by, ''), 'admin') AS username,
+                                   COUNT(*) AS total_n,
+                                   COUNT(*) FILTER (WHERE a.reviewed_at >= %s) AS today_n,
+                                   COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_n,
+                                   COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_n,
+                                   COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_n,
+                                   COUNT(*) FILTER (WHERE a.flag_color = 'green') AS green_n,
+                                   COUNT(*) FILTER (WHERE a.flag_color = 'yellow') AS yellow_n,
+                                   COUNT(*) FILTER (WHERE a.flag_color = 'red') AS red_n
+                            FROM wazuh.alerts a
+                            WHERE a.is_reviewed = true {t_and}
+                            GROUP BY 1""",
+                        [today_start_utc, *t_params],
+                    ).fetchall()
+            except Exception:
+                with _savepoint(conn):
+                    reviewed_rows = conn.execute(
+                        f"""SELECT COALESCE(NULLIF(a.reviewed_by, ''), NULLIF(a.claimed_by, ''), 'admin') AS username,
+                                   COUNT(*) AS total_n,
+                                   COUNT(*) FILTER (WHERE a.reviewed_at >= %s) AS today_n,
+                                   COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_n,
+                                   COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_n,
+                                   COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_n,
+                                   0 AS green_n,
+                                   0 AS yellow_n,
+                                   0 AS red_n
+                            FROM wazuh.alerts a
+                            WHERE a.is_reviewed = true {t_and}
+                            GROUP BY 1""",
+                        [today_start_utc, *t_params],
+                    ).fetchall()
             for r in reviewed_rows:
                 uname = str(r["username"])
                 entry = leaderboard_map.setdefault(uname, {
                     "username": uname, "display_name": uname, "role": "analyst",
                     "currently_claimed": 0, "completed_today": 0, "total_contributions": 0,
                     "tp_count": 0, "fp_count": 0, "benign_count": 0,
+                    "green_count": 0, "yellow_count": 0, "red_count": 0,
                 })
                 entry["total_contributions"] = int(r["total_n"] or 0)
                 entry["completed_today"] = int(r["today_n"] or 0)
                 entry["tp_count"] = int(r["tp_n"] or 0)
                 entry["fp_count"] = int(r["fp_n"] or 0)
                 entry["benign_count"] = int(r["benign_n"] or 0)
+                entry["green_count"] = int(r["green_n"] or 0)
+                entry["yellow_count"] = int(r["yellow_n"] or 0)
+                entry["red_count"] = int(r["red_n"] or 0)
         except Exception:
             pass
 
@@ -3988,46 +4088,49 @@ def api_get_monitoring(
         # 3. Audit Log Laporan (Published Incident Cases + Exported Reports)
         audit_logs: list[dict[str, Any]] = []
         try:
-            rep_rows = conn.execute(
-                """SELECT id, title, author, format, tenant, alert_count, status, created_at
-                   FROM wazuh.report_audit_logs
-                   ORDER BY created_at DESC, id DESC
-                   LIMIT 50"""
-            ).fetchall()
-            for r in rep_rows:
-                audit_logs.append({
-                    "id": f"rep-{r['id']}",
-                    "title": str(r.get("title") or "Laporan Insiden"),
-                    "author": str(r.get("author") or "analyst"),
-                    "created_at": str(r.get("created_at") or ""),
-                    "export_status": f"Diekspor ({r.get('format') or 'HTML'})",
-                    "format": str(r.get("format") or "HTML"),
-                    "tenant": str(r.get("tenant") or "Semua Tenant"),
-                    "alert_count": int(r.get("alert_count") or 0),
-                })
+            with _savepoint(conn):
+                rep_rows = conn.execute(
+                    """SELECT id, title, author, format, tenant, alert_count, status, created_at
+                       FROM wazuh.report_audit_logs
+                       ORDER BY created_at DESC, id DESC
+                       LIMIT 50"""
+                ).fetchall()
+                for r in rep_rows:
+                    audit_logs.append({
+                        "id": f"rep-{r['id']}",
+                        "title": str(r.get("title") or "Laporan Insiden"),
+                        "author": str(r.get("author") or "analyst"),
+                        "created_at": str(r.get("created_at") or ""),
+                        "export_status": f"Diekspor ({r.get('format') or 'HTML'})",
+                        "format": str(r.get("format") or "HTML"),
+                        "tenant": str(r.get("tenant") or "Semua Tenant"),
+                        "alert_count": int(r.get("alert_count") or 0),
+                    })
         except Exception:
             pass
 
         try:
-            inc_rows = _scoped_groups(conn, tenant)
-            for g in inc_rows[:30]:
-                audit_logs.append({
-                    "id": str(g["id"]),
-                    "title": str(g.get("title") or "Kasus Insiden"),
-                    "author": "AI Triage" if g.get("source") == "ai" else "Tim Analis SOC",
-                    "created_at": str(g.get("updated_at") or g.get("created_at") or ""),
-                    "export_status": f"Kasus {str(g.get('status') or 'open').upper()} · Siap Ekspor",
-                    "format": "Kasus Insiden",
-                    "tenant": ", ".join(g.get("tenants") or []) or "Semua Tenant",
-                    "alert_count": int(g.get("alert_count") or 0),
-                })
+            with _savepoint(conn):
+                inc_rows = _scoped_groups(conn, tenant)
+                for g in inc_rows[:30]:
+                    audit_logs.append({
+                        "id": str(g["id"]),
+                        "title": str(g.get("title") or "Kasus Insiden"),
+                        "author": "AI Triage" if g.get("source") == "ai" else "Tim Analis SOC",
+                        "created_at": str(g.get("updated_at") or g.get("created_at") or ""),
+                        "export_status": f"Kasus {str(g.get('status') or 'open').upper()} · Siap Ekspor",
+                        "format": "Kasus Insiden",
+                        "tenant": ", ".join(g.get("tenants") or []) or "Semua Tenant",
+                        "alert_count": int(g.get("alert_count") or 0),
+                    })
         except Exception:
             pass
 
         audit_logs.sort(key=lambda x: x.get("created_at") or "", reverse=True)
 
         try:
-            review_activity = _review_activity_payload(conn, tenant, offset, 14)
+            with _savepoint(conn):
+                review_activity = _review_activity_payload(conn, tenant, offset, 14)
         except Exception:
             review_activity = None
 
@@ -4039,6 +4142,11 @@ def api_get_monitoring(
             "total_unreviewed": total_unreviewed,
             "global_review_count": global_review_count,
             "active_claims": active_claims,
+            "flags": {
+                "green": int((m_row or {}).get("flag_green_total") or 0),
+                "yellow": int((m_row or {}).get("flag_yellow_total") or 0),
+                "red": int((m_row or {}).get("flag_red_total") or 0),
+            },
             "verdicts": {
                 "tp": int((m_row or {}).get("tp_total") or 0),
                 "fp": int((m_row or {}).get("fp_total") or 0),
@@ -4300,14 +4408,64 @@ def api_flag_alerts(
         if f_clean not in ALLOWED_FLAG_COLORS:
             raise HTTPException(status_code=400, detail="Warna flag harus 'green', 'yellow', atau 'red'.")
         flag_color = f_clean
-    alert_ids = payload.get("alert_ids") or []
-    if not isinstance(alert_ids, list) or not alert_ids:
-        raise HTTPException(status_code=400, detail="Pilih minimal satu alert.")
+    unreview = bool(payload.get("unreview", False))
+    if unreview and flag_color is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Alert yang dikembalikan ke belum direview tidak boleh tetap memiliki Flag.",
+        )
+    raw_ids = payload.get("alert_ids")
     auto_review = bool(payload.get("auto_review", False))
     notes = str(payload.get("reviewer_notes") or "").strip()
     actor = str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst"
     with get_db() as conn:
-        clean_pks = _validate_membership(conn, alert_ids, tenant)
+        if raw_ids is not None:
+            if not isinstance(raw_ids, list) or not raw_ids:
+                raise HTTPException(status_code=400, detail="Pilih minimal satu alert.")
+            clean_pks = _validate_membership(conn, raw_ids, tenant)
+        else:
+            group_by = payload.get("group_by")
+            group_key = payload.get("group_key")
+            current_flag_color = str(payload.get("current_flag_color") or "").strip().lower()
+            if not group_by or group_key is None or current_flag_color not in ALLOWED_FLAG_COLORS:
+                raise HTTPException(status_code=400, detail="Pilih minimal satu alert atau tentukan grup pola Flag.")
+            where_sql, where_params = _build_flag_scope_where(
+                tenant=tenant,
+                flag_color=current_flag_color,
+                rule_status=str(payload.get("current_rule_status") or "all").strip().lower(),
+                q=str(payload.get("q") or ""),
+                group_by=str(group_by),
+                group_key=str(group_key),
+                pattern=str(payload.get("pattern") or ""),
+                pattern_mode=str(payload.get("pattern_mode") or "contains"),
+            )
+            matched_rows = conn.execute(
+                f"SELECT a.id FROM wazuh.alerts a {where_sql}",
+                where_params,
+            ).fetchall()
+            clean_pks = [int(r["id"]) for r in matched_rows]
+            if not clean_pks:
+                raise HTTPException(status_code=404, detail="Tidak ada alert yang cocok pada grup pola ini.")
+
+        if unreview:
+            _update_alerts_review_state(
+                conn,
+                clean_pks,
+                is_reviewed=False,
+                notes="",
+                overwrite_notes=False,
+                verdict=None,
+                flag_color=None,
+                reviewer=actor,
+            )
+            return {
+                "status": "ok",
+                "count": len(clean_pks),
+                "is_reviewed": False,
+                "flag_color": None,
+                "flagged_by": None,
+                "summary": _flag_counts(conn, tenant),
+            }
         return _apply_flag_update(
             conn,
             clean_pks,
@@ -4336,11 +4494,37 @@ def api_flag_single_alert(
         if f_clean not in ALLOWED_FLAG_COLORS:
             raise HTTPException(status_code=400, detail="Warna flag harus 'green', 'yellow', atau 'red'.")
         flag_color = f_clean
+    unreview = bool(payload.get("unreview", False))
+    if unreview and flag_color is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Alert yang dikembalikan ke belum direview tidak boleh tetap memiliki Flag.",
+        )
     auto_review = bool(payload.get("auto_review", False))
     notes = str(payload.get("reviewer_notes") or "").strip()
     actor = str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst"
     with get_db() as conn:
         clean_pks = _validate_membership(conn, [alert_id], tenant)
+        if unreview:
+            _update_alerts_review_state(
+                conn,
+                clean_pks,
+                is_reviewed=False,
+                notes="",
+                overwrite_notes=False,
+                verdict=None,
+                flag_color=None,
+                reviewer=actor,
+            )
+            return {
+                "status": "ok",
+                "id": alert_id,
+                "count": len(clean_pks),
+                "is_reviewed": False,
+                "flag_color": None,
+                "flagged_by": None,
+                "summary": _flag_counts(conn, tenant),
+            }
         res = _apply_flag_update(
             conn,
             clean_pks,

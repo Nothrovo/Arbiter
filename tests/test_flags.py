@@ -316,6 +316,226 @@ class FlagWorkspaceTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.text)
         self.assertEqual(self.client.get("/api/alerts/10", params={"tenant": "Alpha"}).status_code, 200)
 
+    def test_monitoring_returns_three_flag_categories(self):
+        self._seed_rich_alerts()
+        self.db.add_alert(
+            14, "Alpha",
+            alert_id="syn-14",
+            timestamp="2026-11-18T14:00:00Z",
+            agent_name="web-01",
+            rule_id="9999",
+            rule_level=12,
+            description="Critical exploit attempt",
+        )
+        self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [10, 11], "flag_color": "green", "auto_review": True},
+        )
+        self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [12], "flag_color": "yellow", "auto_review": True},
+        )
+        self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [14], "flag_color": "red", "auto_review": True},
+        )
+        resp = self.client.get("/api/monitoring", params={"tenant": "Alpha"})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertEqual(body["metrics"]["flags"], {"green": 2, "yellow": 1, "red": 1})
+        analyst_row = next((r for r in body["leaderboard"] if r["username"] == "analyst"), None)
+        self.assertIsNotNone(analyst_row)
+        self.assertEqual(analyst_row["green_count"], 2)
+        self.assertEqual(analyst_row["yellow_count"], 1)
+        self.assertEqual(analyst_row["red_count"], 1)
+        self.assertEqual(analyst_row["total_contributions"], 4)
+
+    def test_unreview_single_and_batch_clears_flag_claim_and_rule_tuning(self):
+        self._seed_rich_alerts()
+        self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [10, 11], "flag_color": "green", "auto_review": True},
+        )
+        self.client.post(
+            "/api/flags/rule-status",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [10], "rule_status": "done", "custom_rule_id": "100145", "rule_notes": "Whitelist"},
+        )
+        self.client.put(
+            "/api/alerts/11/flag",
+            params={"tenant": "Alpha"},
+            json={"flag_color": "yellow", "auto_review": True},
+        )
+
+        res_single = self.client.put(
+            "/api/alerts/10/review",
+            params={"tenant": "Alpha"},
+            json={"is_reviewed": False},
+        )
+        self.assertEqual(res_single.status_code, 200, res_single.text)
+        self.assertFalse(res_single.json()["is_reviewed"])
+        self.assertIsNone(res_single.json()["flag_color"])
+        row10 = self.db.connection.execute(
+            """SELECT is_reviewed, status, verdict, reviewed_by, claimed_by, claimed_at,
+                      flag_color, flagged_by, rule_status, custom_rule_id
+               FROM wazuh.alerts WHERE id = 10"""
+        ).fetchone()
+        self.assertEqual(row10["is_reviewed"], 0)
+        self.assertEqual(row10["status"], "unread")
+        self.assertIsNone(row10["verdict"])
+        self.assertIsNone(row10["reviewed_by"])
+        self.assertIsNone(row10["claimed_by"])
+        self.assertIsNone(row10["claimed_at"])
+        self.assertIsNone(row10["flag_color"])
+        self.assertIsNone(row10["flagged_by"])
+        self.assertEqual(row10["rule_status"], "pending")
+        self.assertIsNone(row10["custom_rule_id"])
+
+        res_batch = self.client.post(
+            "/api/alerts/batch-review",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [11], "is_reviewed": False},
+        )
+        self.assertEqual(res_batch.status_code, 200, res_batch.text)
+        row11 = self.db.connection.execute(
+            """SELECT is_reviewed, status, verdict, reviewed_by, flag_color, flagged_by
+               FROM wazuh.alerts WHERE id = 11"""
+        ).fetchone()
+        self.assertEqual(row11["is_reviewed"], 0)
+        self.assertEqual(row11["status"], "unread")
+        self.assertIsNone(row11["verdict"])
+        self.assertIsNone(row11["reviewed_by"])
+        self.assertIsNone(row11["flag_color"])
+        self.assertIsNone(row11["flagged_by"])
+
+    def test_group_unflag_and_group_unreview_endpoints(self):
+        self._seed_rich_alerts()
+        self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [10, 11], "flag_color": "green", "auto_review": True},
+        )
+
+        # Group unflag only: alerts lose Flag but stay reviewed
+        res_unflag = self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={
+                "flag_color": None,
+                "current_flag_color": "green",
+                "group_by": "rule_id",
+                "group_key": "31101",
+                "current_rule_status": "pending",
+            },
+        )
+        self.assertEqual(res_unflag.status_code, 200, res_unflag.text)
+        self.assertEqual(res_unflag.json()["count"], 2)
+        rows_after_unflag = self.db.connection.execute(
+            "SELECT id, is_reviewed, flag_color FROM wazuh.alerts WHERE id IN (10, 11) ORDER BY id"
+        ).fetchall()
+        self.assertEqual([(r["id"], r["is_reviewed"], r["flag_color"]) for r in rows_after_unflag], [(10, 1, None), (11, 1, None)])
+
+        # Re-flag and then group unreview + unflag together
+        self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [10, 11], "flag_color": "green", "auto_review": True},
+        )
+        res_unrev = self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={
+                "flag_color": None,
+                "unreview": True,
+                "current_flag_color": "green",
+                "group_by": "rule_id",
+                "group_key": "31101",
+                "current_rule_status": "pending",
+            },
+        )
+        self.assertEqual(res_unrev.status_code, 200, res_unrev.text)
+        self.assertEqual(res_unrev.json()["count"], 2)
+        self.assertFalse(res_unrev.json()["is_reviewed"])
+        rows_after_unrev = self.db.connection.execute(
+            "SELECT id, is_reviewed, status, flag_color FROM wazuh.alerts WHERE id IN (10, 11) ORDER BY id"
+        ).fetchall()
+        self.assertEqual(
+            [(r["id"], r["is_reviewed"], r["status"], r["flag_color"]) for r in rows_after_unrev],
+            [(10, 0, "unread", None), (11, 0, "unread", None)],
+        )
+
+        # Invalid combination: unreview=True while assigning a flag_color
+        bad = self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [10], "flag_color": "green", "unreview": True},
+        )
+        self.assertEqual(bad.status_code, 400, bad.text)
+
+    def test_review_and_flag_sql_never_binds_untyped_null_to_is_not_null(self):
+        import re
+        self._seed_rich_alerts()
+        recorded_sql = []
+        orig_execute = self.db.execute
+
+        def spy_execute(sql, params=None):
+            recorded_sql.append((sql, params))
+            if re.search(r"%s\s+IS\s+(?:NOT\s+)?NULL|CASE\s+WHEN\s+NOT\s+%s", sql, re.I):
+                raise AssertionError(f"Unsafe untyped NULL pattern in SQL: {sql}")
+            return orig_execute(sql, params)
+
+        with patch.object(self.db, "execute", side_effect=spy_execute):
+            self.assertEqual(
+                self.client.put("/api/alerts/10/review", params={"tenant": "Alpha"}, json={"is_reviewed": True}).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.put("/api/alerts/10/review", params={"tenant": "Alpha"}, json={"is_reviewed": False}).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.put("/api/alerts/10/review", params={"tenant": "Alpha"}, json={"is_reviewed": True, "flag_color": "red"}).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.post("/api/alerts/batch-review", params={"tenant": "Alpha"}, json={"alert_ids": [10, 11], "is_reviewed": True}).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.post("/api/alerts/batch-review", params={"tenant": "Alpha"}, json={"alert_ids": [10, 11], "is_reviewed": False}).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.put("/api/alerts/10/flag", params={"tenant": "Alpha"}, json={"flag_color": "green", "auto_review": True}).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.put("/api/alerts/10/flag", params={"tenant": "Alpha"}, json={"flag_color": None}).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.post("/api/alerts/flag", params={"tenant": "Alpha"}, json={"alert_ids": [10], "flag_color": None, "unreview": True}).status_code,
+                200,
+            )
+
+        for sql, params in recorded_sql:
+            if not params:
+                continue
+            flat = []
+            for p in params:
+                if isinstance(p, (list, tuple)):
+                    flat.extend(p)
+                else:
+                    flat.append(p)
+            self.assertFalse(
+                any(v is None for v in flat),
+                f"Unexpected None parameter bound in SQL: {sql} -> {params!r}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

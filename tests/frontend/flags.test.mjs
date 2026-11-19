@@ -69,15 +69,40 @@ test('renderFlagsPage renders counts, done badges with audit info, escapes XSS, 
       rule_updated_at: '2026-11-18T13:00:00Z',
     }],
   };
-  const html = renderFlagsPage(query, data, {});
+  const html = renderFlagsPage(query, data, {
+    expandedGroups: new Set(['/lib/minigalnano/createthumb.php <script>alert(1)</script>']),
+    groupAlertsCache: new Map([[
+      '/lib/minigalnano/createthumb.php <script>alert(1)</script>',
+      {
+        loading: false,
+        error: '',
+        total: 1,
+        items: [{
+          id: 101,
+          alert_id: 'syn-101',
+          description: 'Web server 400 error code.',
+          rule_level: 7,
+          flag_color: 'green',
+          flagged_by: 'analis1',
+          rule_status: 'done',
+          custom_rule_id: '100145',
+        }],
+      },
+    ]]),
+  });
   assert.match(html, /Rule Dibuat \(#100145\)/);
   assert.match(html, /@rule_eng/);
   assert.match(html, /Kembalikan Pending/);
+  assert.match(html, /Hapus Flag Grup/);
+  assert.match(html, /data-action="unreview-group"/);
+  assert.match(html, /<option value="">— Hapus Flag \(Unflag\) —<\/option>/);
+  assert.match(html, /data-action="unflag-alert"/);
+  assert.match(html, /data-action="unreview-alert"/);
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.doesNotMatch(html, /<img src=x/);
   assert.doesNotMatch(html, /\bAman\b|\bClean\b|\bSafe\b/);
 
-  // Red tab hides exclusion rule marking buttons
+  // Red tab hides exclusion rule marking buttons but allows unflag & unreview
   const redQuery = normalizeFlagQuery(new URLSearchParams('tenant=Alpha&flag_color=red'));
   const redHtml = renderFlagsPage(redQuery, {
     ...data,
@@ -85,6 +110,8 @@ test('renderFlagsPage renders counts, done badges with audit info, escapes XSS, 
   }, {});
   assert.doesNotMatch(redHtml, /Tandai Rule Dibuat/);
   assert.match(redHtml, /Tidak boleh diabaikan dengan custom rule/);
+  assert.match(redHtml, /Hapus Flag Grup/);
+  assert.match(redHtml, /Belum direview/);
 });
 
 test('claimBadge prioritizes Flag badge with Rule Dibuat status and retains legacy TP fallback', () => {
@@ -107,11 +134,14 @@ test('claimBadge prioritizes Flag badge with Rule Dibuat status and retains lega
   assert.equal(ruleStatusBadge({flag_color: 'red', rule_status: 'pending'}), '');
 });
 
-test('triage view replaces TP/FP/Benign buttons with Flag Hijau/Kuning/Merah controls', () => {
+test('triage view replaces TP/FP/Benign buttons with Flag Hijau/Kuning/Merah and Unflag controls', () => {
   const triageView = readFileSync(new URL('../../app/static/js/features/triage/view.js', import.meta.url), 'utf8');
   assert.match(triageView, /Flag Hijau/);
   assert.match(triageView, /Flag Kuning/);
   assert.match(triageView, /Flag Merah/);
+  assert.match(triageView, /data-action="batch-unflag"/);
+  assert.match(triageView, /data-action="unflag-current"/);
+  assert.match(triageView, /Hapus Flag/);
   assert.match(triageView, /\/api\/alerts\/flag/);
   assert.doesNotMatch(triageView, /Verdict TP|Verdict FP|Verdict Benign/);
 });

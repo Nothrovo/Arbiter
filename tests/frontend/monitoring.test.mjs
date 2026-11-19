@@ -23,6 +23,7 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
         total_unreviewed: 100000,
         global_review_count: 3420,
         active_claims: 4,
+        flags: {green: 3100, yellow: 200, red: 120},
         verdicts: {tp: 120, fp: 3100, benign: 200},
       },
       leaderboard: [
@@ -33,9 +34,9 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
           currently_claimed: 2,
           completed_today: 85,
           total_contributions: 1240,
-          tp_count: 40,
-          fp_count: 1100,
-          benign_count: 100,
+          green_count: 1100,
+          yellow_count: 100,
+          red_count: 40,
         },
         {
           username: 'lead_csirt',
@@ -44,9 +45,9 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
           currently_claimed: 0,
           completed_today: 12,
           total_contributions: 530,
-          tp_count: 25,
-          fp_count: 480,
-          benign_count: 25,
+          green_count: 480,
+          yellow_count: 25,
+          red_count: 25,
         },
       ],
       audit_logs: [
@@ -70,6 +71,16 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   assert.match(html, /Hari ini <strong class="num">12<\/strong> alert/);
   assert.match(html, /Outstanding Backlog/);
   assert.match(html, /Global Review Count/);
+  assert.match(html, /Hijau 3\.100/);
+  assert.match(html, /Kuning 200/);
+  assert.match(html, /Merah 120/);
+  assert.match(html, /Rincian Flag/);
+  assert.match(html, /badge flag-green">Hijau 1\.100/);
+  assert.match(html, /badge flag-yellow">Kuning 100/);
+  assert.match(html, /badge flag-red">Merah 40/);
+  assert.doesNotMatch(html, /Rincian Verdict/);
+  assert.doesNotMatch(html, /TP 40/);
+  assert.doesNotMatch(html, /Benign 100/);
   assert.match(html, /Leaderboard &amp; Akuntabilitas Analis/);
   assert.match(html, /Audit Log Laporan Insiden/);
   assert.match(html, /Director \/ Lead/);

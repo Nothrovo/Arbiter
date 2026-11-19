@@ -58,6 +58,7 @@ function renderAlertDetailRows(query, items, {expandedLogIds = new Set()} = {}) 
           <option value="green" ${currentFlag === 'green' ? 'selected' : ''}>Hijau</option>
           <option value="yellow" ${currentFlag === 'yellow' ? 'selected' : ''}>Kuning</option>
           <option value="red" ${currentFlag === 'red' ? 'selected' : ''}>Merah</option>
+          <option value="">— Hapus Flag (Unflag) —</option>
         </select>
       </td>
       ${showRuleCol ? `<td>
@@ -73,6 +74,8 @@ function renderAlertDetailRows(query, items, {expandedLogIds = new Set()} = {}) 
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="button text-button meta" data-action="toggle-flag-log" data-alert-id="${id}" aria-expanded="${isLogOpen}">[${isLogOpen ? 'Tutup Log' : 'Log'}]</button>
           <a class="button text-button meta" href="${esc(triageLinkFor(query, a))}">Buka di Triage</a>
+          <button type="button" class="button text-button meta" data-action="unflag-alert" data-alert-id="${id}" title="Hapus Flag alert ini (status review tetap)">Hapus Flag</button>
+          <button type="button" class="button text-button meta" data-action="unreview-alert" data-alert-id="${id}" title="Kembalikan ke Belum direview dan hapus Flag">Belum direview</button>
         </div>
       </td>
     </tr>`;
@@ -133,7 +136,9 @@ export function renderFlagGroups(query, data, {
       ? `<span>Rule ditandai oleh <strong>@${esc(group.rule_updated_by)}</strong>${group.rule_updated_at ? ` · ${esc(formatTime(group.rule_updated_at))}` : ''}${group.rule_notes ? ` — “${esc(group.rule_notes)}”` : ''}</span>`
       : '';
     const actionsHTML = isRed
-      ? '<span class="meta">Tidak boleh diabaikan dengan custom rule</span>'
+      ? `<span class="meta">Tidak boleh diabaikan dengan custom rule</span>
+         <button type="button" class="button" data-action="unflag-group" data-group-index="${index}" title="Hapus Flag semua alert pada grup ini">Hapus Flag Grup</button>
+         <button type="button" class="button" data-action="unreview-group" data-group-index="${index}" title="Kembalikan semua alert pada grup ini ke Belum direview dan hapus Flag">Belum direview</button>`
       : `
         ${group.rule_status !== 'done'
           ? `<button type="button" class="button primary" data-action="open-group-rule-modal" data-group-index="${index}">${icon('check')}Tandai Rule Dibuat (${Number(group.pending_count ?? group.alert_count).toLocaleString('id-ID')})</button>`
@@ -141,6 +146,8 @@ export function renderFlagGroups(query, data, {
         ${group.rule_status === 'done' || group.rule_status === 'partial'
           ? `<button type="button" class="button" data-action="revert-group-rule" data-group-index="${index}">Kembalikan Pending</button>`
           : ''}
+        <button type="button" class="button" data-action="unflag-group" data-group-index="${index}" title="Hapus Flag semua alert pada grup ini">Hapus Flag Grup</button>
+        <button type="button" class="button" data-action="unreview-group" data-group-index="${index}" title="Kembalikan semua alert pada grup ini ke Belum direview dan hapus Flag">Belum direview</button>
       `;
 
     let bodyHTML = '';

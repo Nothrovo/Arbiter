@@ -35,7 +35,7 @@ export function renderReviewActivity(data) {
 
 export function renderMonitoringDashboard(data, query) {
   const metrics = data?.metrics || {};
-  const verdicts = metrics.verdicts || {};
+  const flags = metrics.flags || {};
   const leaderboard = Array.isArray(data?.leaderboard) ? data.leaderboard : [];
   const auditLogs = Array.isArray(data?.audit_logs) ? data.audit_logs : [];
   const num = v => Number(v || 0).toLocaleString('id-ID');
@@ -65,7 +65,7 @@ export function renderMonitoringDashboard(data, query) {
           <td class="numeric num">${row.currently_claimed > 0 ? `<span class="badge warning">${num(row.currently_claimed)} aktif</span>` : '0'}</td>
           <td class="numeric num"><strong>${num(row.completed_today)}</strong></td>
           <td class="numeric num">${num(row.total_contributions)}</td>
-          <td class="meta num">TP ${num(row.tp_count)} · FP ${num(row.fp_count)} · Benign ${num(row.benign_count)}</td>
+          <td class="num"><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;"><span class="badge flag-green">Hijau ${num(row.green_count)}</span><span class="badge flag-yellow">Kuning ${num(row.yellow_count)}</span><span class="badge flag-red">Merah ${num(row.red_count)}</span></div></td>
         </tr>`;
       }).join('')
     : `<tr><td colspan="7" class="meta" style="text-align:center;padding:var(--space-4)">Belum ada aktivitas klaim atau review analis tercatat.</td></tr>`;
@@ -91,7 +91,7 @@ export function renderMonitoringDashboard(data, query) {
       <div class="split">
         <div>
           <h2 class="section-heading">Metrik Operasional Real-Time</h2>
-          <p class="meta">Ritme penarikan alert harian, sisa antrean lintas hari (backlog persistence), dan akumulasi verdict tim SOC.</p>
+          <p class="meta">Ritme penarikan alert harian, sisa antrean lintas hari (backlog persistence), dan akumulasi flag tim SOC.</p>
         </div>
         <span class="meta">Diperbarui ${esc(formatTime(data?.checked_at))}</span>
       </div>
@@ -109,7 +109,7 @@ export function renderMonitoringDashboard(data, query) {
         <div class="key-value" style="padding:16px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
           <dt>Global Review Count</dt>
           <dd class="num" style="font-size:26px;font-weight:600;margin-top:4px;">${num(metrics.global_review_count)}</dd>
-          <dd class="meta">TP ${num(verdicts.tp)} · FP ${num(verdicts.fp)} · Benign ${num(verdicts.benign)}</dd>
+          <dd class="meta" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"><span class="badge flag-green">Hijau ${num(flags.green)}</span><span class="badge flag-yellow">Kuning ${num(flags.yellow)}</span><span class="badge flag-red">Merah ${num(flags.red)}</span></dd>
         </div>
         <div class="key-value" style="padding:16px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
           <dt>Klaim Aktif Saat Ini</dt>
@@ -123,7 +123,7 @@ export function renderMonitoringDashboard(data, query) {
       <div class="split">
         <div>
           <h2 class="section-heading">Leaderboard &amp; Akuntabilitas Analis</h2>
-          <p class="meta">Pemantauan beban kerja aktif (sedang diklaim), penyelesaian hari ini, dan total kontribusi verdict per analis.</p>
+          <p class="meta">Pemantauan beban kerja aktif (sedang diklaim), penyelesaian hari ini, dan total kontribusi flag (Hijau, Kuning, Merah) per analis.</p>
         </div>
         <a class="button" href="${esc(triageLink({review_status: 'unreviewed'}))}">${icon('inbox')} Buka Antrean Backlog</a>
       </div>
@@ -137,7 +137,7 @@ export function renderMonitoringDashboard(data, query) {
               <th scope="col" class="numeric">Sedang Diklaim</th>
               <th scope="col" class="numeric">Selesai Hari Ini</th>
               <th scope="col" class="numeric">Total Kontribusi</th>
-              <th scope="col">Rincian Verdict</th>
+              <th scope="col">Rincian Flag</th>
             </tr>
           </thead>
           <tbody>${leaderboardRows}</tbody>

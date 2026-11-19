@@ -264,6 +264,107 @@ export function mount(ctx) {
       }, `Status custom rule alert #${alertId} dikembalikan ke Belum Dibuat.`);
       return;
     }
+    if (action === 'unflag-alert') {
+      const alertId = Number(btn.dataset.alertId);
+      btn.disabled = true;
+      try {
+        await json(apiURL(`/api/alerts/${alertId}/flag`, tenantParams()), {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({flag_color: null}),
+          signal,
+        });
+        notify(`Flag alert #${alertId} dihapus.`, 'success');
+        window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
+        await loadGroups({preserveExpanded: true});
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message || 'Gagal menghapus flag alert.', 'error');
+      } finally {
+        if (btn.isConnected) btn.disabled = false;
+      }
+      return;
+    }
+    if (action === 'unreview-alert') {
+      const alertId = Number(btn.dataset.alertId);
+      btn.disabled = true;
+      try {
+        await json(apiURL('/api/alerts/batch-review', tenantParams()), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({alert_ids: [alertId], is_reviewed: false}),
+          signal,
+        });
+        notify(`Alert #${alertId} dikembalikan ke belum direview dan Flag dihapus.`, 'success');
+        window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
+        await loadGroups({preserveExpanded: true});
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message || 'Gagal mengembalikan status alert.', 'error');
+      } finally {
+        if (btn.isConnected) btn.disabled = false;
+      }
+      return;
+    }
+    if (action === 'unflag-group') {
+      const group = data?.groups?.[Number(btn.dataset.groupIndex)];
+      if (!group) return;
+      btn.disabled = true;
+      try {
+        const res = await json(apiURL('/api/alerts/flag', tenantParams()), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            flag_color: null,
+            current_flag_color: query.flag_color,
+            group_by: query.group_by,
+            group_key: String(group.key ?? ''),
+            current_rule_status: query.rule_status,
+            pattern: query.pattern,
+            pattern_mode: query.pattern_mode,
+            q: query.q,
+          }),
+          signal,
+        });
+        notify(`${Number(res.count || 0).toLocaleString('id-ID')} alert pada grup “${group.key}” berhasil dihapus Flag-nya.`, 'success');
+        window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
+        await loadGroups({preserveExpanded: true});
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message || 'Gagal menghapus flag grup.', 'error');
+      } finally {
+        if (btn.isConnected) btn.disabled = false;
+      }
+      return;
+    }
+    if (action === 'unreview-group') {
+      const group = data?.groups?.[Number(btn.dataset.groupIndex)];
+      if (!group) return;
+      btn.disabled = true;
+      try {
+        const res = await json(apiURL('/api/alerts/flag', tenantParams()), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            flag_color: null,
+            unreview: true,
+            current_flag_color: query.flag_color,
+            group_by: query.group_by,
+            group_key: String(group.key ?? ''),
+            current_rule_status: query.rule_status,
+            pattern: query.pattern,
+            pattern_mode: query.pattern_mode,
+            q: query.q,
+          }),
+          signal,
+        });
+        notify(`${Number(res.count || 0).toLocaleString('id-ID')} alert pada grup “${group.key}” dikembalikan ke belum direview dan Flag dihapus.`, 'success');
+        window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
+        await loadGroups({preserveExpanded: true});
+      } catch (err) {
+        if (err.name !== 'AbortError') notify(err.message || 'Gagal mengembalikan grup ke belum direview.', 'error');
+      } finally {
+        if (btn.isConnected) btn.disabled = false;
+      }
+      return;
+    }
     if (action === 'toggle-flag-log') {
       const alertId = Number(btn.dataset.alertId);
       if (expandedLogIds.has(alertId)) expandedLogIds.delete(alertId);
@@ -298,15 +399,21 @@ export function mount(ctx) {
     if (el.matches('[data-change-alert-flag]')) {
       const alertId = Number(el.dataset.changeAlertFlag);
       const nextColor = el.value;
+      const bodyPayload = nextColor ? {flag_color: nextColor, auto_review: true} : {flag_color: null};
       el.disabled = true;
       try {
         await json(apiURL(`/api/alerts/${alertId}/flag`, tenantParams()), {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({flag_color: nextColor, auto_review: true}),
+          body: JSON.stringify(bodyPayload),
           signal,
         });
-        notify(`Flag alert #${alertId} diperbarui menjadi ${nextColor === 'green' ? 'Hijau' : nextColor === 'yellow' ? 'Kuning' : 'Merah'}.`, 'success');
+        notify(
+          nextColor
+            ? `Flag alert #${alertId} diperbarui menjadi ${nextColor === 'green' ? 'Hijau' : nextColor === 'yellow' ? 'Kuning' : 'Merah'}.`
+            : `Flag alert #${alertId} dihapus.`,
+          'success',
+        );
         window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
         await loadGroups({preserveExpanded: true});
       } catch (err) {

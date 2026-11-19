@@ -687,6 +687,7 @@ export function mount(ctx) {
           body: JSON.stringify({alert_ids: ids, is_reviewed: isRev, tenant: query.tenant}),
           signal,
         });
+        window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
         notify(isRev ? `${ids.length} alert ditandai direview.` : `${ids.length} alert ditandai belum direview.`, 'success');
         await loadData();
       } catch (err) {
