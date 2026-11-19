@@ -408,6 +408,7 @@
 .ai-group { display:grid; gap:12px; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-panel); }
 .ai-group-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
 .ai-group-head h3 { font-size:16px; }
+.ai-merge-select { margin-right:6px; vertical-align:middle; }
 .ai-group-reason { margin:0; color:var(--muted); }
 .ai-group-meta { display:flex; gap:16px; flex-wrap:wrap; }
 .ai-group-details > summary { margin-bottom:12px; }

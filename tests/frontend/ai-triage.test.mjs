@@ -52,7 +52,11 @@ test('ai-triage model normalizes verdicts, modes, and bounded controls', async (
   assert.deepEqual(GROUP_BY_OPTIONS, [
     ['rule_description', 'Rule description (per tenant)'],
     ['host_rule', 'Host / Agent + Rule'],
+    ['indicator', 'Korelasi IP + URL + Payload (kampanye)'],
   ]);
+  const indicatorOptions = triageOptions(new URLSearchParams('group_by=indicator&limit=100000'));
+  assert.equal(indicatorOptions.groupBy, 'indicator');
+  assert.equal(indicatorOptions.limit, 100000, '100k alerts are allowed');
 
   const result = normalizeTriageResult({
     mode: 'local_ai',
@@ -162,6 +166,11 @@ test('ai-triage page sends only sanitized fields and offers TP/FP actions', () =
   assert.match(view, /Simpan ke Insiden/);
   assert.match(view, /verdict: group\.verdict/);
   assert.match(view, /alert_ids: group\.alertIds/);
+  // Manual group merge and per-group full-alert copy.
+  assert.match(view, /data-action="merge-selected"/);
+  assert.match(view, /Gabungkan terpilih/);
+  assert.match(view, /data-merge-index/);
+  assert.match(view, /Salin full log/);
   // Fallback is clearly labelled, never presented as AI.
   assert.match(view, /local_rules_fallback/);
   assert.match(view, /heuristik/i);

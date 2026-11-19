@@ -797,7 +797,7 @@ def bulk_full_logs(payload: dict[str, Any], tenant: list[str] = Query(default=["
         clean_pks = _validate_membership(conn, alert_ids, tenant)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT a.id, a.alert_id, a.description, a.source_ip, a.agent_name,
+            """SELECT a.id, a.alert_id, a.tenant, a.description, a.source_ip, a.agent_name,
                       a.rule_id, a.rule_level, a.timestamp,
                       COALESCE(a.raw->>'full_log', '') AS full_log
                FROM wazuh.alerts a
@@ -2138,7 +2138,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
         options = state["options"]
         tenant = options.get("tenant") or ["all"]
         try:
-            limit = max(1, min(5000, int(options.get("limit") or 40)))
+            limit = max(1, min(100000, int(options.get("limit") or 40)))
             min_rule_level = max(0, min(16, int(options.get("min_rule_level") if options.get("min_rule_level") is not None else 7)))
         except (TypeError, ValueError):
             limit, min_rule_level = 40, 7
@@ -2146,7 +2146,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
         max_rule_level = int(raw_max) if raw_max is not None and str(raw_max).strip() != "" else None
         review_status = str(options.get("review_status") or "unreviewed")
         group_by = str(options.get("group_by") or "rule_description")
-        if group_by not in {"host_rule", "rule_description"}:
+        if group_by not in {"host_rule", "rule_description", "indicator"}:
             group_by = "rule_description"
 
         saved_ids = [int(aid) for aid in (state.get("alert_ids") or []) if str(aid).isdigit()]
@@ -2278,8 +2278,8 @@ def api_ai_triage(payload: dict[str, Any]):
             raise HTTPException(status_code=400, detail="max_rule_level tidak valid.")
 
     group_by = str(payload.get("group_by") or "host_rule").strip()
-    if group_by not in {"host_rule", "rule_description"}:
-        raise HTTPException(status_code=400, detail="group_by harus berupa 'host_rule' atau 'rule_description'.")
+    if group_by not in {"host_rule", "rule_description", "indicator"}:
+        raise HTTPException(status_code=400, detail="group_by harus berupa 'host_rule', 'rule_description', atau 'indicator'.")
 
     tenant = payload.get("tenant") or ["all"]
     review_status = str(payload.get("review_status") or "unreviewed")

@@ -26,6 +26,7 @@ export async function mount(ctx) {
   let result = null;
   let running = false;
   let saving = false;
+  let mergeSelection = new Set();
 
   const activeTenants = () => {
     if (!state.tenantValue || state.tenantValue === 'all') return ['all'];
@@ -88,6 +89,7 @@ export async function mount(ctx) {
         <div class="field">
           <label for="ai-limit">Maksimum alert</label>
           <input class="input" id="ai-limit" name="limit" type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${esc(state.limit)}" placeholder="40" required>
+          <span class="meta">Maksimum 100.000. Volume besar diproses lebih lama dan memakai memori lebih banyak.</span>
         </div>
         <div class="field">
           <label for="ai-review-status">Status review</label>
@@ -184,7 +186,11 @@ export async function mount(ctx) {
             <h3 id="ai-group-${position}">${esc(group.title)}</h3>
           </div>
           <div>
+            <label class="checkbox-label ai-merge-select" title="Pilih grup untuk digabung manual">
+              <input type="checkbox" data-merge-index="${position}" ${mergeSelection.has(position) ? 'checked' : ''} aria-label="Pilih grup ${esc(group.title)} untuk digabung">
+            </label>
             ${newCount > 0 ? `<span class="badge success">+${newCount.toLocaleString('id-ID')} alert baru</span> ` : ''}
+            ${group.manualMerged ? '<span class="badge info">Gabungan manual</span> ' : ''}
             ${group.savedGroupId ? `<a class="badge neutral" href="#/incidents/${esc(group.savedGroupId)}">Tersimpan di Insiden</a> ` : ''}
             <span class="badge ${meta.badge}">${esc(meta.label)}</span>
           </div>
@@ -221,7 +227,7 @@ export async function mount(ctx) {
       ${result.warning ? `<div class="notice" data-kind="warning"><p>${esc(result.warning)}</p></div>` : ''}
       ${renderSummary(result, counts, result.mode)}
       ${result.groups.length
-        ? `<div class="ai-save-bar"><button class="button primary" type="button" data-action="save" ${saving ? 'disabled' : ''}>${icon('cases')} ${saving ? 'Menyimpan…' : 'Simpan ke Insiden'}</button><span class="inline-status" id="ai-save-status" role="status"></span></div>
+        ? `<div class="ai-save-bar"><button class="button primary" type="button" data-action="save" ${saving ? 'disabled' : ''}>${icon('cases')} ${saving ? 'Menyimpan…' : 'Simpan ke Insiden'}</button><button class="button" type="button" data-action="merge-selected" ${mergeSelection.size < 2 ? 'disabled' : ''}>${icon('plus')} Gabungkan terpilih (<span data-merge-count>${mergeSelection.size}</span>)</button><button class="button" type="button" data-action="clear-merge" ${mergeSelection.size ? '' : 'disabled'}>Reset pilihan</button><span class="inline-status" id="ai-save-status" role="status"></span></div>
            <div class="ai-groups">${result.groups.map((group, index) => renderGroup(group, alertIndex(result.alerts), index)).join('')}</div>`
         : emptyState('Tidak ada alert pada scope ini', 'Ubah status review, ambang severity, atau scope tenant lalu jalankan ulang.')}`;
   }
@@ -294,9 +300,10 @@ export async function mount(ctx) {
           group_by: groupBy,
         }),
         signal,
-        timeout: Math.max(120000, (Number(settings.ai.timeout_seconds) || 90) * 1000),
+        timeout: Math.max(120000, (Number(settings.ai.timeout_seconds) || 90) * 1000, Math.min(1800000, limit * 100)),
       });
       result = normalizeTriageResult(body);
+      mergeSelection = new Set();
       running = false;
       render();
       const counts = summarizeGroups(result.groups);
@@ -329,8 +336,16 @@ export async function mount(ctx) {
       });
       const items = Array.isArray(body.items) ? body.items : [];
       const text = items.map(a => {
-        const head = `Alert #${a.id} · ${a.description || 'Tanpa deskripsi'} · Sumber ${a.source_ip || '—'} · Rule ${a.rule_id || '—'}`;
-        return `${head}\n${a.full_log || '(full log tidak tersedia)'}`;
+        const facts = [
+          a.tenant ? `Tenant ${a.tenant}` : '',
+          a.timestamp ? `Waktu ${a.timestamp}` : '',
+          a.agent_name ? `Agent ${a.agent_name}` : '',
+          a.rule_id ? `Rule ${a.rule_id}` : '',
+          `Level ${a.rule_level ?? '—'}`,
+          `Sumber ${a.source_ip || '—'}`,
+        ].filter(Boolean).join(' · ');
+        const head = `Alert #${a.id} · ${a.description || 'Tanpa deskripsi'}`;
+        return `${head}\n${facts}\n${a.full_log || '(full log tidak tersedia)'}`;
       }).join('\n\n---\n\n');
       if (!text) { notify('Tidak ada full log yang dapat disalin.', 'error'); return; }
       await copyText(text);
@@ -340,6 +355,59 @@ export async function mount(ctx) {
       if (error.name === 'AbortError') return;
       if (status) { status.textContent = error.message; status.dataset.kind = 'error'; }
     }
+  }
+
+  function updateMergeToolbar() {
+    const count = mergeSelection.size;
+    const button = root.querySelector('[data-action=merge-selected]');
+    if (button) {
+      button.disabled = count < 2;
+      const counter = button.querySelector('[data-merge-count]');
+      if (counter) counter.textContent = String(count);
+    }
+    const reset = root.querySelector('[data-action=clear-merge]');
+    if (reset) reset.disabled = count === 0;
+  }
+
+  function mergeSelected() {
+    if (!result?.groups?.length || mergeSelection.size < 2) return;
+    const indexes = [...mergeSelection].filter(index => result.groups[index]).sort((a, b) => a - b);
+    const chosen = indexes.map(index => result.groups[index]);
+    if (chosen.length < 2) return;
+    const tenants = new Set(chosen.map(group => String(group.tenant || '').trim()).filter(Boolean));
+    const windows = new Set(chosen.map(group => String(group.windowKey || '').trim()).filter(Boolean));
+    if (tenants.size > 1) { notify('Grup dari tenant berbeda tidak bisa digabung.', 'error'); return; }
+    if (windows.size > 1) { notify('Grup yang melewati batas 17:00 WIB tidak bisa digabung.', 'error'); return; }
+    const rank = {fp: 1, needs_review: 2, tp: 3};
+    const verdict = chosen.reduce((best, group) => (rank[group.verdict] || 0) > (rank[best] || 0) ? group.verdict : best, 'fp');
+    const alertIds = [...new Set(chosen.flatMap(group => group.alertIds || []))];
+    const newAlertIds = [...new Set(chosen.flatMap(group => group.newAlertIds || []))];
+    const first = chosen[0];
+    const merged = {
+      ...first,
+      title: `Gabungan manual · ${chosen.length} grup (${alertIds.length.toLocaleString('id-ID')} alert)`.slice(0, 200),
+      category: 'Gabungan manual analis',
+      verdict,
+      reason: `Digabung manual oleh analis dari ${chosen.length} grup: ${chosen.map(group => group.title).join(' + ')}`.slice(0, 400),
+      alertIds,
+      newAlertIds,
+      groupKey: `${first.tenant || 'Default'}::manual::${alertIds.slice(0, 3).join('-')}::${first.windowKey || ''}`,
+      savedGroupId: first.savedGroupId || '',
+      manualMerged: true,
+    };
+    const firstIndex = indexes[0];
+    const nextGroups = [];
+    for (let index = 0; index < result.groups.length; index += 1) {
+      if (mergeSelection.has(index)) {
+        if (index === firstIndex) nextGroups.push(merged);
+        continue;
+      }
+      nextGroups.push(result.groups[index]);
+    }
+    result = {...result, groups: nextGroups};
+    mergeSelection = new Set();
+    render();
+    notify(`${chosen.length} grup digabung menjadi 1 kasus (${alertIds.length.toLocaleString('id-ID')} alert).`, 'success');
   }
 
   async function save() {
@@ -395,6 +463,7 @@ export async function mount(ctx) {
           const savedTriage = await json(`/api/ai/triage?${new URLSearchParams(activeTenants().map(t => ['tenant', t]))}`, {signal, timeout: 15000});
           if (savedTriage?.saved && savedTriage.result) {
             result = normalizeTriageResult(savedTriage.result);
+            mergeSelection = new Set();
             const savedOpts = triageOptions(savedTriage.options || {});
             state.severitySelection = savedOpts.severitySelection;
             state.limit = savedOpts.limit;
@@ -419,6 +488,15 @@ export async function mount(ctx) {
     }
   }, {signal});
 
+  root.addEventListener('change', event => {
+    if (!event.target.matches('[data-merge-index]')) return;
+    const index = Number(event.target.dataset.mergeIndex);
+    if (!Number.isInteger(index)) return;
+    if (event.target.checked) mergeSelection.add(index);
+    else mergeSelection.delete(index);
+    updateMergeToolbar();
+  }, {signal});
+
   root.addEventListener('submit', event => {
     if (event.target.id !== 'ai-triage-form') return;
     event.preventDefault();
@@ -429,6 +507,8 @@ export async function mount(ctx) {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'run-inline') run();
     if (action === 'save') save();
+    if (action === 'merge-selected') mergeSelected();
+    if (action === 'clear-merge') { mergeSelection = new Set(); render(); }
     if (action === 'copy-group-logs') {
       const position = Number(event.target.closest('[data-action=copy-group-logs]')?.dataset.groupIndex);
       const group = result?.groups?.[position];

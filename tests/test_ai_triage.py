@@ -538,6 +538,45 @@ class AITriageAPITests(unittest.TestCase):
         self.assertEqual(len(alpha_ssh_groups), 1)
         self.assertNotIn("22", alpha_ssh_groups[0]["alert_ids"])
 
+    def test_ai_triage_accepts_100k_limit_and_indicator_grouping(self):
+        # 100k is allowed for analyst-driven bulk grouping.
+        run = self.client.post("/api/ai/triage", json={
+            "tenant": ["Alpha"], "limit": 100000, "min_rule_level": 7,
+            "review_status": "all", "group_by": "indicator",
+        })
+        self.assertEqual(run.status_code, 200, run.text)
+        self.assertEqual(run.json()["group_by"], "indicator")
+        reopen = self.client.get("/api/ai/triage", params={"tenant": "Alpha"})
+        self.assertEqual(reopen.json()["options"]["limit"], 100000)
+
+        # 80+81 share source IP, 81+82 share URL -> one connected campaign.
+        # 83 shares nothing -> separate group.
+        self.db.add_alert(80, "Alpha", rule_level=10, description="Login attempt", source_ip="203.0.113.5",
+                          parsed_details='{"path":"/login"}', log_signature="sig-ind-a")
+        self.db.add_alert(81, "Alpha", rule_level=10, description="Admin probe", source_ip="203.0.113.5",
+                          parsed_details='{"path":"/admin"}', log_signature="sig-ind-b")
+        self.db.add_alert(82, "Alpha", rule_level=12, description="Admin scan", source_ip="198.51.100.9",
+                          parsed_details='{"path":"/admin"}', log_signature="sig-ind-c")
+        self.db.add_alert(83, "Alpha", rule_level=8, description="Static asset", source_ip="192.0.2.44",
+                          parsed_details='{"path":"/static"}', log_signature="sig-ind-d")
+
+        response = self.client.post("/api/ai/triage", json={
+            "tenant": ["Alpha"], "limit": 100, "min_rule_level": 7,
+            "review_status": "all", "group_by": "indicator",
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        campaign = next(g for g in body["groups"] if "80" in g["alert_ids"])
+        self.assertEqual(set(campaign["alert_ids"]), {"80", "81", "82"})
+        self.assertIn("IP + URL + Payload", campaign["category"])
+        separate_groups = [g for g in body["groups"] if "83" in g["alert_ids"]]
+        self.assertEqual(len(separate_groups), 1)
+        self.assertNotIn("83", campaign["alert_ids"])
+        self.assertEqual(set(separate_groups[0]["alert_ids"]), {"83"})
+        alerts_by_id = {str(a["id"]): a for a in body["alerts"]}
+        for group in body["groups"]:
+            self.assertEqual({alerts_by_id[aid]["tenant"] for aid in group["alert_ids"]}, {"Alpha"})
+
     def test_ai_triage_save_rejects_multi_tenant_group(self):
         self.db.add_alert(30, "Alpha", rule_level=10, description="Shared rule", source_ip="1.2.3.4")
         self.db.add_alert(31, "Beta", rule_level=10, description="Shared rule", source_ip="1.2.3.4")

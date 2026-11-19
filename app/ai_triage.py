@@ -90,7 +90,7 @@ def _intel_summary(alert: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-GROUP_BY_MODES = {"host_rule", "rule_description"}
+GROUP_BY_MODES = {"host_rule", "rule_description", "indicator"}
 
 
 def wib_window_key(value: Any = None) -> str:
@@ -247,14 +247,197 @@ def _group_by_rule_description(
     return groups
 
 
+def _as_mapping(value: Any) -> dict[str, Any]:
+    """Parse a JSONB-like field that may arrive as dict or JSON text."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _indicator_keys(alert: dict[str, Any]) -> set[str]:
+    """Derive grouping indicators from one alert: source IP, URL/path, payload signature."""
+    keys: set[str] = set()
+    source_ip = str(alert.get("source_ip") or "").strip()
+    if source_ip and source_ip != "-":
+        keys.add(f"ip:{source_ip}")
+    details = _as_mapping(alert.get("parsed_details"))
+    data = _as_mapping(alert.get("data"))
+    url = (
+        details.get("url") or data.get("url")
+        or details.get("uri") or data.get("uri")
+        or details.get("path") or data.get("path")
+        or alert.get("url")
+    )
+    if url is not None:
+        text = str(url).strip().lower()
+        if text and text not in {"-", "/"}:
+            keys.add(f"url:{text[:500]}")
+    signature = str(alert.get("log_signature") or "").strip()
+    if signature:
+        keys.add(f"payload:{signature}")
+    return keys
+
+
+def _group_by_indicators(
+    tenant: str,
+    has_explicit_tenant: bool,
+    multi_tenant: bool,
+    alerts: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Group alerts that share a source IP, URL/path, or payload signature.
+
+    Alerts are connected transitively: an IP linking many URLs becomes one
+    campaign case, and a URL or payload shared by several IPs joins the same
+    case. Tenant and the 17:00 WIB window remain hard boundaries.
+    """
+    win_buckets: dict[str, list[dict[str, Any]]] = {}
+    for alert in alerts:
+        win_buckets.setdefault(wib_window_key(alert.get("timestamp")), []).append(alert)
+
+    groups: list[dict[str, Any]] = []
+    multi_window = len(win_buckets) > 1
+    for win_key, win_alerts in win_buckets.items():
+        entries: list[tuple[str, dict[str, Any]]] = []
+        key_sets: list[set[str]] = []
+        for alert in win_alerts:
+            alert_id = str(alert.get("id") or alert.get("alert_id") or "")
+            if not alert_id:
+                continue
+            entries.append((alert_id, alert))
+            key_sets.append(_indicator_keys(alert))
+        if not entries:
+            continue
+
+        parent = list(range(len(entries)))
+
+        def find(index: int) -> int:
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = parent[index]
+            return index
+
+        def union(left: int, right: int) -> None:
+            root_left, root_right = find(left), find(right)
+            if root_left != root_right:
+                parent[root_right] = root_left
+
+        owner: dict[str, int] = {}
+        for index in range(len(entries)):
+            for key in key_sets[index]:
+                if key in owner:
+                    union(index, owner[key])
+                else:
+                    owner[key] = index
+
+        components: dict[int, list[int]] = {}
+        for index in range(len(entries)):
+            components.setdefault(find(index), []).append(index)
+
+        win_suffix = f" [≤ {format_wib_window_label(win_key)}]" if (multi_window and win_key) else ""
+        for member_indexes in components.values():
+            members = [entries[index][1] for index in member_indexes]
+            ids = list(dict.fromkeys(entries[index][0] for index in member_indexes))
+            strongest = max(members, key=lambda a: int(a.get("rule_level") or 0))
+            source_ips = sorted({
+                str(a.get("source_ip") or "")
+                for a in members
+                if a.get("source_ip") and a.get("source_ip") != "-"
+            })
+            urls = sorted({
+                key.split(":", 1)[1]
+                for index in member_indexes
+                for key in key_sets[index]
+                if key.startswith("url:")
+            })
+            payloads = sorted({
+                key.split(":", 1)[1]
+                for index in member_indexes
+                for key in key_sets[index]
+                if key.startswith("payload:")
+            })
+            agent_names = sorted({
+                str(a.get("agent_name") or "")
+                for a in members
+                if a.get("agent_name") and a.get("agent_name") != "-"
+            })
+            total_hits = sum(int(a.get("hit_count") or 1) for a in members)
+
+            verdict, base_reason = _heuristic_verdict(strongest)
+            payload_tp = False
+            for member in members:
+                info = classify_alert(member)
+                if info.get("source") == "payload_indicator":
+                    verdict, base_reason = "tp", str(info.get("reason") or base_reason)
+                    payload_tp = True
+                    break
+                if info.get("verdict") == "tp" and verdict != "tp":
+                    verdict, base_reason = "tp", str(info.get("reason") or base_reason)
+
+            description = str(strongest.get("description") or "Kampanye indikator").strip()
+            title = f"{description} · {len(source_ips)} IP / {len(urls)} URL / {len(payloads)} payload{win_suffix}"[:200]
+            category = (
+                f"Korelasi IP + URL + Payload · {tenant}"
+                if has_explicit_tenant
+                else "Korelasi IP + URL + Payload"
+            )[:120]
+            shared_parts = []
+            if len(source_ips) > 1 or (source_ips and len(ids) > 1):
+                shared_parts.append(f"{len(source_ips)} IP sumber")
+            if urls:
+                shared_parts.append(f"{len(urls)} URL/path")
+            if payloads:
+                shared_parts.append(f"{len(payloads)} signature payload")
+            shared_note = ", ".join(shared_parts) or "indikator yang sama"
+            reason = (
+                f"Digabung karena berbagi indikator ({shared_note}) di tenant '{tenant}'"
+                f"{f' pada batas {format_wib_window_label(win_key)}' if win_key else ''}: "
+                f"{len(ids)} alert ({total_hits} hits). {base_reason}"
+            )[:400]
+            component_keys = sorted({key for index in member_indexes for key in key_sets[index]})
+            groups.append({
+                "tenant": tenant,
+                "window_key": win_key,
+                "group_key": f"{tenant}::indicator::{('|'.join(component_keys))[:240]}::{win_key}",
+                "lock_tp": bool(payload_tp),
+                "heuristic_reason": reason,
+                "category": category,
+                "title": title,
+                "verdict": verdict,
+                "reason": reason,
+                "alert_ids": ids,
+                "rule_id": str(strongest.get("rule_id") or "")[:80],
+                "rule_level": int(strongest.get("rule_level") or 0),
+                "description": description[:300],
+                "source_ips": source_ips[:12],
+                "agent_names": agent_names[:8],
+                "alert_count": len(ids),
+                "total_hits": total_hits,
+                "chain": [],
+                "response_alert_ids": [],
+                **_intel_summary(strongest),
+            })
+    return groups
+
+
 def heuristic_triage(alerts: list[dict[str, Any]], *, group_by: str = "host_rule") -> list[dict[str, Any]]:
     """Deterministic fallback, clearly labelled as rules rather than AI."""
     partitions = _partition_by_tenant(alerts)
     multi_tenant = len(partitions) > 1
-    if group_by == "rule_description":
+    if group_by in {"rule_description", "indicator"}:
         result: list[dict[str, Any]] = []
         for tenant, has_explicit, tenant_alerts in partitions:
-            for item in _group_by_rule_description(tenant, has_explicit, multi_tenant, tenant_alerts):
+            items = (
+                _group_by_indicators(tenant, has_explicit, multi_tenant, tenant_alerts)
+                if group_by == "indicator"
+                else _group_by_rule_description(tenant, has_explicit, multi_tenant, tenant_alerts)
+            )
+            for item in items:
                 result.append({
                     "tenant": item["tenant"],
                     "window_key": item["window_key"],
@@ -344,10 +527,15 @@ def _cluster_alerts(alerts: list[dict[str, Any]], *, group_by: str = "host_rule"
     """
     partitions = _partition_by_tenant(alerts)
     multi_tenant = len(partitions) > 1
-    if group_by == "rule_description":
+    if group_by in {"rule_description", "indicator"}:
         clusters: list[dict[str, Any]] = []
         for tenant, has_explicit, tenant_alerts in partitions:
-            for item in _group_by_rule_description(tenant, has_explicit, multi_tenant, tenant_alerts):
+            items = (
+                _group_by_indicators(tenant, has_explicit, multi_tenant, tenant_alerts)
+                if group_by == "indicator"
+                else _group_by_rule_description(tenant, has_explicit, multi_tenant, tenant_alerts)
+            )
+            for item in items:
                 clusters.append({
                     "tenant": item["tenant"],
                     "window_key": item["window_key"],

@@ -18,7 +18,7 @@ export const MIN_LEVELS = [
 ];
 
 export const MIN_LIMIT = 1;
-export const MAX_LIMIT = 5000;
+export const MAX_LIMIT = 100000;
 export const LIMITS = [10, 20, 40, 60, 100];
 
 export const REVIEW_STATUSES = [
@@ -30,6 +30,7 @@ export const REVIEW_STATUSES = [
 export const GROUP_BY_OPTIONS = [
   ['rule_description', 'Rule description (per tenant)'],
   ['host_rule', 'Host / Agent + Rule'],
+  ['indicator', 'Korelasi IP + URL + Payload (kampanye)'],
 ];
 
 export function wibWindowKey(value) {
