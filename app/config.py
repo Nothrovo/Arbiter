@@ -10,6 +10,8 @@ ACTIVE_DB_PROFILE = os.getenv("ACTIVE_DB_PROFILE", "local")
 PORT = int(os.getenv("PORT", "8000"))
 HOST = os.getenv("HOST", "0.0.0.0")
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
+VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
+INTEL_SIDECAR_URL = os.getenv("INTEL_SIDECAR_URL", "")
 
 # Security and Privacy
 ENABLE_LOCAL_AI = os.getenv("ENABLE_LOCAL_AI", "false").lower() in ("true", "1", "yes")

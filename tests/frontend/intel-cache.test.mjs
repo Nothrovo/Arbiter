@@ -35,3 +35,15 @@ test('triage Live Enrich surfaces real errors instead of a fake zero score', () 
   assert.match(triageView, /cache \$\{item\.cache_source\}/);
   assert.match(triageView, /failed\.length/);
 });
+
+test('settings and main expose HTTP IP Intel Sidecar configuration and probe endpoint', () => {
+  assert.match(settingsView, /id="intel-sidecar-url"/);
+  assert.match(settingsView, /name="intel_sidecar_writeback"/);
+  assert.match(settingsView, /id="intel-vt-key"/);
+  assert.match(settingsView, /data-action="test-intel-sidecar"/);
+  assert.match(settingsView, /\/api\/intel\/sidecar\/test/);
+  assert.match(mainPy, /@app\.post\("\/api\/intel\/sidecar\/test"\)/);
+  assert.match(mainPy, /def api_intel_sidecar_test/);
+  assert.match(triageView, /VirusTotal live/);
+  assert.match(triageView, /CDN Edge/);
+});

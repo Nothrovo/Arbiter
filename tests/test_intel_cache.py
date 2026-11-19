@@ -246,5 +246,141 @@ class EnrichFallbackTests(unittest.TestCase):
         self.assertEqual(result["abuse_score"], 21)
 
 
+class SidecarEnrichTests(unittest.TestCase):
+    def test_probe_sidecar_fails_over_between_candidates(self):
+        class _FakeResp:
+            def __init__(self, body):
+                self._raw = body.encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def read(self):
+                return self._raw
+
+        calls = []
+
+        def fake_urlopen(req, timeout=2.0):
+            calls.append(req.full_url)
+            if "192.0.2.10" in req.full_url:
+                raise OSError("connection refused")
+            return _FakeResp('{"cached": {"8.8.8.8": {"reputation_source": "abuseipdb", "abuse_score": 12}}}')
+
+        with patch.object(intel, "urlopen", side_effect=fake_urlopen):
+            res = intel.probe_sidecar(["http://192.0.2.10:8899", "http://127.0.0.1:8899"], ["8.8.8.8"])
+
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(res["connected"])
+        self.assertEqual(res["url"], "http://127.0.0.1:8899")
+        self.assertIn("8.8.8.8", res["cached"])
+
+    def test_has_usable_sidecar_cache_rejects_placeholders_and_accepts_real_sources(self):
+        self.assertFalse(intel.has_usable_sidecar_cache(None))
+        self.assertFalse(intel.has_usable_sidecar_cache({
+            "isp": "Pending batch query",
+            "reputation_source": "abuseipdb",
+            "reputation_json": None,
+        }))
+        self.assertTrue(intel.has_usable_sidecar_cache({
+            "isp": "Example Transit",
+            "reputation_source": "abuseipdb",
+            "reputation_json": {"abuseConfidenceScore": 80},
+        }))
+        self.assertTrue(intel.has_usable_sidecar_cache({
+            "reputation_source": "virustotal",
+            "vt_malicious": 3,
+        }))
+        self.assertTrue(intel.has_usable_sidecar_cache({
+            "reputation_source": "cdn_edge",
+            "isp": "Cloudflare, Inc.",
+        }))
+
+    def test_enrich_ips_with_sidecar_uses_cache_then_live_fallback_and_writes_back_context(self):
+        saved_posts = []
+
+        def fake_probe(_cands, _sample):
+            return {
+                "connected": True,
+                "url": "http://127.0.0.1:8899",
+                "cached": {
+                    "9.9.9.9": {
+                        "reputation_source": "abuseipdb",
+                        "abuse_score": 88,
+                        "country_code": "ID",
+                        "isp": "Cached Transit",
+                        "reputation_json": {"abuseConfidenceScore": 88, "totalReports": 15},
+                    }
+                },
+                "error": None,
+            }
+
+        def fake_geo(uncached):
+            return {
+                "8.8.8.8": {"country": "United States", "countryCode": "US", "isp": "Hosting Co", "as": "AS1234"},
+                "104.16.1.2": {"country": "United States", "countryCode": "US", "isp": "Cloudflare, Inc.", "as": "AS13335 Cloudflare"},
+            }
+
+        def fake_abuse(ip, api_key=None):
+            if ip == "8.8.8.8":
+                raise intel.AbuseIPDBError("HTTP 503", status_code=503)
+            raise intel.AbuseIPDBError("HTTP 503", status_code=503)
+
+        def fake_vt(ip, api_key=None):
+            self.assertEqual(api_key, "synthetic-vt-key")
+            return {"attributes": {"last_analysis_stats": {"malicious": 3}}}
+
+        def fake_save(url, ip, enriched, context=None):
+            saved_posts.append((url, ip, enriched, context))
+            return True
+
+        ctx = intel.extract_alert_intel_context([{
+            "agent_name": "web-01",
+            "description": "Possible SQL injection attempt",
+            "data": {"url": "/search.php?q=1+union+select", "protocol": "POST"},
+            "mitre_ids": ["T1190"],
+            "full_log": "POST /search.php?q=1+union+select HTTP/1.1",
+        }])
+        self.assertIn("sql_injection", ctx["attack_types"])
+        self.assertEqual(ctx["endpoints_targeted"], ["/search.php?q=1+union+select"])
+        self.assertEqual(ctx["mitre_tactics"], ["T1190"])
+
+        with patch.object(intel, "probe_sidecar", side_effect=fake_probe), \
+                patch.object(intel, "query_geo_batch", side_effect=fake_geo), \
+                patch.object(intel, "query_abuseipdb", side_effect=fake_abuse), \
+                patch.object(intel, "query_virustotal_ip", side_effect=fake_vt), \
+                patch.object(intel, "save_sidecar_intel", side_effect=fake_save):
+            results, stats = intel.enrich_ips_with_sidecar(
+                ["10.0.0.5", "9.9.9.9", "8.8.8.8", "104.16.1.2"],
+                abuseipdb_api_key="synthetic-abuse-key",
+                virustotal_api_key="synthetic-vt-key",
+                sidecar_url="http://127.0.0.1:8899",
+                sidecar_writeback=True,
+                context=ctx,
+            )
+
+        by_ip = {r["ip"]: r for r in results}
+        self.assertEqual(by_ip["10.0.0.5"]["status"], "private")
+        self.assertEqual(by_ip["9.9.9.9"]["cache_source"], "sidecar")
+        self.assertEqual(by_ip["9.9.9.9"]["abuse_score"], 88)
+        self.assertEqual(by_ip["8.8.8.8"]["reputation_source"], "virustotal")
+        self.assertEqual(by_ip["8.8.8.8"]["vt_malicious"], 3)
+        self.assertEqual(by_ip["8.8.8.8"]["abuse_score"], 50)
+        self.assertEqual(by_ip["104.16.1.2"]["status"], "cdn_edge")
+        self.assertEqual(by_ip["104.16.1.2"]["reputation_source"], "cdn_edge")
+        self.assertIsNone(by_ip["104.16.1.2"]["abuse_score"])
+
+        # Sidecar write-back only happens for non-cached live/CDN entries, with extracted alert context
+        written_ips = {ip for _, ip, _, _ in saved_posts}
+        self.assertEqual(written_ips, {"8.8.8.8", "104.16.1.2"})
+        self.assertEqual(saved_posts[0][3]["target_host"], "web-01")
+        self.assertEqual(stats["from_cache"], 1)
+        self.assertEqual(stats["enriched_live"], 1)
+        self.assertEqual(stats["cdn_edge"], 1)
+        self.assertEqual(stats["sidecar"]["writeback_count"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

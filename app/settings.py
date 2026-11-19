@@ -51,6 +51,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     },
     "intel": {
         "web_url": "http://localhost:3001",
+        "sidecar_url": "",
+        "sidecar_writeback": True,
     },
     "ui": {
         "sidebar_default": "expanded",
@@ -74,6 +76,26 @@ _OLLAMA_PATH_SUFFIX_RE = re.compile(
 _LOCAL_HOST_SUFFIXES = (".local", ".lan", ".internal", ".home", ".lab", ".corp", ".intranet", ".localdomain")
 
 
+def _is_local_or_lan_host(host: str) -> bool:
+    clean = (host or "").strip().lower()
+    if not clean:
+        return False
+    if clean in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        ip = ipaddress.ip_address(clean)
+        cgnat = ipaddress.ip_network("100.64.0.0/10")
+        return bool(
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_link_local
+            or (isinstance(ip, ipaddress.IPv4Address) and ip in cgnat)
+        )
+    except ValueError:
+        # Hostname: allow single-label internal hostnames (e.g. Docker service `ollama` / `host.docker.internal`) or local LAN suffixes
+        return "." not in clean or clean.endswith(_LOCAL_HOST_SUFFIXES)
+
+
 def normalize_ollama_base_url(value: Any) -> str:
     """Normalize an Ollama base URL (stripping /api/generate etc.) and verify it is loopback or private LAN."""
     raw = str(value or "").strip() or "http://127.0.0.1:11434"
@@ -81,26 +103,31 @@ def normalize_ollama_base_url(value: Any) -> str:
     cleaned = _OLLAMA_PATH_SUFFIX_RE.sub("", cleaned).rstrip("/")
     parsed = urllib.parse.urlparse(cleaned)
     host = (parsed.hostname or "").strip().lower()
-    if parsed.scheme not in {"http", "https"} or not host:
-        raise ValueError("AI lokal hanya boleh memakai http://localhost, IP loopback, atau IP jaringan lokal (LAN).")
-
-    allowed = False
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        allowed = True
-    else:
-        try:
-            ip = ipaddress.ip_address(host)
-            cgnat = ipaddress.ip_network("100.64.0.0/10")
-            if ip.is_loopback or ip.is_private or ip.is_link_local or (isinstance(ip, ipaddress.IPv4Address) and ip in cgnat):
-                allowed = True
-        except ValueError:
-            # Hostname: allow single-label internal hostnames (e.g. Docker service `ollama`) or local LAN suffixes
-            if "." not in host or host.endswith(_LOCAL_HOST_SUFFIXES):
-                allowed = True
-
-    if not allowed:
+    if parsed.scheme not in {"http", "https"} or not _is_local_or_lan_host(host):
         raise ValueError("AI lokal hanya boleh memakai http://localhost, IP loopback, atau IP jaringan lokal (LAN).")
     return cleaned
+
+
+def normalize_sidecar_urls(value: Any) -> str:
+    """Normalize and validate comma/newline-separated local/LAN HTTP IP Intel Sidecar URLs."""
+    raw = _text(value, "intel.sidecar_url", 1000)
+    if not raw:
+        return ""
+    tokens = [part.strip() for part in re.split(r"[\n,]+", raw) if part.strip()]
+    cleaned_list: list[str] = []
+    for item in tokens[:10]:
+        if re.search(r"\s", item):
+            raise ValueError("URL Sidecar IP Intel tidak boleh mengandung spasi di dalam satu alamat URL.")
+        cleaned = re.sub(r"/ip-intel/?$", "", item.rstrip("/"), flags=re.IGNORECASE).rstrip("/")
+        parsed = urllib.parse.urlparse(cleaned)
+        host = (parsed.hostname or "").strip().lower()
+        if parsed.scheme not in {"http", "https"} or not _is_local_or_lan_host(host):
+            raise ValueError(
+                "URL Sidecar IP Intel hanya boleh memakai http(s)://localhost, IP loopback, IP jaringan lokal (LAN), atau hostname internal Docker."
+            )
+        if cleaned not in cleaned_list:
+            cleaned_list.append(cleaned)
+    return ", ".join(cleaned_list)
 
 
 def default_settings() -> dict[str, Any]:
@@ -243,6 +270,8 @@ def validate_settings(payload: dict[str, Any], current: dict[str, Any] | None = 
     if not _URL.match(web_url):
         raise ValueError("URL IP Intel harus diawali http:// atau https:// dan tanpa spasi.")
     intel["web_url"] = re.sub(r"/ip/?$", "", web_url.rstrip("/"), flags=re.IGNORECASE).rstrip("/") or "http://localhost:3001"
+    intel["sidecar_url"] = normalize_sidecar_urls(intel.get("sidecar_url"))
+    intel["sidecar_writeback"] = _boolean(intel.get("sidecar_writeback", True), "intel.sidecar_writeback")
     abuse_key = intel.pop("abuseipdb_api_key", None)
     if abuse_key is not None:
         if not isinstance(abuse_key, str):
@@ -253,6 +282,16 @@ def validate_settings(payload: dict[str, Any], current: dict[str, Any] | None = 
     intel.setdefault("abuseipdb_key_enc", "")
     if not isinstance(intel["abuseipdb_key_enc"], str):
         raise ValueError("intel.abuseipdb_key_enc tidak valid.")
+    vt_key = intel.pop("virustotal_api_key", None)
+    if vt_key is not None:
+        if not isinstance(vt_key, str):
+            raise ValueError("intel.virustotal_api_key tidak valid.")
+        if len(vt_key) > 500:
+            raise ValueError("intel.virustotal_api_key terlalu panjang.")
+        intel["virustotal_key_enc"] = encrypt_text(vt_key.strip()) if vt_key.strip() else ""
+    intel.setdefault("virustotal_key_enc", "")
+    if not isinstance(intel["virustotal_key_enc"], str):
+        raise ValueError("intel.virustotal_key_enc tidak valid.")
 
     ui = settings.get("ui")
     if not isinstance(ui, dict):
@@ -292,9 +331,14 @@ def redact_settings(settings: dict[str, Any]) -> dict[str, Any]:
     wazuh["password_set"] = bool(password_enc)
     wazuh["auth_configured"] = bool(result["wazuh"].get("indexer_url"))
     intel = result.setdefault("intel", {"web_url": "http://localhost:3001"})
+    intel["sidecar_url"] = str(intel.get("sidecar_url") or "")
+    intel["sidecar_writeback"] = bool(intel.get("sidecar_writeback", True))
     abuse_key_enc = intel.pop("abuseipdb_key_enc", "") or ""
     intel.pop("abuseipdb_api_key", None)
     intel["abuseipdb_key_set"] = bool(abuse_key_enc)
+    vt_key_enc = intel.pop("virustotal_key_enc", "") or ""
+    intel.pop("virustotal_api_key", None)
+    intel["virustotal_key_set"] = bool(vt_key_enc)
     realtime = result.get("realtime")
     if isinstance(realtime, dict):
         realtime.pop("range_cursor", None)
@@ -377,6 +421,13 @@ def save_settings(conn, settings: dict[str, Any]) -> dict[str, Any]:
     if password_enc and not is_encrypted(password_enc):
         # Defensive: never persist plaintext, even if a caller bypassed validation.
         wazuh["password_enc"] = encrypt_text(password_enc)
+    intel = payload.setdefault("intel", {})
+    intel.pop("abuseipdb_api_key", None)
+    intel.pop("virustotal_api_key", None)
+    for enc_field in ("abuseipdb_key_enc", "virustotal_key_enc"):
+        enc_val = str(intel.get(enc_field) or "")
+        if enc_val and not is_encrypted(enc_val):
+            intel[enc_field] = encrypt_text(enc_val)
     save_document(conn, SETTINGS_KEY, payload)
     return payload
 
@@ -397,6 +448,18 @@ def intel_abuseipdb_key(settings: dict[str, Any]) -> str:
     """Decrypt the stored AbuseIPDB API key in memory only; never log or return it."""
     intel = settings.get("intel", {})
     encrypted = str(intel.get("abuseipdb_key_enc") or "")
+    if not encrypted:
+        return ""
+    try:
+        return decrypt_text(encrypted)
+    except SecretStoreError:
+        return ""
+
+
+def intel_virustotal_key(settings: dict[str, Any]) -> str:
+    """Decrypt the stored VirusTotal API key in memory only; never log or return it."""
+    intel = settings.get("intel", {})
+    encrypted = str(intel.get("virustotal_key_enc") or "")
     if not encrypted:
         return ""
     try:

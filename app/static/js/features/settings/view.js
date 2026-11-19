@@ -72,6 +72,8 @@ export async function mount(ctx) {
       },
       intel: {
         web_url: (form.elements.intel_web_url?.value || '').trim().replace(/\/ip\/?$/i, '').replace(/\/+$/, '') || 'http://localhost:3001',
+        sidecar_url: (form.elements.intel_sidecar_url?.value || '').trim(),
+        sidecar_writeback: form.elements.intel_sidecar_writeback ? Boolean(form.elements.intel_sidecar_writeback.checked) : true,
       },
       ui: {sidebar_default: form.elements.sidebar_default.value},
     };
@@ -81,6 +83,9 @@ export async function mount(ctx) {
     const abuseKey = form.elements.abuseipdb_api_key?.value || '';
     if (abuseKey) data.intel.abuseipdb_api_key = abuseKey;
     else if (form.elements.clear_abuseipdb_key?.checked) data.intel.abuseipdb_api_key = '';
+    const vtKey = form.elements.virustotal_api_key?.value || '';
+    if (vtKey) data.intel.virustotal_api_key = vtKey;
+    else if (form.elements.clear_virustotal_key?.checked) data.intel.virustotal_api_key = '';
     return data;
   };
 
@@ -107,6 +112,52 @@ export async function mount(ctx) {
     if (kind) slot.dataset.kind = kind;
     else delete slot.dataset.kind;
   };
+
+  const renderSidecarStatus = (message, kind = '') => {
+    const slot = root.querySelector('#intel-sidecar-status');
+    if (!slot) return;
+    slot.textContent = message;
+    if (kind) slot.dataset.kind = kind;
+    else delete slot.dataset.kind;
+  };
+
+  async function testIntelSidecar(button) {
+    const urlInput = form?.elements?.intel_sidecar_url;
+    const ipInput = root.querySelector('#intel-sidecar-ip');
+    const sidecarUrl = String(urlInput?.value || '').trim();
+    const ip = String(ipInput?.value || '8.8.8.8').trim() || '8.8.8.8';
+    button.disabled = true;
+    renderSidecarStatus('Menghubungi Sidecar IP Intel…');
+    try {
+      const result = await json('/api/intel/sidecar/test', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({sidecar_url: sidecarUrl, ip}), signal,
+      });
+      if (!result.configured) {
+        renderSidecarStatus(result.error || 'URL Sidecar IP Intel belum diatur.', 'error');
+      } else if (result.connected && result.found) {
+        const scorePart = result.abuse_score !== null && result.abuse_score !== undefined
+          ? `skor ${Number(result.abuse_score)}%`
+          : (result.reputation_source === 'cdn_edge' ? 'CDN Edge proxy' : 'tercatat');
+        const ispPart = result.isp ? ` · ${result.isp}` : '';
+        renderSidecarStatus(
+          `Sidecar terhubung (${result.active_url}) · ditemukan di cache (${result.reputation_source || 'sidecar'}): ${scorePart}${ispPart}.`,
+          'success',
+        );
+      } else if (result.connected) {
+        renderSidecarStatus(
+          `Sidecar terhubung (${result.active_url}) · IP ${ip} belum ada di cache (siap untuk Live Enrich).`,
+          'success',
+        );
+      } else {
+        renderSidecarStatus(result.error || 'Sidecar IP Intel tidak dapat dihubungi.', 'error');
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') renderSidecarStatus(error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  }
 
   async function testIntelCache(button) {
     const input = root.querySelector('#intel-cache-ip');
@@ -398,9 +449,9 @@ export async function mount(ctx) {
           <div class="split">
             <div>
               <h2 class="section-heading">IP Intel &amp; Live Enrich</h2>
-              <p class="meta">Atur alamat web project <strong>IP Intel</strong> untuk tombol <em>Buka IP Intel ↗</em> di Triage, serta kunci API AbuseIPDB untuk tombol <em>Live Enrich</em>. Hasil Live Enrich disimpan ke database aktif Arbiter. Profil <strong>PC Intel (Remote)</strong> di menu <a href="#/database">Database</a> dibaca sebagai sumber cache reputasi dan tetap <strong>read-only</strong> — Arbiter tidak menulis ke Neuropetra.</p>
+              <p class="meta">Atur alamat web project <strong>IP Intel</strong> untuk tombol <em>Buka IP Intel ↗</em> di Triage, endpoint <strong>HTTP Sidecar (:8899)</strong>, serta kunci API AbuseIPDB &amp; VirusTotal untuk tombol <em>Live Enrich</em>. Hasil Live Enrich disimpan ke database aktif Arbiter dan dapat dikirim balik ke Sidecar. Profil <strong>PC Intel (Remote)</strong> di menu <a href="#/database">Database</a> tetap <strong>read-only</strong> — Arbiter tidak menulis ke Neuropetra.</p>
             </div>
-            <span class="badge ${data.intel?.abuseipdb_key_set ? 'success' : 'neutral'}"><span class="status-dot"></span>${data.intel?.abuseipdb_key_set ? 'API Key tersimpan' : 'Sinkron DB IP Intel'}</span>
+            <span class="badge ${data.intel?.sidecar_url || data.intel?.abuseipdb_key_set || data.intel?.virustotal_key_set ? 'success' : 'neutral'}"><span class="status-dot"></span>${data.intel?.sidecar_url ? 'Sidecar + Live Enrich aktif' : (data.intel?.abuseipdb_key_set ? 'API Key tersimpan' : 'Sinkron DB IP Intel')}</span>
           </div>
           <div class="form-grid">
             <div class="field">
@@ -409,12 +460,27 @@ export async function mount(ctx) {
               <span class="meta">Tombol <strong>Buka IP Intel ↗</strong> di Triage akan membuka <span class="mono">${esc((data.intel?.web_url || 'http://localhost:3001').replace(/\/+$/, ''))}/ip/&lt;source_ip&gt;</span>.</span>
             </div>
             <div class="field">
+              <label for="intel-sidecar-url">URL Sidecar IP Intel (HTTP /ip-intel, pisah koma untuk failover)</label>
+              <input class="input mono" id="intel-sidecar-url" name="intel_sidecar_url" type="text" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:8899, http://host.docker.internal:8899" value="${esc(data.intel?.sidecar_url || '')}">
+              <label class="checkbox-label meta"><input type="checkbox" name="intel_sidecar_writeback" ${data.intel?.sidecar_writeback !== false ? 'checked' : ''}> Simpan hasil Live Enrich baru kembali ke Sidecar (<span class="mono">POST /ip-intel</span>)</label>
+            </div>
+            <div class="field">
               <label for="intel-abuse-key">AbuseIPDB API Key (opsional untuk Live Enrich)</label>
               <input class="input mono" id="intel-abuse-key" name="abuseipdb_api_key" type="password" autocomplete="new-password" placeholder="${data.intel?.abuseipdb_key_set ? 'Tersimpan terenkripsi — kosongkan untuk mempertahankan' : 'Isi API Key AbuseIPDB v2 (atau lewat .env ABUSEIPDB_API_KEY)'}">
-              ${data.intel?.abuseipdb_key_set ? '<label class="checkbox-label meta"><input type="checkbox" name="clear_abuseipdb_key"> Hapus API Key tersimpan</label>' : '<span class="meta">Jika dikosongkan, Live Enrich akan memakai <span class="mono">ABUSEIPDB_API_KEY</span> di <span class="mono">.env</span> atau menarik cache langsung dari database PC Intel (Remote).</span>'}
+              ${data.intel?.abuseipdb_key_set ? '<label class="checkbox-label meta"><input type="checkbox" name="clear_abuseipdb_key"> Hapus API Key tersimpan</label>' : '<span class="meta">Jika dikosongkan, Live Enrich akan memakai <span class="mono">ABUSEIPDB_API_KEY</span> di <span class="mono">.env</span> atau menarik cache langsung dari Sidecar / database PC Intel (Remote).</span>'}
+            </div>
+            <div class="field">
+              <label for="intel-vt-key">VirusTotal API Key (opsional fallback)</label>
+              <input class="input mono" id="intel-vt-key" name="virustotal_api_key" type="password" autocomplete="new-password" placeholder="${data.intel?.virustotal_key_set ? 'Tersimpan terenkripsi — kosongkan untuk mempertahankan' : 'Isi API Key VirusTotal v3 (atau lewat .env VIRUSTOTAL_API_KEY)'}">
+              ${data.intel?.virustotal_key_set ? '<label class="checkbox-label meta"><input type="checkbox" name="clear_virustotal_key"> Hapus API Key VirusTotal tersimpan</label>' : '<span class="meta">Dipakai otomatis saat AbuseIPDB tidak mengembalikan skor (batas fallback 4 IP per batch).</span>'}
             </div>
           </div>
           <div class="settings-actions">
+            <input class="input mono" id="intel-sidecar-ip" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="8.8.8.8" aria-label="IP untuk menguji HTTP Sidecar" style="width:180px">
+            <button class="button" type="button" data-action="test-intel-sidecar">${icon('search')} Tes Sidecar</button>
+            <span class="inline-status" id="intel-sidecar-status" role="status"></span>
+          </div>
+          <div class="settings-actions" style="margin-top:8px;">
             <input class="input mono" id="intel-cache-ip" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="8.8.8.8" aria-label="IP untuk menguji cache IP Intel" style="width:180px">
             <button class="button" type="button" data-action="test-intel-cache">${icon('search')} Tes cache Neuropetra</button>
             <span class="inline-status" id="intel-cache-status" role="status"></span>
@@ -716,6 +782,8 @@ export async function mount(ctx) {
     if (modelButton) { await testModel(modelButton); return; }
     const intelCacheButton = event.target.closest('[data-action=test-intel-cache]');
     if (intelCacheButton) { await testIntelCache(intelCacheButton); return; }
+    const intelSidecarButton = event.target.closest('[data-action=test-intel-sidecar]');
+    if (intelSidecarButton) { await testIntelSidecar(intelSidecarButton); return; }
     const updateBtn = event.target.closest('[data-action=update-user]');
     if (updateBtn) {
       const uname = updateBtn.dataset.username;

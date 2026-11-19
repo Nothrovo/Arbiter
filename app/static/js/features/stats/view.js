@@ -105,13 +105,18 @@ export function mount(ctx) {
         const sampleData = await json(apiURL('/api/alerts', sampleParams), {signal: activeRequest.signal});
         if (signal?.aborted || !session.isCurrent(version)) return;
         drilldownAlerts = sampleData.items || [];
+        const validIds = new Set(drilldownAlerts.map(a => a.id));
+        for (const id of [...selectedIds]) if (!validIds.has(id)) selectedIds.delete(id);
       } else {
         drilldownAlerts = null;
         selectedIds.clear();
+        selectedSecondaryKeys.clear();
         expandedLogIds.clear();
       }
 
       currentData = data;
+      const validSecKeys = new Set((data?.secondary_breakdown || []).map(sb => sb.key));
+      for (const k of [...selectedSecondaryKeys]) if (!validSecKeys.has(k)) selectedSecondaryKeys.delete(k);
       showAllSecondary = false;
       renderView();
       if (query.secondary_facet && query.secondary_facet_value) {
@@ -610,6 +615,8 @@ export function mount(ctx) {
             body: JSON.stringify({alert_ids: pks, is_reviewed: true, tenant: query.tenant}),
             signal,
           });
+          selectedSecondaryKeys.clear();
+          window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
           notify(`${pks.length} alert dari ${keys.length} sub-kategori ditandai direview.`, 'success');
           await loadData();
         }
@@ -687,6 +694,7 @@ export function mount(ctx) {
           body: JSON.stringify({alert_ids: ids, is_reviewed: isRev, tenant: query.tenant}),
           signal,
         });
+        selectedIds.clear();
         window.dispatchEvent(new CustomEvent('arbiter:flags-changed'));
         notify(isRev ? `${ids.length} alert ditandai direview.` : `${ids.length} alert ditandai belum direview.`, 'success');
         await loadData();

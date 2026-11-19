@@ -637,6 +637,86 @@ class SettingsAPITests(unittest.TestCase):
             bad_res = self.client.put("/api/settings", json={"retention": {"raw_days": bad_days}})
             self.assertEqual(bad_res.status_code, 400, bad_res.text)
 
+    def test_intel_sidecar_and_virustotal_settings_and_test_endpoint(self):
+        # Reject public internet URLs to prevent SSRF
+        for bad_url in ("http://8.8.8.8:8899", "https://evil.example.com:8899", "ftp://127.0.0.1:8899"):
+            bad_res = self.client.put("/api/settings", json={"intel": {"sidecar_url": bad_url}})
+            self.assertEqual(bad_res.status_code, 400, bad_res.text)
+
+        saved = self.client.put("/api/settings", json={
+            "intel": {
+                "sidecar_url": "http://192.168.50.10:8899/ip-intel, http://host.docker.internal:8899/",
+                "sidecar_writeback": True,
+                "virustotal_api_key": "SyntheticVtSecret999",
+            }
+        })
+        self.assertEqual(saved.status_code, 200, saved.text)
+        intel_cfg = saved.json()["settings"]["intel"]
+        self.assertEqual(
+            intel_cfg["sidecar_url"],
+            "http://192.168.50.10:8899, http://host.docker.internal:8899",
+        )
+        self.assertTrue(intel_cfg["sidecar_writeback"])
+        self.assertTrue(intel_cfg["virustotal_key_set"])
+        self.assertNotIn("SyntheticVtSecret999", saved.text)
+        self.assertNotIn("virustotal_key_enc", intel_cfg)
+
+        # Read-only sidecar probe endpoint validates IP and returns cached intel
+        probe_payload = {
+            "connected": True,
+            "url": "http://192.168.50.10:8899",
+            "cached": {
+                "8.8.8.8": {
+                    "reputation_source": "abuseipdb",
+                    "abuse_score": 14,
+                    "country_code": "US",
+                    "isp": "Google LLC",
+                    "reputation_json": {"abuseConfidenceScore": 14},
+                }
+            },
+            "error": None,
+        }
+        with patch.object(self.api, "probe_sidecar", return_value=probe_payload) as mocked_probe:
+            probe_res = self.client.post("/api/intel/sidecar/test", json={"ip": "8.8.8.8"})
+        self.assertEqual(probe_res.status_code, 200, probe_res.text)
+        body = probe_res.json()
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["connected"])
+        self.assertTrue(body["found"])
+        self.assertEqual(body["abuse_score"], 14)
+        self.assertEqual(body["isp"], "Google LLC")
+        mocked_probe.assert_called_once_with(
+            ["http://192.168.50.10:8899", "http://host.docker.internal:8899"],
+            ["8.8.8.8"],
+        )
+
+        # Invalid IP rejected cleanly
+        bad_ip = self.client.post("/api/intel/sidecar/test", json={"ip": "not-an-ip"})
+        self.assertEqual(bad_ip.status_code, 400, bad_ip.text)
+
+        # Enrich endpoint receives decrypted VT key + sidecar config without leaking keys
+        captured = {}
+
+        def fake_sidecar_enrich(ips, **kwargs):
+            captured.update(kwargs)
+            return (
+                [{"ip": ips[0], "status": "enriched", "abuse_score": 50, "reputation_source": "virustotal"}],
+                {"total_ips": 1, "sidecar": {"connected": True}},
+            )
+
+        with patch.object(self.api, "enrich_ips_with_sidecar", side_effect=fake_sidecar_enrich), \
+             patch.object(self.api, "upsert_ip_cache"), \
+             patch.object(self.api, "sync_remote_cache"):
+            enrich_res = self.client.post("/api/intel/enrich", json={"ips": ["203.0.113.55"]})
+        self.assertEqual(enrich_res.status_code, 200, enrich_res.text)
+        self.assertEqual(captured["virustotal_api_key"], "SyntheticVtSecret999")
+        self.assertEqual(
+            captured["sidecar_url"],
+            "http://192.168.50.10:8899, http://host.docker.internal:8899",
+        )
+        self.assertTrue(captured["sidecar_writeback"])
+        self.assertNotIn("SyntheticVtSecret999", enrich_res.text)
+
 
 if __name__ == "__main__":
     unittest.main()

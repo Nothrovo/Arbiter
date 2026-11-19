@@ -48,7 +48,20 @@ from app.exclusions import (
     parse_wazuh_exclusion,
     with_exclusions,
 )
-from app.intel import enrich_ip, is_valid_ip, lookup_remote_ip_cache_detail, sync_remote_cache, upsert_ip_cache
+from app.intel import (
+    enrich_ip,
+    enrich_ips_with_sidecar,
+    extract_alert_intel_context,
+    has_usable_sidecar_cache,
+    is_valid_ip,
+    lookup_remote_ip_cache_detail,
+    normalize_ip_address,
+    normalize_sidecar_record,
+    parse_sidecar_candidates,
+    probe_sidecar,
+    sync_remote_cache,
+    upsert_ip_cache,
+)
 import app.database as db_module
 from app.database import get_db, init_database, ingest_alert_with_dedup
 from app.exports import (
@@ -67,9 +80,11 @@ from app.settings import (
     _normalize_wazuh_timestamp,
     _valid_timestamp,
     intel_abuseipdb_key,
+    intel_virustotal_key,
     load_document,
     load_settings,
     migrate_settings,
+    normalize_sidecar_urls,
     redact_settings,
     save_document,
     save_settings,
@@ -1227,6 +1242,79 @@ def api_intel_cache_test(payload: dict[str, Any]):
     }
 
 
+@app.post("/api/intel/sidecar/test")
+def api_intel_sidecar_test(payload: dict[str, Any]):
+    """Read-only probe of the configured HTTP IP Intel Sidecar (/ip-intel)."""
+    ip = normalize_ip_address(str(payload.get("ip") or "8.8.8.8"))
+    if not is_valid_ip(ip):
+        raise HTTPException(status_code=400, detail="Masukkan alamat IPv4/IPv6 yang valid untuk diuji.")
+
+    raw_override = payload.get("sidecar_url")
+    if raw_override is not None and str(raw_override).strip() != "":
+        try:
+            validated = normalize_sidecar_urls(raw_override)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        candidates = parse_sidecar_candidates(validated)
+    else:
+        with get_db() as conn:
+            stored = load_settings(conn)
+        saved_url = str((stored.get("intel") or {}).get("sidecar_url") or "")
+        candidates = parse_sidecar_candidates(saved_url)
+
+    if not candidates:
+        return {
+            "ok": False,
+            "configured": False,
+            "connected": False,
+            "ip": ip,
+            "error": "URL Sidecar IP Intel belum diatur.",
+        }
+
+    probe = probe_sidecar(candidates, [ip])
+    if not probe.get("connected"):
+        return {
+            "ok": False,
+            "configured": True,
+            "connected": False,
+            "active_url": None,
+            "ip": ip,
+            "error": probe.get("error") or "Sidecar IP Intel tidak dapat dihubungi.",
+        }
+
+    active_url = str(probe.get("url") or "")
+    cached_map = probe.get("cached") if isinstance(probe.get("cached"), dict) else {}
+    entry = cached_map.get(ip)
+    if has_usable_sidecar_cache(entry):
+        norm = normalize_sidecar_record(ip, entry, active_url)
+        return {
+            "ok": True,
+            "configured": True,
+            "connected": True,
+            "found": True,
+            "active_url": active_url,
+            "ip": ip,
+            "abuse_score": norm.get("abuse_score"),
+            "vt_malicious": norm.get("vt_malicious"),
+            "isp": norm.get("isp"),
+            "country_code": norm.get("country_code"),
+            "reputation_source": norm.get("reputation_source"),
+            "cached_entries": len(cached_map),
+            "error": None,
+        }
+
+    return {
+        "ok": True,
+        "configured": True,
+        "connected": True,
+        "found": False,
+        "active_url": active_url,
+        "ip": ip,
+        "cached_entries": len(cached_map),
+        "error": None,
+    }
+
+
 @app.post("/api/intel/enrich")
 def enrich_intel(payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
     normalize_tenants(tenant)
@@ -1236,9 +1324,19 @@ def enrich_intel(payload: dict[str, Any], tenant: list[str] = Query(default=["al
     alert_ids = payload.get("alert_ids") or []
     if isinstance(alert_ids, (int, str)):
         alert_ids = [alert_ids]
+    else:
+        alert_ids = list(alert_ids)
+    single_alert_id = payload.get("alert_id")
+    if single_alert_id is not None and str(single_alert_id).strip() != "":
+        alert_ids.append(single_alert_id)
 
-    target_ips: list[str] = [str(x).strip() for x in raw_ips if str(x).strip()]
+    target_ips: list[str] = []
+    for raw in raw_ips:
+        norm_ip = normalize_ip_address(str(raw))
+        if norm_ip and norm_ip not in target_ips:
+            target_ips.append(norm_ip)
 
+    alert_context: dict[str, Any] | None = None
     if alert_ids:
         clean_pks = positive_ids(alert_ids)
         if clean_pks:
@@ -1250,27 +1348,42 @@ def enrich_intel(payload: dict[str, Any], tenant: list[str] = Query(default=["al
                     where_clause += " AND " + tenant_sql
                     params.extend(tenant_params)
                 rows = conn.execute(
-                    f"SELECT DISTINCT a.source_ip FROM wazuh.alerts a {where_clause} AND a.source_ip IS NOT NULL AND a.source_ip != ''",
+                    f"""SELECT a.source_ip, a.agent_name, a.description, a.data,
+                               a.mitre_ids, a.parsed_details,
+                               COALESCE(a.raw->>'full_log', '') AS full_log
+                        FROM wazuh.alerts a {where_clause}""",
                     params,
                 ).fetchall()
                 for r in rows:
-                    ip_val = (r["source_ip"] or "").strip()
+                    ip_val = normalize_ip_address(str(r.get("source_ip") or ""))
                     if ip_val and ip_val not in target_ips:
                         target_ips.append(ip_val)
+                if rows:
+                    alert_context = extract_alert_intel_context(rows)
 
     unique_ips = list(dict.fromkeys(ip for ip in target_ips if is_valid_ip(ip)))[:50]
     if not unique_ips:
         raise HTTPException(status_code=400, detail="Tidak ada alamat IPv4/IPv6 valid yang diberikan untuk di-enrich.")
 
-    results = []
     with get_db() as conn:
         stored_settings = load_settings(conn)
-        stored_api_key = intel_abuseipdb_key(stored_settings)
-        for ip in unique_ips:
-            res = enrich_ip(ip, api_key=stored_api_key or None)
+        stored_abuse_key = intel_abuseipdb_key(stored_settings)
+        stored_vt_key = intel_virustotal_key(stored_settings)
+        intel_cfg = stored_settings.get("intel") or {}
+        stored_sidecar_url = str(intel_cfg.get("sidecar_url") or "")
+        stored_sidecar_writeback = bool(intel_cfg.get("sidecar_writeback", True))
+        results, enrich_stats = enrich_ips_with_sidecar(
+            unique_ips,
+            abuseipdb_api_key=stored_abuse_key,
+            virustotal_api_key=stored_vt_key,
+            sidecar_url=stored_sidecar_url,
+            sidecar_writeback=stored_sidecar_writeback,
+            context=alert_context,
+            single_enrich_fn=enrich_ip,
+        )
+        for res in results:
             if res.get("status") not in ("invalid", "error"):
                 upsert_ip_cache(conn, res)
-            results.append(res)
         if hasattr(conn, "commit"):
             conn.commit()
 
@@ -1280,6 +1393,7 @@ def enrich_intel(payload: dict[str, Any], tenant: list[str] = Query(default=["al
         "status": "ok",
         "count": len(results),
         "enriched": results,
+        "stats": enrich_stats,
     }
 
 

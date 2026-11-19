@@ -61,7 +61,10 @@ export const DEFAULT_SETTINGS = {
   },
   intel: {
     web_url: 'http://localhost:3001',
+    sidecar_url: '',
+    sidecar_writeback: true,
     abuseipdb_key_set: false,
+    virustotal_key_set: false,
   },
   ui: {sidebar_default: 'expanded'},
   exclusions: {enabled: true, rules: []},
@@ -152,7 +155,10 @@ export function normalizeSettings(value) {
   base.ai.timeout_seconds = Number.isFinite(aiTimeout) && aiTimeout >= 10 && aiTimeout <= 180 ? aiTimeout : 90;
   const rawWebUrl = String(base.intel.web_url || '').trim().replace(/\/ip\/?$/i, '').replace(/\/+$/, '');
   base.intel.web_url = rawWebUrl || 'http://localhost:3001';
+  base.intel.sidecar_url = String(base.intel.sidecar_url || '').trim();
+  base.intel.sidecar_writeback = base.intel.sidecar_writeback !== false;
   base.intel.abuseipdb_key_set = Boolean(base.intel.abuseipdb_key_set);
+  base.intel.virustotal_key_set = Boolean(base.intel.virustotal_key_set);
   if (!['expanded', 'collapsed'].includes(base.ui.sidebar_default)) base.ui.sidebar_default = 'expanded';
   base.exclusions.enabled = base.exclusions.enabled !== false;
   base.exclusions.rules = Array.isArray(base.exclusions.rules)

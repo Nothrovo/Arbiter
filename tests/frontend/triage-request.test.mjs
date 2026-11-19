@@ -5,7 +5,7 @@ import {createSelection} from '../../app/static/js/state/selection.js';
 
 class Element extends EventTarget {
   constructor(){super();this.classList={add(){},remove(){},toggle(){}};this.value='';this.innerHTML='';this.textContent='';this.dataset={};this.hidden=false;this.closed=false;}
-  setAttribute(){} removeAttribute(){} close(){this.closed=true;} showModal(){this.closed=false;}
+  setAttribute(){} removeAttribute(){} hasAttribute(){return false;} matches(){return false;} closest(){return null;} close(){this.closed=true;} showModal(){this.closed=false;}
   querySelector(){return new Element();}
 }
 async function requestsFor(search){
@@ -112,5 +112,83 @@ test('submitting triage filter form auto-commits typed draft filter and keeps in
   } finally {
     controller.abort(); dispose?.();
     globalThis.fetch=originalFetch; globalThis.FormData=originalFormData;
+  }
+});
+
+test('triage clears selection after flag, review, queue pruning, and navigation/tab changes',async()=>{
+  const controls=new Map(), root=new Element(), navigated=[], calls=[];
+  root.querySelector=s=>{if(!controls.has(s))controls.set(s,new Element());return controls.get(s);};
+  root.querySelectorAll=()=>[];
+  let queueItems=[
+    {id:10,alert_id:'a-10',description:'A',hit_count:1},
+    {id:11,alert_id:'a-11',description:'B',hit_count:1},
+  ];
+  const controller=new AbortController(), originalFetch=globalThis.fetch;
+  globalThis.fetch=async(url,opts={})=>{
+    const parsed=new URL(url,'http://synthetic.invalid');
+    calls.push({path:parsed.pathname,method:opts.method||'GET'});
+    if(parsed.pathname==='/api/triage/summary')return new Response(JSON.stringify({alerts:queueItems.length,events:queueItems.length,unique_source_ips:0,unique_agents:0,incident_cases:0}));
+    if(parsed.pathname==='/api/alerts')return new Response(JSON.stringify({items:queueItems,total:queueItems.length}));
+    return new Response(JSON.stringify({status:'ok',count:2}));
+  };
+  const selection=createSelection('all');
+  const flush=()=>new Promise(resolve=>setTimeout(resolve,15));
+  const clickAction=(dataset)=>{
+    const btn=new Element();
+    btn.dataset=dataset;
+    btn.closest=sel=>sel==='button'?btn:null;
+    btn.matches=()=>false;
+    const ev=new Event('click');
+    Object.defineProperty(ev,'target',{value:btn});
+    root.dispatchEvent(ev);
+  };
+  let dispose;
+  try{
+    dispose=mount({
+      root,
+      route:{params:new URLSearchParams('tenant=Alpha&review_status=unreviewed')},
+      signal:controller.signal,
+      selection,
+      navigate(url){navigated.push(url);},
+      notify(){},
+    });
+    await flush();
+
+    // 1. batch-flag removes processed alerts from selection
+    selection.toggle(10,true);
+    selection.toggle(11,true);
+    clickAction({action:'batch-flag',flagColor:'green'});
+    await flush();
+    assert.ok(calls.some(c=>c.path==='/api/alerts/flag'&&c.method==='POST'));
+    assert.equal(selection.size(),0);
+
+    // 2. batch-review removes processed alerts from selection
+    selection.toggle(10,true);
+    selection.toggle(11,true);
+    clickAction({action:'batch-review'});
+    await flush();
+    assert.ok(calls.some(c=>c.path==='/api/alerts/batch-review'&&c.method==='POST'));
+    assert.equal(selection.size(),0);
+
+    // 3. load() prunes IDs that are no longer in the visible queue
+    queueItems=[{id:10,alert_id:'a-10',description:'A',hit_count:1}];
+    selection.toggle(10,true);
+    selection.toggle(999,true);
+    root.dispatchEvent(new Event('arbiter:refresh'));
+    await flush();
+    assert.deepEqual(selection.ids(),[10]);
+
+    // 4. switching review tab clears selection immediately
+    clickAction({review:'reviewed'});
+    assert.equal(selection.size(),0);
+    assert.ok(navigated.some(u=>u.includes('review_status=reviewed')));
+
+    // 5. leaving Triage (dispose) clears remaining selection
+    selection.toggle(10,true);
+    dispose();
+    assert.equal(selection.size(),0);
+  }finally{
+    controller.abort();
+    globalThis.fetch=originalFetch;
   }
 });
