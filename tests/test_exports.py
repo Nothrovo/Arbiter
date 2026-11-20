@@ -44,10 +44,10 @@ class ExportTests(unittest.TestCase):
         tsv = generate_tsv_table(self.sample_alerts)
         self.assertIn("SQL Injection attempt", tsv)
         self.assertIn("195.201.245.94", tsv)
-        self.assertIn("Reviewed", tsv)
-        self.assertIn("Analisis", tsv)
+        self.assertIn("Rule Description", tsv)
+        self.assertIn("User-Agent", tsv)
         self.assertIn("GET /index.php?id=1 UNION SELECT 1,2", tsv)
-        self.assertTrue(tsv.startswith("No\tHit Count"))
+        self.assertTrue(tsv.startswith("No\tHit\tKejadian\tClient IP\tTimestamp Log\tWazuh ID"))
 
     def test_generate_markdown_report(self):
         md = generate_markdown_report(self.sample_alerts, self.meta)
@@ -65,9 +65,10 @@ class ExportTests(unittest.TestCase):
         self.assertIn("Tabel Kronologi Investigasi", html)
         self.assertIn('border="1"', html)
         self.assertIn('border: 1px solid #cbd5e0', html)
-        self.assertIn('Full Log:</strong> GET /index.php?id=1 UNION SELECT 1,2', html)
-        self.assertIn("Analisis", html)
-        self.assertNotIn("CVE / MITRE", html)
+        self.assertIn("GET /index.php?id=1 UNION SELECT 1,2", html)
+        self.assertIn("Full Log", html)
+        self.assertIn("User-Agent", html)
+        self.assertIn("Kronologi &amp; Analisis Investigasi", html)
 
     def test_generate_docx_landscape_report(self):
         buf = generate_docx_landscape_report(self.sample_alerts, self.meta)
@@ -90,7 +91,7 @@ class ExportTests(unittest.TestCase):
         ]
         tsv = generate_tsv_table(mixed_alerts)
         lines = [line.split("\t") for line in tsv.strip().split("\n")][1:]
-        rule_ids = [line[5] for line in lines]
+        rule_ids = [line[12] for line in lines]
         self.assertEqual(rule_ids, ["1002", "31101", "31101", "5710"])
 
 

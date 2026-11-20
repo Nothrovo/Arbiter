@@ -537,6 +537,10 @@
 .flag-group-body { border-top:1px solid var(--border); padding:12px 16px; background:var(--ground); }
 .flag-rule-badge-done { background:var(--success-bg); color:var(--success); border:1px solid color-mix(in srgb, var(--success) 35%, transparent); }
 .flag-rule-badge-pending { background:var(--warning-bg); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent); }
+.flag-export-bar { margin-bottom:14px; }
+.flag-export-bar .section-heading { font-size:14px; margin-bottom:4px; }
+.flag-group-select { display:flex; align-items:center; padding:2px; flex:none; }
+.flag-group-select input { width:16px; height:16px; accent-color:var(--info); cursor:pointer; }
 .flag-inline-log { margin:8px 0 0; }
 @media (prefers-reduced-motion: reduce) {
   .flag-group-toggle .icon { transition:none; }

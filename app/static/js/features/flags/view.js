@@ -1,7 +1,13 @@
-import {json, apiURL, copyText} from '../../api/client.js';
+import {json, apiURL, copyText, copyHTML, download, request} from '../../api/client.js';
 import {withParams} from '../../router.js';
 import {tenantValues} from '../../state/scope.js';
-import {normalizeFlagQuery, flagScopeParams} from './model.js';
+import {
+  normalizeFlagQuery,
+  flagScopeParams,
+  flagExportParams,
+  flagExportURL,
+  flagExportFormat,
+} from './model.js';
 import {renderFlagsPage} from './render.js';
 
 export function mount(ctx) {
@@ -16,6 +22,11 @@ export function mount(ctx) {
   const expandedGroups = new Set();
   const groupAlertsCache = new Map();
   const expandedLogIds = new Set();
+  const selectedGroupKeys = new Set();
+  let exportPending = false;
+  let exportStatus = '';
+  let exportCount = null;
+  let exportCountVersion = 0;
   let pendingRuleTarget = null;
 
   const tenantParams = () => {
@@ -41,6 +52,10 @@ export function mount(ctx) {
       expandedGroups,
       groupAlertsCache,
       expandedLogIds,
+      selectedGroupKeys,
+      exportPending,
+      exportStatus,
+      exportCount,
     });
     if (wasOpen && pendingRuleTarget) {
       openRuleDialog(pendingRuleTarget);
@@ -101,6 +116,56 @@ export function mount(ctx) {
     paint();
   }
 
+  async function refreshExportCount() {
+    const version = ++exportCountVersion;
+    try {
+      const params = flagExportParams(query, [...selectedGroupKeys]);
+      const body = await json(apiURL('/api/flags/export/preview', params), {signal, timeout: 20000});
+      if (signal.aborted || version !== exportCountVersion) return;
+      exportCount = Number(body?.count || 0);
+    } catch (err) {
+      if (err.name === 'AbortError' || signal.aborted || version !== exportCountVersion) return;
+      exportCount = null;
+    }
+    paint();
+  }
+
+  async function performFlagExport(format) {
+    if (exportPending) return;
+    exportPending = true;
+    exportStatus = format.startsWith('copy-') ? 'Menyiapkan salinan laporan Flag…' : 'Menyiapkan unduhan laporan Flag…';
+    paint();
+    const keys = [...selectedGroupKeys];
+    try {
+      const url = flagExportURL(query, keys, format);
+      const resolved = flagExportFormat(format);
+      if (format === 'copy-html') {
+        const preview = await json(apiURL('/api/flags/export/preview', flagExportParams(query, keys)), {signal, timeout: 60000});
+        if (!preview?.html) throw new Error('Preview laporan tidak tersedia untuk disalin.');
+        await copyHTML(preview.html);
+        exportStatus = 'Laporan Flag disalin ke clipboard (HTML untuk Google Docs).';
+      } else if (format.startsWith('copy-')) {
+        const response = await request(url, {signal, timeout: 60000});
+        const text = await response.text();
+        await copyText(text);
+        exportStatus = 'Laporan Flag disalin ke clipboard.';
+      } else {
+        const extension = resolved === 'report-html' ? 'html' : resolved === 'markdown' ? 'md' : resolved;
+        await download(url, `Arbiter-Flag.${extension}`);
+        exportStatus = 'File laporan Flag disiapkan untuk diunduh.'; 
+      }
+      notify(exportStatus, 'success');
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        exportStatus = err.message || 'Ekspor Flag gagal. Coba lagi.';
+        notify(exportStatus, 'error');
+      }
+    } finally {
+      exportPending = false;
+      paint();
+    }
+  }
+
   async function loadGroups({preserveExpanded = false} = {}) {
     activeRequest?.abort();
     activeRequest = new AbortController();
@@ -112,6 +177,8 @@ export function mount(ctx) {
     if (!preserveExpanded) {
       expandedGroups.clear();
       groupAlertsCache.clear();
+      selectedGroupKeys.clear();
+      exportCount = null;
     } else {
       groupAlertsCache.clear();
     }
@@ -122,7 +189,14 @@ export function mount(ctx) {
       if (signal.aborted || version !== requestVersion) return;
       data = body;
       loading = false;
+      if (preserveExpanded && selectedGroupKeys.size) {
+        const visibleKeys = new Set((data.groups || []).map(g => String(g.key ?? '')));
+        for (const key of [...selectedGroupKeys]) {
+          if (!visibleKeys.has(key)) selectedGroupKeys.delete(key);
+        }
+      }
       paint();
+      void refreshExportCount();
       if (preserveExpanded && expandedGroups.size) {
         const visibleKeys = new Set((data.groups || []).map(g => String(g.key ?? '')));
         for (const key of [...expandedGroups]) {
@@ -194,6 +268,24 @@ export function mount(ctx) {
     }
 
     const action = btn.dataset.action;
+    if (btn.dataset.flagExport) {
+      await performFlagExport(btn.dataset.flagExport);
+      return;
+    }
+    if (action === 'flag-select-all') {
+      const keys = (data?.groups || []).map(group => String(group.key ?? ''));
+      selectedGroupKeys.clear();
+      for (const key of keys) selectedGroupKeys.add(key);
+      void refreshExportCount();
+      paint();
+      return;
+    }
+    if (action === 'flag-select-none') {
+      selectedGroupKeys.clear();
+      void refreshExportCount();
+      paint();
+      return;
+    }
     if (action === 'refresh-flags' || action === 'retry') {
       await loadGroups({preserveExpanded: true});
       return;
@@ -387,6 +479,16 @@ export function mount(ctx) {
 
   root.addEventListener('change', async e => {
     const el = e.target;
+    if (el.matches('[data-select-group-index]')) {
+      const group = data?.groups?.[Number(el.dataset.selectGroupIndex)];
+      if (!group) return;
+      const key = String(group.key ?? '');
+      if (el.checked) selectedGroupKeys.add(key);
+      else selectedGroupKeys.delete(key);
+      void refreshExportCount();
+      paint();
+      return;
+    }
     if (el.id === 'flag-group-by') {
       updateRoute({group_by: el.value, pattern: el.value === 'pattern' ? query.pattern : null});
       return;

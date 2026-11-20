@@ -6,66 +6,140 @@ Supports:
 3. Excel Workbook (.xlsx styled sheets with threat intelligence metrics)
 4. Tab-Separated Values (TSV clipboard text)
 5. Markdown Executive Briefing
+
+Every format shares one canonical evidence table so Triage, Reports, and the
+Flag & Rule Tuning tracker produce the same columns in the same order.
 """
 
 from __future__ import annotations
 
 import csv
 import io
+import json
 from html import escape
 from typing import Any
 
 from docx import Document
-from docx.enum.section import WD_ORIENT, WD_SECTION
+from docx.enum.section import WD_ORIENT
 from docx.shared import Inches, Pt, RGBColor
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip().startswith("{"):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except ValueError:
+            return {}
+    return {}
+
+
+def _first(*values: Any) -> str:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _split_uri(uri: str) -> tuple[str, str]:
+    text = str(uri or "")
+    if "?" not in text:
+        return text, ""
+    path, query = text.split("?", 1)
+    return path, query
+
+
+def alert_full_log(alert: dict[str, Any]) -> str:
+    return _first(alert.get("full_log"), _as_dict(alert.get("raw")).get("full_log"))
+
+
+def _evidence_fields(alert: dict[str, Any]) -> dict[str, Any]:
+    parsed = _as_dict(alert.get("parsed_details"))
+    data = _as_dict(alert.get("data"))
+    uri = _first(parsed.get("uri"), data.get("uri"), data.get("url"))
+    path, query = _split_uri(uri)
+    payload = _first(
+        parsed.get("query"),
+        query,
+        data.get("query"),
+        data.get("payload"),
+        data.get("body"),
+    )
+    tenant = _first(alert.get("tenant"), "Default")
+    agent = _first(alert.get("agent_name"))
+    return {
+        "hit": int(alert.get("hit_count") or 1),
+        "kejadian": _first(alert.get("timestamp")),
+        "client_ip": _first(alert.get("source_ip"), parsed.get("srcip"), data.get("srcip")),
+        "timestamp_log": _first(parsed.get("timestamp"), parsed.get("timestamp_display")),
+        "alert_id": _first(alert.get("alert_id"), alert.get("id")),
+        "method": _first(parsed.get("method"), data.get("method")),
+        "path_uri": _first(parsed.get("path"), path, data.get("path"), uri),
+        "query_payload": payload,
+        "protocol": _first(parsed.get("protocol")),
+        "status": _first(parsed.get("status"), data.get("status"), data.get("id")),
+        "bytes": _first(parsed.get("bytes")),
+        "rule_id": _first(alert.get("rule_id")),
+        "rule_description": _first(alert.get("description")),
+        "tenant_agent": f"{tenant} ({agent})" if agent else tenant,
+        "full_log": alert_full_log(alert),
+        "user_agent": _first(parsed.get("ua"), parsed.get("user_agent"), data.get("ua"), data.get("user_agent")),
+    }
+
+
+# (key, label) — the single source of truth for every exported evidence table.
+EXPORT_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("no", "No"),
+    ("hit", "Hit"),
+    ("kejadian", "Kejadian"),
+    ("client_ip", "Client IP"),
+    ("timestamp_log", "Timestamp Log"),
+    ("alert_id", "Wazuh ID"),
+    ("method", "Method"),
+    ("path_uri", "Path / URI"),
+    ("query_payload", "Query / Payload"),
+    ("protocol", "Protocol"),
+    ("status", "Status"),
+    ("bytes", "Bytes"),
+    ("rule_id", "Rule ID"),
+    ("rule_description", "Rule Description"),
+    ("tenant_agent", "Tenant (Agent)"),
+    ("full_log", "Full Log"),
+    ("user_agent", "User-Agent"),
+)
+
+EXPORT_HEADERS = [label for _key, label in EXPORT_COLUMNS]
+EXPORT_KEYS = [key for key, _label in EXPORT_COLUMNS]
+
+
+def export_row(alert: dict[str, Any], index: int) -> dict[str, Any]:
+    row = {"no": index}
+    row.update(_evidence_fields(alert))
+    return row
+
+
+def export_rows(alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [export_row(alert, index) for index, alert in enumerate(alerts, 1)]
+
+
+def _flat(value: Any) -> str:
+    return str(value if value is not None else "").replace("\t", " ").replace("\r\n", " ").replace("\n", " ").strip()
+
+
 def generate_tsv_table(alerts: list[dict[str, Any]]) -> str:
     """Generates a clean Tab-Separated Values table for instant pasting into Excel or Word."""
     alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
-    headers = [
-        "No",
-        "Hit Count",
-        "Timestamp",
-        "Tenant",
-        "Agent / Host",
-        "Rule ID",
-        "Level",
-        "Event Description",
-        "Source IP",
-        "Abuse Score (%)",
-        "VT Detections",
-        "Country",
-        "Full Log Snippet",
-        "Status",
-        "Analisis",
-    ]
-    rows = [headers]
-    for idx, a in enumerate(alerts, 1):
-        full_log = a.get("full_log") or (a.get("raw") or {}).get("full_log") or ""
-        clean_log = str(full_log).replace("\t", " ").replace("\r\n", " ").replace("\n", " ").strip()
-        reviewed = "Reviewed" if a.get("is_reviewed") else "Pending"
-        analysis = str(a.get("reviewer_notes") or "").replace("\t", " ").replace("\r\n", " ").replace("\n", " ").strip()
-        rows.append([
-            str(idx),
-            str(a.get("hit_count") or 1),
-            str(a.get("timestamp") or "-"),
-            str(a.get("tenant") or "Default"),
-            str(a.get("agent_name") or "-"),
-            str(a.get("rule_id") or "-"),
-            str(a.get("rule_level") or 0),
-            str(a.get("description") or "-").replace("\t", " "),
-            str(a.get("source_ip") or "-"),
-            str(a.get("abuse_score") if a.get("abuse_score") is not None else "-"),
-            str(a.get("vt_malicious") if a.get("vt_malicious") is not None else "-"),
-            str(a.get("country_code") or "-"),
-            clean_log,
-            reviewed,
-            analysis,
-        ])
+    rows = [[_flat(label) for label in EXPORT_HEADERS]]
+    for item in export_rows(alerts):
+        rows.append([_flat(item.get(key)) for key in EXPORT_KEYS])
     output = io.StringIO()
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
     writer.writerows(rows)
@@ -91,25 +165,17 @@ def generate_markdown_report(alerts: list[dict[str, Any]], meta: dict[str, Any])
         f"- **Total Kemunculan (Hits):** {total_hits} (dengan {repeated} kluster berulang)",
         f"- **Tingkat Severity Maksimum:** Level {highest_lvl}",
         "",
-        "## 1. Rekapitulasi Kronologi Log & Threat Intelligence",
+        "## 1. Tabel Kronologi Investigasi",
+        "",
     ]
 
-    for idx, a in enumerate(alerts, 1):
-        ip = a.get("source_ip") or "-"
-        intel_notes = []
-        if a.get("abuse_score") is not None:
-            intel_notes.append(f"Abuse: {a['abuse_score']}%")
-        if a.get("vt_malicious"):
-            intel_notes.append(f"VT: {a['vt_malicious']}")
-        if a.get("country_code"):
-            intel_notes.append(str(a["country_code"]))
-        intel_str = f" [{', '.join(intel_notes)}]" if intel_notes else ""
+    def cell(value: Any) -> str:
+        return _flat(value).replace("|", "\\|") or "-"
 
-        hits_str = f" (x{a['hit_count']})" if int(a.get("hit_count") or 1) > 1 else ""
-        lines.append(
-            f"{idx}. `[{a.get('timestamp') or '-'}]` **Level {a.get('rule_level') or 0}** (Rule {a.get('rule_id')}) - "
-            f"{a.get('description')}{hits_str} | IP: `{ip}`{intel_str} | Host: `{a.get('agent_name') or '-'}`"
-        )
+    lines.append("| " + " | ".join(EXPORT_HEADERS) + " |")
+    lines.append("| " + " | ".join("---" for _ in EXPORT_HEADERS) + " |")
+    for item in export_rows(alerts):
+        lines.append("| " + " | ".join(cell(item.get(key)) for key in EXPORT_KEYS) + " |")
 
     lines.extend([
         "",
@@ -150,7 +216,7 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
         body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; line-height: 1.35; margin: 0; padding: 0; }
         h1 { color: #1a365d; border-bottom: 2px solid #2b6cb0; padding-bottom: 4px; font-size: 15pt; margin: 8px 0 10px; }
         h2 { color: #2c5282; font-size: 12pt; margin: 16px 0 8px; border-bottom: 1px solid #cbd5e0; padding-bottom: 3px; }
-        table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 9pt; line-height: 1.3; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 8pt; line-height: 1.3; }
         th, td { border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; }
         th { background-color: #edf2f7; color: #2d3748; font-weight: bold; }
         tr:nth-child(even) { background-color: #f7fafc; }
@@ -159,6 +225,7 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
         .badge-low { background-color: #e2e8f0; color: #4a5568; padding: 1px 5px; border-radius: 3px; font-size: 8pt; }
         .meta-box { background: #f8fafc; border-left: 4px solid #3182ce; padding: 8px 12px; margin: 8px 0; font-size: 9.5pt; }
         .content-box { background: #ffffff; border: 1px solid #cbd5e0; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 9.5pt; }
+        .mono { font-family: Consolas, "Courier New", monospace; font-size: 7.5pt; word-break: break-all; }
         </style></head><body>
         """,
         f"<h1>{escape(title)}</h1>",
@@ -172,62 +239,37 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
     ]
 
     if alerts:
-        html_parts.append(
-            '<table border="1" cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e0; margin: 8px 0 14px; font-family: Arial, sans-serif; font-size: 9pt; line-height: 1.3;">'
-            '<thead><tr style="background-color: #edf2f7;">'
-            '<th style="width: 25px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">No</th>'
-            '<th style="width: 35px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Hits</th>'
-            '<th style="width: 125px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Timestamp</th>'
-            '<th style="width: 110px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Host / Agent</th>'
-            '<th style="width: 95px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Rule &amp; Severity</th>'
-            '<th style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Ringkasan Event / Full Log</th>'
-            '<th style="width: 130px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Source IP &amp; Intel</th>'
-            '<th style="width: 150px; border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-weight: bold; color: #2d3748;">Analisis</th>'
-            '</tr></thead><tbody>'
+        header_html = "".join(
+            f'<th style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; '
+            f'font-weight: bold; color: #2d3748;">{escape(label)}</th>'
+            for label in EXPORT_HEADERS
         )
-        for idx, a in enumerate(alerts, 1):
-            lvl = int(a.get("rule_level") or 0)
-            row_lvl = "badge-high" if lvl >= 12 else ("badge-med" if lvl >= 7 else "badge-low")
-            hits = int(a.get("hit_count") or 1)
-
-            intel_txt = ""
-            if a.get("abuse_score") is not None:
-                intel_txt = f"<br><small><strong>Abuse:</strong> {a['abuse_score']}%"
-                if a.get("vt_malicious"):
-                    intel_txt += f" | <strong>VT:</strong> {a['vt_malicious']}"
-                if a.get("country_code"):
-                    intel_txt += f" ({escape(str(a['country_code']))})"
-                intel_txt += "</small>"
-
-            full_log = (a.get("full_log") or (a.get("raw") or {}).get("full_log") or "").strip()
-            log_block = (
-                f"<div style='margin-top: 3px; padding: 3px 5px; background-color: #f8fafc; "
-                f"border: 1px solid #e2e8f0; border-radius: 3px; font-family: Consolas, \"Courier New\", monospace; "
-                f"font-size: 7.5pt; line-height: 1.25; color: #2d3748; white-space: pre-wrap; word-break: break-all;'>"
-                f"<strong>Full Log:</strong> {escape(full_log)}</div>"
-            ) if full_log else ""
-
+        html_parts.append(
+            '<table border="1" cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; '
+            'border: 1px solid #cbd5e0; margin: 8px 0 14px; font-family: Arial, sans-serif; font-size: 8pt; line-height: 1.3;">'
+            f'<thead><tr style="background-color: #edf2f7;">{header_html}</tr></thead><tbody>'
+        )
+        for idx, item in enumerate(export_rows(alerts), 1):
             row_bg = "background-color: #f7fafc;" if idx % 2 == 0 else "background-color: #ffffff;"
-            analysis_text = escape(str(a.get("reviewer_notes") or "")).replace("\n", "<br>")
-
-            html_parts.append(
-                f'<tr style="{row_bg}">'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;">{idx}</td>'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><strong>{hits}x</strong></td>'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 8.5pt;">{escape(str(a.get("timestamp") or "-"))}</td>'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get("agent_name") or "-"))}</strong><br><small>{escape(str(a.get("agent_ip") or "-"))}</small></td>'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><span class="{row_lvl}">Level {lvl}</span><br><small>Rule {escape(str(a.get("rule_id") or "-"))}</small></td>'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"><strong>{escape(str(a.get("description") or "-"))}</strong>{log_block}</td>'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;">{escape(str(a.get("source_ip") or "-"))}{intel_txt}</td>'
-                f'<td style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 8.5pt;">{analysis_text}</td>'
-                f'</tr>'
-            )
+            cells = []
+            for key in EXPORT_KEYS:
+                value = item.get(key)
+                style = "border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"
+                if key == "full_log":
+                    style += " font-family: Consolas, 'Courier New', monospace; font-size: 7.5pt; word-break: break-all; white-space: pre-wrap;"
+                elif key == "hit":
+                    style += " font-weight: bold;"
+                content = escape(str(value if value is not None else "")) or "-"
+                if key == "hit" and str(value or "") not in ("", "0"):
+                    content = f"{content}x"
+                cells.append(f'<td style="{style}">{content}</td>')
+            html_parts.append(f'<tr style="{row_bg}">{"".join(cells)}</tr>')
         html_parts.append("</tbody></table>")
     else:
         html_parts.append("<p><em>Tidak ada alert terkait dalam laporan ini.</em></p>")
 
     html_parts.append(f"""
-    <h2>2. Kronologi & Analisis Investigasi</h2>
+    <h2>2. Kronologi &amp; Analisis Investigasi</h2>
     <div class="content-box">
         {escape(analysis).replace(chr(10), '<br>') or '<em>Aktivitas serangan terekam secara kronologis pada tabel di atas. Diperlukan penelusuran lebih lanjut terkait payload yang dieksekusi.</em>'}
     </div>
@@ -252,14 +294,13 @@ def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str,
     doc = Document()
     section = doc.sections[0]
     section.orientation = WD_ORIENT.LANDSCAPE
-    # Swap page dimensions for landscape
     new_width, new_height = section.page_height, section.page_width
     section.page_width = new_width
     section.page_height = new_height
-    section.top_margin = Inches(0.6)
-    section.bottom_margin = Inches(0.6)
-    section.left_margin = Inches(0.6)
-    section.right_margin = Inches(0.6)
+    section.top_margin = Inches(0.5)
+    section.bottom_margin = Inches(0.5)
+    section.left_margin = Inches(0.5)
+    section.right_margin = Inches(0.5)
 
     title = meta.get("title") or "SOC Security Telemetry & Incident Report"
     category = meta.get("category") or "Security Incident"
@@ -280,42 +321,23 @@ def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str,
 
     doc.add_heading("1. Tabel Kronologi Investigasi", level=2)
 
-    headers = ["No", "Hits", "Waktu", "Host", "Rule ID & Lvl", "Event Description", "Source IP & Intel", "CVE / MITRE"]
-    table = doc.add_table(rows=1, cols=len(headers))
+    table = doc.add_table(rows=1, cols=len(EXPORT_HEADERS))
     table.style = "Table Grid"
-
-    # Header Row
     hdr_cells = table.rows[0].cells
-    for i, h in enumerate(headers):
-        hdr_cells[i].text = h
+    for i, label in enumerate(EXPORT_HEADERS):
+        hdr_cells[i].text = label
         p = hdr_cells[i].paragraphs[0]
         p.runs[0].font.bold = True
-        p.runs[0].font.size = Pt(9.5)
+        p.runs[0].font.size = Pt(7.5)
 
-    # Data Rows
-    for idx, a in enumerate(alerts, 1):
+    for item in export_rows(alerts):
         row_cells = table.add_row().cells
-        hits = str(a.get("hit_count") or 1)
-        intel = []
-        if a.get("abuse_score") is not None:
-            intel.append(f"Abuse: {a['abuse_score']}%")
-        if a.get("country_code"):
-            intel.append(str(a["country_code"]))
-        intel_str = f" ({', '.join(intel)})" if intel else ""
-
-        row_cells[0].text = str(idx)
-        row_cells[1].text = f"{hits}x"
-        row_cells[2].text = str(a.get("timestamp") or "-")
-        row_cells[3].text = str(a.get("agent_name") or "-")
-        row_cells[4].text = f"Rule {a.get('rule_id')} (Lv {a.get('rule_level')})"
-        row_cells[5].text = str(a.get("description") or "-")
-        row_cells[6].text = f"{a.get('source_ip') or '-'}{intel_str}"
-        row_cells[7].text = str(a.get("cve") or ", ".join(a.get("mitre_ids") or []) or "-")
-
-        for c in row_cells:
-            for p in c.paragraphs:
+        for i, key in enumerate(EXPORT_KEYS):
+            value = item.get(key)
+            row_cells[i].text = str(value if value is not None else "")
+            for p in row_cells[i].paragraphs:
                 for r in p.runs:
-                    r.font.size = Pt(8.5)
+                    r.font.size = Pt(6.5)
 
     doc.add_heading("2. Analisis Investigasi", level=2)
     doc.add_paragraph(meta.get("analysis") or "Aktivitas serangan terekam secara kronologis pada tabel di atas.")
@@ -333,37 +355,16 @@ def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str,
 
 
 def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
-    """Generates a styled Excel workbook (.xlsx) with threat intelligence metrics."""
+    """Generates a styled Excel workbook (.xlsx) with the canonical evidence table."""
     alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
     wb = Workbook()
     ws = wb.worksheets[0]
     ws.title = "Wazuh Alerts Triage"
 
-    headers = [
-        "No",
-        "Hit Count",
-        "Timestamp",
-        "Tenant",
-        "Agent Name",
-        "Agent IP",
-        "Rule ID",
-        "Level",
-        "Event Description",
-        "Source IP",
-        "Abuse Score (%)",
-        "VT Detections",
-        "Country",
-        "Location",
-        "Decoder",
-        "CVE",
-        "MITRE ATT&CK",
-        "Review Status",
-        "Analisis",
-    ]
-    ws.append(headers)
+    ws.append(EXPORT_HEADERS)
 
     header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
-    header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    header_font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
     thin_border = Border(
         left=Side(style="thin", color="CBD5E0"),
         right=Side(style="thin", color="CBD5E0"),
@@ -371,46 +372,26 @@ def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
         bottom=Side(style="thin", color="CBD5E0"),
     )
 
-    for col_idx in range(1, len(headers) + 1):
+    for col_idx in range(1, len(EXPORT_HEADERS) + 1):
         cell = ws.cell(row=1, column=col_idx)
         cell.fill = header_fill
         cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.border = thin_border
 
-    for idx, a in enumerate(alerts, 1):
-        row_vals = [
-            idx,
-            int(a.get("hit_count") or 1),
-            a.get("timestamp") or "",
-            a.get("tenant") or "Default",
-            a.get("agent_name") or "",
-            a.get("agent_ip") or "",
-            a.get("rule_id") or "",
-            int(a.get("rule_level") or 0),
-            a.get("description") or "",
-            a.get("source_ip") or "",
-            a.get("abuse_score") if a.get("abuse_score") is not None else "",
-            a.get("vt_malicious") if a.get("vt_malicious") is not None else "",
-            a.get("country_code") or "",
-            a.get("location") or "",
-            a.get("decoder") or "",
-            a.get("cve") or "",
-            ", ".join(a.get("mitre_ids") or []),
-            "Reviewed" if a.get("is_reviewed") else "Pending",
-            a.get("reviewer_notes") or "",
-        ]
+    for idx, item in enumerate(export_rows(alerts), 1):
+        row_vals = [item.get(key) for key in EXPORT_KEYS]
         ws.append(row_vals)
         for col_idx in range(1, len(row_vals) + 1):
             cell = ws.cell(row=idx + 1, column=col_idx)
-            cell.font = Font(name="Arial", size=9)
+            cell.font = Font(name="Arial", size=8)
             cell.border = thin_border
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
 
-    # Auto-adjust column widths
     for col in ws.columns:
         max_len = max(len(str(cell.value or "")) for cell in col)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 45)
+        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 60)
 
     buf = io.BytesIO()
     wb.save(buf)

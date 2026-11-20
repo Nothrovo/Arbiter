@@ -5,6 +5,7 @@ import {
   FLAG_TABS,
   RULE_STATUS_FILTERS,
   FLAG_GROUP_BY_OPTIONS,
+  FLAG_EXPORT_FORMATS,
   flagMeta,
   flagBadge,
   ruleStatusBadge,
@@ -104,6 +105,10 @@ export function renderFlagGroups(query, data, {
   expandedGroups = new Set(),
   groupAlertsCache = new Map(),
   expandedLogIds = new Set(),
+  selectedGroupKeys = new Set(),
+  exportPending = false,
+  exportStatus = '',
+  exportCount = null,
 } = {}) {
   const groups = Array.isArray(data?.groups) ? data.groups : [];
   if (data?.pattern_required) {
@@ -123,7 +128,29 @@ export function renderFlagGroups(query, data, {
   }
 
   const isRed = query.flag_color === 'red';
-  return `<div class="flag-group-list">${groups.map((group, index) => {
+  const selectedCount = selectedGroupKeys.size;
+  const exportButtons = FLAG_EXPORT_FORMATS.map(([format, label]) =>
+    `<button class="button" type="button" data-flag-export="${format}" ${exportPending ? 'disabled' : ''}>${esc(label)}</button>`
+  ).join('');
+  const countText = exportCount === null
+    ? 'Menghitung alert dalam scope ekspor…'
+    : `<strong class="num">${Number(exportCount).toLocaleString('id-ID')}</strong> alert siap diekspor`;
+  const exportBar = `<section class="flag-export-bar panel stack" aria-label="Ekspor alert Flag">
+    <div class="split" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h2 class="section-heading">Ekspor Flag</h2>
+        <p class="meta">${selectedCount ? `<strong>${selectedCount.toLocaleString('id-ID')} grup dipilih</strong> · ` : 'Tanpa centang = seluruh alert pada kategori ini · '}${countText}</p>
+      </div>
+      <div class="page-actions" style="flex-wrap:wrap;">
+        <button class="button" type="button" data-action="flag-select-all">Pilih semua grup</button>
+        <button class="button" type="button" data-action="flag-select-none" ${selectedCount ? '' : 'disabled'}>Kosongkan pilihan</button>
+        <details class="format-menu"><summary class="button primary">${icon('down')} Ekspor / Salin</summary><div class="stack" aria-label="Format ekspor Flag">${exportButtons}</div></details>
+      </div>
+    </div>
+    <p class="inline-status" id="flag-export-status" role="status" aria-live="polite">${esc(exportStatus)}</p>
+  </section>`;
+
+  return `${exportBar}<div class="flag-group-list">${groups.map((group, index) => {
     const key = String(group.key ?? '');
     const isExpanded = expandedGroups.has(key);
     const cached = groupAlertsCache.get(key);
@@ -167,6 +194,9 @@ export function renderFlagGroups(query, data, {
 
     return `<article class="flag-group-card" data-group-index="${index}">
       <div class="flag-group-head">
+        <label class="flag-group-select" title="Pilih grup ini untuk diekspor">
+          <input type="checkbox" data-select-group-index="${index}" ${selectedGroupKeys.has(key) ? 'checked' : ''} aria-label="Pilih grup ${esc(key)} untuk diekspor">
+        </label>
         <button type="button" class="flag-group-toggle" data-action="toggle-group" data-group-index="${index}" aria-expanded="${isExpanded}">
           ${icon('chevron')}
           <div style="min-width:0">

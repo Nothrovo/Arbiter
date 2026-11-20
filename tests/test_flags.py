@@ -476,6 +476,70 @@ class FlagWorkspaceTests(unittest.TestCase):
         )
         self.assertEqual(bad.status_code, 400, bad.text)
 
+    def test_flag_category_and_group_exports_match_scope(self):
+        self._seed_rich_alerts()
+        self.client.post(
+            "/api/alerts/flag",
+            json={"alert_ids": [10, 11, 13], "flag_color": "green", "auto_review": True},
+        )
+        self.client.post(
+            "/api/alerts/flag",
+            params={"tenant": "Alpha"},
+            json={"alert_ids": [12], "flag_color": "red", "auto_review": True},
+        )
+
+        preview = self.client.get("/api/flags/export/preview", params={
+            "tenant": "Alpha", "flag_color": "green", "group_by": "url_path",
+            "group_key": "/lib/minigalnano/createthumb.php",
+        })
+        self.assertEqual(preview.status_code, 200, preview.text)
+        body = preview.json()
+        self.assertEqual(body["count"], 2)
+        self.assertEqual(body["scope"]["group_key"], ["/lib/minigalnano/createthumb.php"])
+        self.assertIn("Laporan Flag Hijau", body["meta"]["title"])
+        self.assertIn("createthumb.php", body["html"])
+
+        everything = self.client.get("/api/flags/export/preview", params={
+            "tenant": "Alpha", "flag_color": "red", "rule_status": "all",
+        })
+        self.assertEqual(everything.status_code, 200, everything.text)
+        self.assertEqual(everything.json()["count"], 1)
+
+        csv_response = self.client.get("/api/flags/export/csv", params={
+            "tenant": "Alpha", "flag_color": "green", "group_by": "url_path",
+            "group_key": "/lib/minigalnano/createthumb.php",
+        })
+        self.assertEqual(csv_response.status_code, 200, csv_response.text)
+        self.assertEqual(csv_response.headers.get("X-Arbiter-Count"), "2")
+        import csv as csv_module
+        import io
+        rows = list(csv_module.DictReader(io.StringIO(csv_response.text)))
+        self.assertEqual([row["alert_id"] for row in rows], ["syn-10", "syn-11"])
+        self.assertEqual(rows[0]["method"], "GET")
+        self.assertEqual(rows[0]["path_uri"], "/lib/minigalnano/createthumb.php")
+        self.assertEqual(rows[0]["tenant_agent"], "Alpha (web-01)")
+
+        for route in ("/api/flags/export/tsv", "/api/flags/export/report-html",
+                      "/api/flags/export/docx", "/api/flags/export/xlsx", "/api/flags/export/markdown"):
+            with self.subTest(route=route):
+                response = self.client.get(route, params={
+                    "tenant": "Alpha", "flag_color": "green", "group_by": "url_path",
+                    "group_key": "/lib/minigalnano/createthumb.php",
+                })
+                self.assertEqual(response.status_code, 200, response.text[:100])
+                self.assertEqual(response.headers.get("X-Arbiter-Count"), "2")
+
+        empty = self.client.get("/api/flags/export/preview", params={
+            "tenant": "Alpha", "flag_color": "green", "group_by": "url_path",
+            "group_key": "/does-not-exist",
+        })
+        self.assertEqual(empty.status_code, 200, empty.text)
+        self.assertEqual(empty.json()["count"], 0)
+
+    def test_flag_export_rejects_unknown_grouping(self):
+        response = self.client.get("/api/flags/export/preview", params={"group_by": "unknown"})
+        self.assertEqual(response.status_code, 422, response.text)
+
     def test_review_and_flag_sql_never_binds_untyped_null_to_is_not_null(self):
         import re
         self._seed_rich_alerts()

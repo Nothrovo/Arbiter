@@ -3620,17 +3620,11 @@ def export_csv(request: Request, scope: dict[str, Any] = Depends(export_scope)):
     alerts, meta = _get_alerts_for_export(**scope)
     _record_report_audit_log(request, title=str(meta.get("title") or "Ekspor CSV"), format_name="CSV", tenant=scope.get("tenant"), alert_count=len(alerts))
     output = io.StringIO()
-    fields = [
-        "alert_id", "timestamp", "tenant", "agent_name", "agent_ip", "rule_id", "rule_level",
-        "description", "source_ip", "abuse_score", "vt_malicious", "country_code",
-        "hit_count", "location", "decoder", "cve", "mitre_ids", "is_reviewed"
-    ]
-    writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+    from app.exports import EXPORT_KEYS, export_rows
+
+    writer = csv.DictWriter(output, fieldnames=list(EXPORT_KEYS), extrasaction="ignore")
     writer.writeheader()
-    for a in alerts:
-        row = dict(a)
-        row["mitre_ids"] = ", ".join(row.get("mitre_ids") or [])
-        writer.writerow(row)
+    writer.writerows(export_rows(alerts))
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv; charset=utf-8",
@@ -4825,6 +4819,190 @@ def api_flags_alerts(
             [*params, limit, offset],
         ).fetchall()
     return {"items": rows, "total": int((total_row or {}).get("n") or 0)}
+
+
+def flag_export_scope(
+    tenant: list[str] = Query(default=["all"]),
+    flag_color: str = "green",
+    rule_status: str = "pending",
+    group_by: str = "rule_description",
+    pattern: str = "",
+    pattern_mode: str = "contains",
+    q: str = "",
+    group_key: list[str] = Query(default=[]),
+) -> dict[str, Any]:
+    """Canonical export scope for flagged alerts (flag category + selected groups)."""
+    normalize_tenants(tenant)
+    color = str(flag_color or "green").strip().lower()
+    if color not in ALLOWED_FLAG_COLORS:
+        raise HTTPException(status_code=422, detail="flag_color harus 'green', 'yellow', atau 'red'.")
+    if group_by not in PIVOT_DEFINITIONS:
+        raise HTTPException(status_code=422, detail=f"Parameter pengelompokan '{group_by}' tidak didukung.")
+    r_status = "all" if color == "red" else str(rule_status or "pending").strip().lower()
+    if r_status not in {"all", "pending", "done"}:
+        raise HTTPException(status_code=422, detail="rule_status harus 'all', 'pending', atau 'done'.")
+    mode = str(pattern_mode or "contains").strip().lower()
+    if mode not in {"contains", "regex"}:
+        raise HTTPException(status_code=422, detail="pattern_mode harus 'contains' atau 'regex'.")
+    keys = [str(value) for value in (group_key or []) if str(value) != ""]
+    return dict(
+        tenant=_scope_tenant_value(tenant),
+        flag_color=color,
+        rule_status=r_status,
+        group_by=group_by,
+        pattern=str(pattern or "").strip(),
+        pattern_mode=mode,
+        q=str(q or "").strip(),
+        group_key=keys,
+    )
+
+
+def _get_flagged_alerts_for_export(
+    *,
+    tenant: Any,
+    flag_color: str,
+    rule_status: str,
+    group_by: str,
+    pattern: str,
+    pattern_mode: str,
+    q: str,
+    group_key: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    where_sql, params = _build_flag_scope_where(
+        tenant=tenant,
+        flag_color=flag_color,
+        rule_status=rule_status,
+        q=q,
+    )
+    keys = [str(key) for key in (group_key or [])]
+    if keys:
+        if group_by == "pattern":
+            match_expr, match_params = _flag_pattern_predicate(pattern, pattern_mode)
+            branches: list[str] = []
+            if "Cocok pola" in keys:
+                if match_expr:
+                    branches.append(match_expr)
+                    params.extend(match_params)
+                else:
+                    branches.append("1 = 0")
+            if "Tidak cocok pola" in keys:
+                if match_expr:
+                    branches.append(f"NOT ({match_expr})")
+                    params.extend(match_params)
+                else:
+                    branches.append("1 = 1")
+            if not branches:
+                branches.append("1 = 0")
+            where_sql += " AND (" + " OR ".join(branches) + ")"
+        else:
+            dim_sql = PIVOT_DEFINITIONS[group_by]["sql"]
+            where_sql += f" AND ({dim_sql}) = ANY(%s)"
+            params.append(keys)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT a.*, COALESCE(a.raw->>'full_log', '') AS full_log
+                FROM wazuh.alerts a {where_sql}
+                ORDER BY a.timestamp ASC NULLS LAST, a.id ASC
+                LIMIT %s""",
+            [*params, MAX_EXPORT_ALERTS + 1],
+        ).fetchall()
+    alerts = [dict(row) for row in rows]
+    if len(alerts) > MAX_EXPORT_ALERTS:
+        raise HTTPException(status_code=413, detail=f"Export exceeds {MAX_EXPORT_ALERTS} alerts. Narrow the scope and retry.")
+
+    color_label = {"green": "Hijau", "yellow": "Kuning", "red": "Merah"}.get(flag_color, flag_color)
+    dimension = PIVOT_DEFINITIONS[group_by]["label"]
+    selected = f" · {len(keys)} grup dipilih" if keys else ""
+    meta: dict[str, Any] = {
+        "title": f"Laporan Flag {color_label} — {dimension}{selected}",
+        "category": "Flag & Rule Tuning",
+        "severity": "Critical" if flag_color == "red" else "High" if flag_color == "yellow" else "Low",
+        "status": "Triage",
+        "analysis": "",
+        "conclusion": "",
+        "recommendation": "",
+    }
+    return alerts, meta
+
+
+@app.get("/api/flags/export/preview")
+def flag_export_preview(scope: dict[str, Any] = Depends(flag_export_scope)):
+    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    return {
+        "count": len(alerts),
+        "meta": meta,
+        "scope": scope,
+        "html": generate_gdocs_html_report(alerts, meta),
+        "truncated": False,
+    }
+
+
+@app.get("/api/flags/export/report-html", response_class=HTMLResponse)
+def flag_export_html(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
+    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    html_content = generate_gdocs_html_report(alerts, meta)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag HTML"), format_name="Google Docs HTML (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
+    return HTMLResponse(content=html_content, headers={"X-Arbiter-Count": str(len(alerts))})
+
+
+@app.get("/api/flags/export/docx")
+def flag_export_docx(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
+    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    buf = generate_docx_landscape_report(alerts, meta)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag Word"), format_name="Word (.docx) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": 'attachment; filename="Arbiter-Flag-Report.docx"', "X-Arbiter-Count": str(len(alerts))},
+    )
+
+
+@app.get("/api/flags/export/xlsx")
+def flag_export_xlsx(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
+    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    buf = generate_xlsx_workbook(alerts)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Workbook Flag Excel"), format_name="Excel (.xlsx) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="Arbiter-Flag-Report.xlsx"', "X-Arbiter-Count": str(len(alerts))},
+    )
+
+
+@app.get("/api/flags/export/tsv")
+def flag_export_tsv(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
+    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    content = generate_tsv_table(alerts)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Tabel Flag TSV"), format_name="TSV (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
+    return Response(content=content, media_type="text/tab-separated-values; charset=utf-8",
+                    headers={"X-Arbiter-Count": str(len(alerts))})
+
+
+@app.get("/api/flags/export/markdown")
+def flag_export_markdown(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
+    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    content = generate_markdown_report(alerts, meta)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag Markdown"), format_name="Markdown (.md) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
+    return Response(content=content, media_type="text/markdown; charset=utf-8",
+                    headers={"X-Arbiter-Count": str(len(alerts))})
+
+
+@app.get("/api/flags/export/csv")
+def flag_export_csv(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
+    from app.exports import EXPORT_KEYS, export_rows
+
+    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    _record_report_audit_log(request, title=str(meta.get("title") or "Ekspor Flag CSV"), format_name="CSV (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=list(EXPORT_KEYS), extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(export_rows(alerts))
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="arbiter-flagged-alerts.csv"', "X-Arbiter-Count": str(len(alerts))},
+    )
 
 
 @app.post("/api/flags/rule-status")

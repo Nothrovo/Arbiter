@@ -6,6 +6,10 @@ import {
   FLAG_GROUP_BY_OPTIONS,
   normalizeFlagQuery,
   flagScopeParams,
+  flagExportParams,
+  flagExportURL,
+  flagExportFormat,
+  FLAG_EXPORT_FORMATS,
   flagBadge,
   ruleStatusBadge,
 } from '../../app/static/js/features/flags/model.js';
@@ -112,6 +116,44 @@ test('renderFlagsPage renders counts, done badges with audit info, escapes XSS, 
   assert.match(redHtml, /Tidak boleh diabaikan dengan custom rule/);
   assert.match(redHtml, /Hapus Flag Grup/);
   assert.match(redHtml, /Belum direview/);
+});
+
+test('flag exports carry the active category and selected groups', () => {
+  const query = normalizeFlagQuery(new URLSearchParams('tenant=Alpha&tenant=Beta&flag_color=yellow&group_by=url_path&q=thumb'));
+  const params = flagExportParams(query, ['/a.php', '/b.php']);
+  assert.deepEqual(params.getAll('tenant'), ['Alpha', 'Beta']);
+  assert.equal(params.get('flag_color'), 'yellow');
+  assert.equal(params.get('group_by'), 'url_path');
+  assert.equal(params.get('q'), 'thumb');
+  assert.deepEqual(params.getAll('group_key'), ['/a.php', '/b.php']);
+  assert.equal(flagExportFormat('copy-html'), 'report-html');
+  assert.equal(flagExportFormat('copy-tsv'), 'tsv');
+  assert.equal(flagExportURL(query, [], 'docx'), `/api/flags/export/docx?${flagExportParams(query, [])}`);
+  assert.ok(FLAG_EXPORT_FORMATS.some(([key]) => key === 'xlsx'));
+  assert.throws(() => flagExportFormat('exe'));
+});
+
+test('renderFlagsPage renders the Flag export bar and group selection controls', () => {
+  const query = normalizeFlagQuery(new URLSearchParams('tenant=Alpha&flag_color=green'));
+  const data = {
+    counts: {green: {total: 1, pending: 1, done: 0}, yellow: {total: 0, pending: 0, done: 0}, red: {total: 0, pending: 0, done: 0}},
+    total_alerts: 1,
+    total_groups: 1,
+    groups: [{key: 'Rule A', alert_count: 1, event_hits: 1, rule_status: 'pending'}],
+  };
+  const html = renderFlagsPage(query, data, {
+    selectedGroupKeys: new Set(['Rule A']),
+    exportCount: 1,
+    exportStatus: 'Siap',
+  });
+  assert.match(html, /Ekspor Flag/);
+  assert.match(html, /1 grup dipilih/);
+  assert.match(html, /1<\/strong> alert siap diekspor/);
+  assert.match(html, /data-flag-export="copy-html"/);
+  assert.match(html, /data-flag-export="xlsx"/);
+  assert.match(html, /data-select-group-index="0" checked/);
+  assert.match(html, /data-action="flag-select-all"/);
+  assert.match(html, /data-action="flag-select-none"/);
 });
 
 test('claimBadge prioritizes Flag badge with Rule Dibuat status and retains legacy TP fallback', () => {

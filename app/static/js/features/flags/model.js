@@ -112,3 +112,37 @@ export function flagScopeParams(query) {
   return params;
 }
 
+export const FLAG_EXPORT_FORMATS = [
+  ['copy-html', 'Salin untuk Google Docs'],
+  ['report-html', 'Unduh HTML'],
+  ['docx', 'Unduh Word (.docx)'],
+  ['xlsx', 'Unduh Excel (.xlsx)'],
+  ['tsv', 'Unduh TSV'],
+  ['copy-tsv', 'Salin TSV (spreadsheet)'],
+  ['markdown', 'Unduh Markdown'],
+  ['copy-markdown', 'Salin Markdown'],
+  ['csv', 'Unduh CSV'],
+];
+
+const FLAG_EXPORT_KEYS = new Set(FLAG_EXPORT_FORMATS.map(([key]) => key));
+
+export function flagExportFormat(value) {
+  const action = String(value || '');
+  if (!FLAG_EXPORT_KEYS.has(action)) throw new Error('Format ekspor Flag tidak dikenal.');
+  if (action === 'copy-html') return 'report-html';
+  return action.startsWith('copy-') ? action.slice(5) : action;
+}
+
+export function flagExportParams(query, groupKeys = []) {
+  const params = flagScopeParams(query);
+  for (const key of groupKeys) {
+    if (key === null || key === undefined || String(key) === '') continue;
+    params.append('group_key', String(key));
+  }
+  return params;
+}
+
+export function flagExportURL(query, groupKeys, format) {
+  return `/api/flags/export/${flagExportFormat(format)}?${flagExportParams(query, groupKeys)}`;
+}
+
