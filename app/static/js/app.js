@@ -155,7 +155,7 @@ async function render(route){
   try{
     const feature=await importFeature(route.page);
     if(version!==routeVersion)return;
-    const context={root:main,route,navigate:(...args)=>router.navigate(...args),selection,notify,databaseChanged,signal:controller.signal,setGuard:fn=>{guard=fn;}};
+    const context={root:main,route,user:currentUser,navigate:(...args)=>router.navigate(...args),selection,notify,databaseChanged,signal:controller.signal,setGuard:fn=>{guard=fn;}};
     const dispose=await feature.mount(context);
     if(version!==routeVersion){if(typeof dispose==='function')dispose();return;}
     cleanup=dispose;

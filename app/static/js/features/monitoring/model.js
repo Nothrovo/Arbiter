@@ -35,8 +35,17 @@ export function renderReviewActivity(data) {
 
 export function renderReviewerFilter(reviewerInfo) {
   const info = reviewerInfo && typeof reviewerInfo === 'object' ? reviewerInfo : {};
+  const currentUser = String(info.current_user || 'analyst');
+  if (info.locked) {
+    return `<section class="monitoring-reviewer-filter" aria-label="Filter reviewer">
+      <div class="field">
+        <span>Reviewer</span>
+        <div class="badge info" data-reviewer-locked="true">Akun Saya · @${esc(currentUser)}</div>
+      </div>
+      <p class="meta">Akun Analis hanya dapat melihat statistik, flag, dan aktivitas review milik <strong>@${esc(currentUser)}</strong>.</p>
+    </section>`;
+  }
   const reviewers = Array.isArray(info.reviewers) ? info.reviewers : [];
-  const currentUser = String(info.current_user || '');
   const selected = info.all ? 'all' : String(info.selected || currentUser || 'all');
   const options = [`<option value="all"${selected === 'all' ? ' selected' : ''}>Semua reviewer</option>`];
   const seen = new Set(['all']);

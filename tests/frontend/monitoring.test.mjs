@@ -136,6 +136,19 @@ test('renderReviewerFilter defaults to the current account and offers all review
     reviewers: [],
   });
   assert.match(missing, /<option value="ghost" selected>ghost<\/option>/);
+
+  const locked = renderReviewerFilter({
+    current_user: 'analyst1',
+    selected: 'analyst1',
+    all: false,
+    is_default: true,
+    locked: true,
+    reviewers: [{username: 'analyst1', display_name: 'Analis Satu'}],
+  });
+  assert.match(locked, /data-reviewer-locked="true"/);
+  assert.match(locked, /@analyst1/);
+  assert.doesNotMatch(locked, /Semua reviewer/);
+  assert.doesNotMatch(locked, /<select/);
 });
 
 test('claimBadge renders active claim owner, timeout state, and final verdict badges', () => {

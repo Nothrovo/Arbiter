@@ -191,3 +191,25 @@ test('triage view replaces TP/FP/Benign buttons with Flag Hijau/Kuning/Merah and
   assert.match(triageView, /\/api\/alerts\/flag/);
   assert.doesNotMatch(triageView, /Verdict TP|Verdict FP|Verdict Benign/);
 });
+
+test('flag workspace forwards review date filters and indicates analyst self-scope', () => {
+  const query = normalizeFlagQuery(new URLSearchParams('tenant=Alpha&flag_color=green&reviewed_preset=exclude_3d&reviewed_to=2026-11-17T16:59:59.999Z'));
+  const params = flagScopeParams(query);
+  assert.equal(params.get('reviewed_preset'), 'exclude_3d');
+  assert.equal(params.get('reviewed_to'), '2026-11-17T16:59:59.999Z');
+
+  const expParams = flagExportParams(query, ['Rule A']);
+  assert.equal(expParams.get('reviewed_to'), '2026-11-17T16:59:59.999Z');
+
+  const html = renderFlagsPage(query, {
+    counts: {green: {total: 1, pending: 1, done: 0}, yellow: {total: 0, pending: 0, done: 0}, red: {total: 0, pending: 0, done: 0}},
+    total_alerts: 1,
+    total_groups: 1,
+    groups: [{key: 'Rule A', alert_count: 1, event_hits: 1, rule_status: 'pending'}],
+  }, {
+    currentUser: {username: 'analyst1', role: 'analyst'},
+  });
+  assert.match(html, /id="flag-review-preset"/);
+  assert.match(html, /@analyst1/);
+  assert.match(html, /Filter waktu review/);
+});

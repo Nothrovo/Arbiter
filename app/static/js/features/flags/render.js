@@ -1,6 +1,6 @@
 import {esc, icon, severity, formatTime, emptyState, errorState, loadingRows} from '../../ui/primitives.js';
 import {withParams} from '../../router.js';
-import {tenantValues} from '../../state/scope.js';
+import {REVIEW_DATE_PRESETS, localDateInputValue, reviewDateLabel, tenantValues} from '../../state/scope.js';
 import {
   FLAG_TABS,
   RULE_STATUS_FILTERS,
@@ -255,6 +255,13 @@ export function renderFlagsPage(query, data = null, state = {}) {
   const groupOptions = FLAG_GROUP_BY_OPTIONS.map(([val, label]) =>
     `<option value="${val}" ${query.group_by === val ? 'selected' : ''}>${esc(label)}</option>`
   ).join('');
+  const activeReviewPreset = query.reviewed_preset || ((query.reviewed_from || query.reviewed_to) ? 'custom' : '');
+  const reviewPresetOptions = REVIEW_DATE_PRESETS.map(([val, label]) =>
+    `<option value="${esc(val)}" ${activeReviewPreset === val ? 'selected' : ''}>${esc(label)}</option>`
+  ).join('');
+  const activeReviewLabel = reviewDateLabel(query);
+  const currentUser = state.currentUser || null;
+  const isAnalyst = currentUser?.role === 'analyst';
 
   const noticeKind = isRed ? 'warning' : 'info';
   const resultsContent = state.error
@@ -278,18 +285,34 @@ export function renderFlagsPage(query, data = null, state = {}) {
     <div class="flag-tabs" role="tablist" aria-label="Kategori warna Flag">${tabsHTML}</div>
 
     <div class="notice" data-kind="${noticeKind}" style="margin-bottom:14px;">
-      <p><strong>Flag ${esc(activeMeta.label)} (${esc(activeMeta.title)}):</strong> ${esc(activeMeta.description)}</p>
+      <p><strong>Flag ${esc(activeMeta.label)} (${esc(activeMeta.title)}):</strong> ${esc(activeMeta.description)}${isAnalyst ? ` <span class="meta">· Menampilkan alert Flag milik akun Anda (@${esc(currentUser.username)}).</span>` : ''}</p>
     </div>
 
     <div class="flag-filter-bar">
       ${ruleFiltersHTML}
-      <span class="meta">${data && !data.pattern_required ? `<strong class="num">${Number(data.total_groups || 0).toLocaleString('id-ID')}</strong> grup pola · <strong class="num">${Number(data.total_alerts || 0).toLocaleString('id-ID')}</strong> alert` : ''}</span>
+      <span class="meta">${data && !data.pattern_required ? `<strong class="num">${Number(data.total_groups || 0).toLocaleString('id-ID')}</strong> grup pola · <strong class="num">${Number(data.total_alerts || 0).toLocaleString('id-ID')}</strong> alert${activeReviewLabel ? ` · Filter waktu review: <strong>${esc(activeReviewLabel)}</strong>` : ''}` : ''}</span>
     </div>
 
     <section class="flag-controls" aria-label="Kontrol pengelompokan pola">
       <div class="field">
         <label for="flag-group-by">Kelompokkan berdasarkan</label>
         <select class="select" id="flag-group-by" name="group_by">${groupOptions}</select>
+      </div>
+      <div class="field">
+        <label for="flag-review-preset">Waktu review</label>
+        <select class="select" id="flag-review-preset" name="reviewed_preset">${reviewPresetOptions}</select>
+      </div>
+      <div class="flag-pattern-controls" id="flag-review-custom" style="display:${activeReviewPreset === 'custom' ? 'flex' : 'none'}">
+        <div class="field">
+          <label for="flag-reviewed-from">Dari</label>
+          <input class="input" id="flag-reviewed-from" type="date" value="${esc(localDateInputValue(query.reviewed_from))}">
+        </div>
+        <div class="field">
+          <label for="flag-reviewed-to">Sampai</label>
+          <input class="input" id="flag-reviewed-to" type="date" value="${esc(localDateInputValue(query.reviewed_to))}">
+        </div>
+        <button class="button primary" type="button" data-action="flag-apply-reviewed-date">Terapkan</button>
+        ${(query.reviewed_from || query.reviewed_to || query.reviewed_preset) ? '<button class="button text-button" type="button" data-action="flag-clear-reviewed-date">Reset</button>' : ''}
       </div>
       <div class="flag-pattern-controls" id="flag-pattern-wrap" style="display:${query.group_by === 'pattern' ? 'flex' : 'none'}">
         <div class="field">

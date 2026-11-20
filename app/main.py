@@ -76,7 +76,7 @@ from app.filters import build_filter_sql, parse_filters
 from app.parser import parse_export
 from app.privacy import sanitize_text
 from app.pull_jobs import cancel_job, get_job, list_jobs, start_pull_job
-from app.query import alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS, FACET_COLUMNS, is_malicious_alert_record
+from app.query import REVIEWER_IDENTITY_SQL, alert_where, normalize_tenants, positive_ids, tenant_clause, validated_group_id, PIVOT_DEFINITIONS, FACET_COLUMNS, is_malicious_alert_record
 from app.settings import (
     _normalize_wazuh_timestamp,
     _valid_timestamp,
@@ -307,9 +307,22 @@ def _savepoint(conn):
         yield
 
 
-def _flag_counts(conn, tenant: str | list[str] | tuple[str, ...] | None = "all") -> dict[str, Any]:
+def _flag_counts(
+    conn,
+    tenant: str | list[str] | tuple[str, ...] | None = "all",
+    owner_reviewer: str = "",
+) -> dict[str, Any]:
     t_sql, t_params = tenant_clause("a", tenant)
-    t_where = f"WHERE {t_sql}" if t_sql else ""
+    clauses: list[str] = []
+    params: list[Any] = []
+    if t_sql:
+        clauses.append(t_sql)
+        params.extend(t_params)
+    owner = str(owner_reviewer or "").strip()
+    if owner:
+        clauses.append(f"{REVIEWER_IDENTITY_SQL} = %s")
+        params.append(owner)
+    t_where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     try:
         with _savepoint(conn):
             row = conn.execute(
@@ -322,7 +335,7 @@ def _flag_counts(conn, tenant: str | list[str] | tuple[str, ...] | None = "all")
                         COUNT(*) FILTER (WHERE a.flag_color = 'yellow' AND a.rule_status = 'done') AS yellow_done,
                         COUNT(*) FILTER (WHERE a.flag_color = 'red') AS red_total
                     FROM wazuh.alerts a {t_where}""",
-                t_params,
+                params,
             ).fetchone()
     except Exception:
         row = None
@@ -380,6 +393,9 @@ def _build_flag_scope_where(
     group_key: str | None = None,
     pattern: str = "",
     pattern_mode: str = "contains",
+    owner_reviewer: str = "",
+    reviewed_from: str = "",
+    reviewed_to: str = "",
 ) -> tuple[str, list[Any]]:
     color = str(flag_color or "").strip().lower()
     if color not in ALLOWED_FLAG_COLORS:
@@ -393,6 +409,16 @@ def _build_flag_scope_where(
     if t_sql:
         clauses.append(t_sql)
         params.extend(t_params)
+    owner = str(owner_reviewer or "").strip()
+    if owner:
+        clauses.append(f"{REVIEWER_IDENTITY_SQL} = %s")
+        params.append(owner)
+    if reviewed_from and str(reviewed_from).strip():
+        clauses.append("a.reviewed_at >= %s")
+        params.append(str(reviewed_from).strip())
+    if reviewed_to and str(reviewed_to).strip():
+        clauses.append("a.reviewed_at <= %s")
+        params.append(str(reviewed_to).strip())
     if color != "red":
         if r_status == "pending":
             clauses.append("COALESCE(NULLIF(a.rule_status, ''), 'pending') != 'done'")
@@ -437,6 +463,7 @@ def _apply_flag_update(
     auto_review: bool,
     reviewer_notes: str,
     tenant: Any,
+    owner_reviewer: str = "",
 ) -> dict[str, Any]:
     if not clean_pks:
         raise HTTPException(status_code=400, detail="Pilih minimal satu alert.")
@@ -463,7 +490,7 @@ def _apply_flag_update(
             "count": len(clean_pks),
             "flag_color": None,
             "flagged_by": None,
-            "summary": _flag_counts(conn, tenant),
+            "summary": _flag_counts(conn, tenant, owner_reviewer=owner_reviewer),
         }
 
     if not auto_review:
@@ -551,15 +578,78 @@ def _apply_flag_update(
         "flag_color": flag_color,
         "verdict": mapped_verdict,
         "flagged_by": actor,
-        "summary": _flag_counts(conn, tenant),
+        "summary": _flag_counts(conn, tenant, owner_reviewer=owner_reviewer),
     }
 
 
+def _request_user(request: Request | None) -> dict[str, Any] | None:
+    if request is None:
+        return None
+    return getattr(request.state, "user", None) or _extract_request_user(request)
+
+
+def _analyst_username(request: Request | None) -> str | None:
+    """Return username ONLY when authenticated with role 'analyst'.
+
+    Admin, director, and unauthenticated PORT==0 synthetic unit test calls
+    return None so full team visibility and test fixtures remain intact.
+    """
+    user = _request_user(request)
+    if not user:
+        return None
+    if str(user.get("role") or "").strip().lower() != "analyst":
+        return None
+    username = str(user.get("username") or "").strip()
+    return username or None
+
+
+def _alert_review_owner(row: dict[str, Any]) -> str:
+    for col in ("reviewed_by", "flagged_by", "claimed_by"):
+        val = str(row.get(col) or "").strip()
+        if val:
+            return val
+    return "admin"
+
+
+def _assert_analyst_can_access_alerts(
+    conn,
+    target_pks: list[int],
+    request: Request | None,
+    *,
+    action_label: str = "mengubah, unflag, atau unreview",
+) -> str | None:
+    analyst_user = _analyst_username(request)
+    if not analyst_user or not target_pks:
+        return analyst_user
+    try:
+        with _savepoint(conn):
+            rows = conn.execute(
+                "SELECT id, is_reviewed, reviewed_by, flagged_by, claimed_by, flag_color FROM wazuh.alerts WHERE id = ANY(%s)",
+                (target_pks,),
+            ).fetchall()
+    except Exception:
+        rows = conn.execute(
+            "SELECT id, is_reviewed, reviewed_by, claimed_by FROM wazuh.alerts WHERE id = ANY(%s)",
+            (target_pks,),
+        ).fetchall()
+    for row in rows:
+        record = dict(row)
+        has_review = bool(record.get("is_reviewed")) or bool(str(record.get("flag_color") or "").strip())
+        if not has_review:
+            continue
+        owner = _alert_review_owner(record)
+        if owner.lower() != analyst_user.lower():
+            raise HTTPException(
+                status_code=403,
+                detail=f"Akses ditolak. Analis tidak dapat {action_label} alert yang direview oleh user lain (@{owner}).",
+            )
+    return analyst_user
+
+
 def _current_username(request: Request | None, fallback: str = "analyst") -> str:
-    if request is not None:
-        user = getattr(request.state, "user", None) or _extract_request_user(request)
-        if user and user.get("username"):
-            return str(user["username"])
+    user = _request_user(request)
+    if user and user.get("username"):
+        return str(user["username"])
     return fallback
 
 
@@ -589,6 +679,7 @@ def _exclusion_document(conn) -> dict[str, Any]:
 
 @app.get("/api/alerts")
 def list_alerts(
+    request: Request,
     q: str = "",
     tenant: list[str] = Query(default=["all"]),
     status: str = "all",
@@ -615,6 +706,7 @@ def list_alerts(
     if offset < 0:
         raise HTTPException(status_code=422, detail="offset must be zero or greater.")
     limit = min(max(limit, 1), 10000)
+    analyst_user = _analyst_username(request)
     where_sql, params = alert_where(
         q=q, tenant=tenant, status=status, group_id=group_id,
         filter_preset=filter_preset, review_status=review_status,
@@ -623,6 +715,7 @@ def list_alerts(
         secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
         alert_ids=alert_ids, filters=filters,
         reviewed_from=reviewed_from, reviewed_to=reviewed_to,
+        owner_reviewer=analyst_user or "",
     )
 
     # Sort order
@@ -695,7 +788,7 @@ def api_list_alert_pulls(limit: int = Query(default=10, ge=1, le=50)):
 
 
 @app.get("/api/alerts/{alert_id}")
-def get_alert_detail(alert_id: int, tenant: list[str] = Query(default=["all"])):
+def get_alert_detail(alert_id: int, request: Request, tenant: list[str] = Query(default=["all"])):
     where = "a.id = %s"
     params: list[Any] = [alert_id]
     tenant_sql, tenant_params = tenant_clause("a", tenant)
@@ -741,6 +834,14 @@ def get_alert_detail(alert_id: int, tenant: list[str] = Query(default=["all"])):
             row = record
     if row is None:
         raise HTTPException(status_code=404, detail="Alert not found in this scope.")
+    analyst_user = _analyst_username(request)
+    if analyst_user:
+        has_review = bool(row.get("is_reviewed")) or bool(str(row.get("flag_color") or "").strip())
+        if has_review and _alert_review_owner(row).lower() != analyst_user.lower():
+            raise HTTPException(
+                status_code=403,
+                detail="Akses ditolak. Analis hanya dapat melihat hasil review milik akun sendiri.",
+            )
     return row
 
 
@@ -753,10 +854,12 @@ def claim_alert(
 ):
     """PRD Section 3.B Atomic Locking (Optimistic Update) for alert claiming."""
     data = payload if isinstance(payload, dict) else {}
-    user_id = str(data.get("user_id") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    user_id = analyst_user or (str(data.get("user_id") or _current_username(request)).strip() or "analyst")
     now_iso = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         _validate_membership(conn, [alert_id], tenant)
+        _assert_analyst_can_access_alerts(conn, [alert_id], request, action_label="mengklaim")
         _expire_stale_claims(conn)
         cur = conn.execute(
             """UPDATE wazuh.alerts
@@ -794,7 +897,8 @@ def heartbeat_alert_claim(
 ):
     """PRD Section 3.B Heartbeat: refresh claimed_at every 2 minutes while analyst inspects alert."""
     data = payload if isinstance(payload, dict) else {}
-    user_id = str(data.get("user_id") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    user_id = analyst_user or (str(data.get("user_id") or _current_username(request)).strip() or "analyst")
     now_iso = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         _validate_membership(conn, [alert_id], tenant)
@@ -828,9 +932,10 @@ def release_alert_claim(
 ):
     """Release an active claim back to unread so another analyst can claim it."""
     data = payload if isinstance(payload, dict) else {}
-    user = getattr(request.state, "user", None) or _extract_request_user(request)
-    user_id = str(data.get("user_id") or (user.get("username") if user else "analyst")).strip() or "analyst"
-    is_privileged = bool(user and user.get("role") in ("admin", "director")) or bool(data.get("force"))
+    user = _request_user(request)
+    analyst_user = _analyst_username(request)
+    user_id = analyst_user or (str(data.get("user_id") or (user.get("username") if user else "analyst")).strip() or "analyst")
+    is_privileged = (not analyst_user) and (bool(user and user.get("role") in ("admin", "director")) or bool(data.get("force")))
     with get_db() as conn:
         _validate_membership(conn, [alert_id], tenant)
         if is_privileged:
@@ -983,6 +1088,11 @@ def update_alert_reviewer(
     tenant: list[str] = Query(default=["all"]),
 ):
     """Reassign which account is recorded as the reviewer of an already reviewed alert."""
+    if _analyst_username(request) is not None:
+        raise HTTPException(
+            status_code=403,
+            detail="Akses ditolak. Hanya Admin atau Director yang dapat mengubah reviewer alert.",
+        )
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Payload reviewer tidak valid.")
     reviewer = str(payload.get("reviewed_by") or "").strip()
@@ -1034,10 +1144,12 @@ def update_alert_review(
         flag_color = f_clean
         if verdict is None:
             verdict = FLAG_TO_DEFAULT_VERDICT[flag_color]
-    reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    reviewer = analyst_user or (str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst")
     new_status = "reviewed" if is_reviewed else "unread"
     with get_db() as conn:
         _validate_membership(conn, [alert_id], tenant)
+        _assert_analyst_can_access_alerts(conn, [alert_id], request)
         prev = conn.execute("SELECT tenant, is_reviewed FROM wazuh.alerts WHERE id = %s", (alert_id,)).fetchone()
         _update_alerts_review_state(
             conn,
@@ -1080,12 +1192,14 @@ def batch_update_review(
         if verdict is None:
             verdict = FLAG_TO_DEFAULT_VERDICT[flag_color]
     notes = str(payload.get("reviewer_notes") or "").strip()
-    reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    reviewer = analyst_user or (str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst")
     new_status = "reviewed" if is_reviewed else "unread"
     if not alert_ids:
         raise HTTPException(status_code=400, detail="No valid alert IDs provided.")
     with get_db() as conn:
         clean_pks = _validate_membership(conn, alert_ids, tenant)
+        _assert_analyst_can_access_alerts(conn, clean_pks, request)
         _update_alerts_review_state(
             conn,
             clean_pks,
@@ -1132,7 +1246,8 @@ def bulk_verdict_by_pattern(
     only_unreviewed = bool(payload.get("only_unreviewed", True))
     default_label = f"Flag {flag_color.upper()}" if flag_color else raw_verdict.upper()
     notes = str(payload.get("reviewer_notes") or f"Bulk pattern: {default_label}").strip()
-    reviewer = str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    reviewer = analyst_user or (str(payload.get("reviewed_by") or _current_username(request)).strip() or "analyst")
 
     if not any([rule_id, description, source_ip, agent_name, q]):
         raise HTTPException(
@@ -1148,6 +1263,9 @@ def bulk_verdict_by_pattern(
         params.extend(t_params)
     if only_unreviewed:
         clauses.append("a.is_reviewed = false")
+    elif analyst_user:
+        clauses.append(f"(a.is_reviewed = false OR a.is_reviewed IS NULL OR {REVIEWER_IDENTITY_SQL} = %s)")
+        params.append(analyst_user)
     if rule_id:
         clauses.append("a.rule_id = %s")
         params.append(rule_id)
@@ -1229,7 +1347,7 @@ def bulk_verdict_by_pattern(
 
 
 @app.post("/api/alerts/full-logs")
-def bulk_full_logs(payload: dict[str, Any], tenant: list[str] = Query(default=["all"])):
+def bulk_full_logs(payload: dict[str, Any], request: Request, tenant: list[str] = Query(default=["all"])):
     """Return full_log for a set of in-scope alert ids, for group-level copy.
 
     Mirrors the single-alert detail endpoint: full_log is the analyst's own
@@ -1242,6 +1360,7 @@ def bulk_full_logs(payload: dict[str, Any], tenant: list[str] = Query(default=["
         raise HTTPException(status_code=400, detail="alert_ids harus berupa daftar id alert.")
     with get_db() as conn:
         clean_pks = _validate_membership(conn, alert_ids, tenant)
+        _assert_analyst_can_access_alerts(conn, clean_pks, request, action_label="melihat log")
     with get_db() as conn:
         rows = conn.execute(
             """SELECT a.id, a.alert_id, a.tenant, a.description, a.source_ip, a.agent_name,
@@ -1611,6 +1730,7 @@ def remove_group_member(group_id: str, alert_pk: int, tenant: list[str] = Query(
 
 @app.get("/api/stats")
 def get_stats(
+    request: Request,
     pivot_by: str = "rule_description",
     secondary_pivot: str | None = None,
     exclude_facet: str = "",
@@ -1668,6 +1788,8 @@ def get_stats(
     if time_from and time_to and str(time_from).strip() > str(time_to).strip():
         raise HTTPException(status_code=422, detail="time_from must be before or equal to time_to.")
 
+    analyst_user = _analyst_username(request)
+    owner_reviewer = analyst_user or ""
     where_sql, base_params = alert_where(
         q=q,
         tenant=tenant,
@@ -1687,6 +1809,7 @@ def get_stats(
         filters=filters,
         reviewed_from=reviewed_from,
         reviewed_to=reviewed_to,
+        owner_reviewer=owner_reviewer,
     )
     parent_where_sql, parent_base_params = alert_where(
         q=q,
@@ -1703,6 +1826,7 @@ def get_stats(
         filters=filters,
         reviewed_from=reviewed_from,
         reviewed_to=reviewed_to,
+        owner_reviewer=owner_reviewer,
     )
     workspace_where_sql, workspace_base_params = alert_where(
         q=q,
@@ -1717,6 +1841,7 @@ def get_stats(
         filters=filters,
         reviewed_from=reviewed_from,
         reviewed_to=reviewed_to,
+        owner_reviewer=owner_reviewer,
     )
 
     metric_expr = "COUNT(*)" if metric == "alerts" else "COALESCE(SUM(COALESCE(a.hit_count, 1)), 0)"
@@ -1960,7 +2085,7 @@ def get_stats(
 
 
 @app.post("/api/stats/facet-alert-ids")
-def get_facet_alert_ids(payload: dict[str, Any]):
+def get_facet_alert_ids(payload: dict[str, Any], request: Request):
     tenant = payload.get("tenant", ["all"])
     if isinstance(tenant, str):
         tenant = [tenant]
@@ -1990,6 +2115,7 @@ def get_facet_alert_ids(payload: dict[str, Any]):
         time_preset=time_preset, time_from=time_from, time_to=time_to,
         facet=facet, facet_value=facet_value, filters=filters,
         reviewed_from=reviewed_from, reviewed_to=reviewed_to,
+        owner_reviewer=_analyst_username(request) or "",
     )
 
     if secondary_facet and secondary_facet_values:
@@ -2028,6 +2154,7 @@ def get_facet_alert_ids(payload: dict[str, Any]):
 
 @app.get("/api/triage/summary")
 def triage_summary(
+    request: Request,
     q: str = "",
     secondary_facet: str = "",
     secondary_facet_value: str = "",
@@ -2064,6 +2191,7 @@ def triage_summary(
         filters=filters,
         reviewed_from=reviewed_from,
         reviewed_to=reviewed_to,
+        owner_reviewer=_analyst_username(request) or "",
     )
 
     with get_db() as conn:
@@ -2133,11 +2261,6 @@ def triage_summary(
         },
         "top_rule": top_rule,
     }
-
-
-REVIEWER_IDENTITY_SQL = (
-    "COALESCE(NULLIF(a.reviewed_by, ''), NULLIF(a.flagged_by, ''), NULLIF(a.claimed_by, ''), 'admin')"
-)
 
 
 def _review_activity_payload(
@@ -2214,6 +2337,7 @@ def _review_activity_payload(
 
 @app.get("/api/reviews/activity")
 def review_activity(
+    request: Request,
     tenant: list[str] = Query(default=["all"]),
     days: int = 14,
     tz_offset_minutes: int = 0,
@@ -2226,8 +2350,9 @@ def review_activity(
     if not (1 <= days <= 90):
         raise HTTPException(status_code=422, detail="days must be between 1 and 90.")
     offset = max(-840, min(840, int(tz_offset_minutes or 0)))
+    analyst_user = _analyst_username(request)
     with get_db() as conn:
-        return _review_activity_payload(conn, tenant, offset, days)
+        return _review_activity_payload(conn, tenant, offset, days, reviewer=analyst_user)
 
 
 def _review_local_date(value: Any, offset_minutes: int) -> str | None:
@@ -2253,6 +2378,7 @@ def _review_local_date(value: Any, offset_minutes: int) -> str | None:
 
 @app.get("/api/suggestions")
 def get_suggestions(
+    request: Request,
     use_local_ai: bool = False, tenant: list[str] = Query(default=["all"]), q: str = "",
     review_status: str = "all", filter_preset: str = "", status: str = "all",
     group_id: str | None = None, time_from: str = "", time_to: str = "",
@@ -2262,6 +2388,7 @@ def get_suggestions(
         tenant=tenant, q=q, review_status=review_status, filter_preset=filter_preset,
         status=status, group_id=group_id, time_from=time_from, time_to=time_to,
         filters=filters, reviewed_from=reviewed_from, reviewed_to=reviewed_to,
+        owner_reviewer=_analyst_username(request) or "",
     )
     with get_db() as conn:
         where, params = with_exclusions(where, params, _exclusion_document(conn))
@@ -2617,8 +2744,14 @@ def _build_ai_triage_where(
     min_rule_level: int,
     max_rule_level: int | None,
     filters: Any = None,
+    owner_reviewer: str = "",
 ) -> tuple[str, list[Any]]:
-    where, params = alert_where(tenant=tenant, review_status=review_status, filters=filters)
+    where, params = alert_where(
+        tenant=tenant,
+        review_status=review_status,
+        filters=filters,
+        owner_reviewer=owner_reviewer,
+    )
     level_clause = "a.rule_level >= %s"
     level_params: list[Any] = [min_rule_level]
     if max_rule_level is not None:
@@ -2889,8 +3022,10 @@ def _sync_triage_groups_with_saved_incidents(
 
 
 @app.get("/api/ai/triage")
-def api_get_ai_triage(tenant: list[str] = Query(None)):
+def api_get_ai_triage(request: Request, tenant: list[str] = Query(None)):
     """Return the persisted AI triage state, automatically merging any new alerts within the 17:00 WIB window."""
+    analyst_user = _analyst_username(request)
+    owner_reviewer = analyst_user or ""
     norm_tenants = list(normalize_tenants(tenant)) or ["all"]
     with get_db() as conn:
         state_key, state = _ai_triage_pick_state(conn, norm_tenants)
@@ -2930,6 +3065,9 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             if filter_sql:
                 id_where += f" AND {filter_sql}"
                 id_params.extend(filter_params)
+            if analyst_user:
+                id_where += f" AND (a.is_reviewed = false OR a.is_reviewed IS NULL OR {REVIEWER_IDENTITY_SQL} = %s)"
+                id_params.append(analyst_user)
             id_where, id_params = with_exclusions(id_where, id_params, excl_doc)
             existing_rows = conn.execute(
                 f"""SELECT a.id, a.alert_id, a.timestamp, a.tenant, a.agent_name, a.agent_ip,
@@ -2942,7 +3080,8 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
             ).fetchall()
 
         base_where, base_params = _build_ai_triage_where(
-            tenant, review_status, min_rule_level, max_rule_level, filters=saved_filters,
+            tenant, review_status, min_rule_level, max_rule_level,
+            filters=saved_filters, owner_reviewer=owner_reviewer,
         )
         base_where, base_params = with_exclusions(base_where, base_params, excl_doc)
         total = int(progress_state.get("total") or 0) if progress_state else 0
@@ -3067,7 +3206,7 @@ def api_get_ai_triage(tenant: list[str] = Query(None)):
 
 
 @app.post("/api/ai/triage")
-def api_ai_triage(payload: dict[str, Any]):
+def api_ai_triage(payload: dict[str, Any], request: Request):
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Payload AI triage tidak valid.")
     raw_limit = payload.get("limit")
@@ -3146,7 +3285,8 @@ def api_ai_triage(payload: dict[str, Any]):
                     processed_ids, progress_state = _ai_triage_progress(prev_state, scope_sig)
 
         base_where, base_params = _build_ai_triage_where(
-            tenant, review_status, min_rule_level, max_rule_level, filters=parsed_filters,
+            tenant, review_status, min_rule_level, max_rule_level,
+            filters=parsed_filters, owner_reviewer=_analyst_username(request) or "",
         )
         base_where, base_params = with_exclusions(base_where, base_params, _exclusion_document(conn))
         total = int(progress_state.get("total") or 0) if progress_state else 0
@@ -3526,6 +3666,7 @@ def _get_alerts_for_export(
     facet: str = "", facet_value: str = "",
     secondary_facet: str = "", secondary_facet_value: str = "",
     filters: str = "", reviewed_from: str = "", reviewed_to: str = "",
+    owner_reviewer: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     where, params = alert_where(
         q=q, tenant=tenant, review_status=review_status, filter_preset=filter_preset,
@@ -3533,6 +3674,7 @@ def _get_alerts_for_export(
         facet=facet, facet_value=facet_value,
         secondary_facet=secondary_facet, secondary_facet_value=secondary_facet_value,
         filters=filters, reviewed_from=reviewed_from, reviewed_to=reviewed_to,
+        owner_reviewer=owner_reviewer,
     )
     clean_pks: list[int] = []
     if alert_ids:
@@ -3620,15 +3762,15 @@ def _record_report_audit_log(
 
 
 @app.get("/api/export/preview")
-def export_preview(scope: dict[str, Any] = Depends(export_scope)):
-    alerts, meta = _get_alerts_for_export(**scope)
+def export_preview(request: Request, scope: dict[str, Any] = Depends(export_scope)):
+    alerts, meta = _get_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     return {"count": len(alerts), "meta": meta, "scope": scope,
             "html": generate_gdocs_html_report(alerts, meta), "truncated": False}
 
 
 @app.get("/api/export/report-html", response_class=HTMLResponse)
 def export_gdocs_html(request: Request, scope: dict[str, Any] = Depends(export_scope)):
-    alerts, meta = _get_alerts_for_export(**scope)
+    alerts, meta = _get_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     html_content = generate_gdocs_html_report(alerts, meta)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan HTML"), format_name="Google Docs HTML", tenant=scope.get("tenant"), alert_count=len(alerts))
     return HTMLResponse(content=html_content, headers={"X-Arbiter-Count": str(len(alerts))})
@@ -3636,7 +3778,7 @@ def export_gdocs_html(request: Request, scope: dict[str, Any] = Depends(export_s
 
 @app.get("/api/export/docx")
 def export_docx(request: Request, scope: dict[str, Any] = Depends(export_scope)):
-    alerts, meta = _get_alerts_for_export(**scope)
+    alerts, meta = _get_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     buf = generate_docx_landscape_report(alerts, meta)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Word"), format_name="Word (.docx)", tenant=scope.get("tenant"), alert_count=len(alerts))
     filename = f"Arbiter-Report-{meta.get('title', 'SOC')[:24].replace(' ', '_')}.docx"
@@ -3649,7 +3791,7 @@ def export_docx(request: Request, scope: dict[str, Any] = Depends(export_scope))
 
 @app.get("/api/export/xlsx")
 def export_xlsx(request: Request, scope: dict[str, Any] = Depends(export_scope)):
-    alerts, meta = _get_alerts_for_export(**scope)
+    alerts, meta = _get_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     buf = generate_xlsx_workbook(alerts)
     _record_report_audit_log(request, title=str(meta.get("title") or "Workbook Excel"), format_name="Excel (.xlsx)", tenant=scope.get("tenant"), alert_count=len(alerts))
     filename = "Arbiter-Alerts-Export.xlsx"
@@ -3662,7 +3804,7 @@ def export_xlsx(request: Request, scope: dict[str, Any] = Depends(export_scope))
 
 @app.get("/api/export/tsv")
 def export_tsv(request: Request, scope: dict[str, Any] = Depends(export_scope)):
-    alerts, meta = _get_alerts_for_export(**scope)
+    alerts, meta = _get_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     tsv_content = generate_tsv_table(alerts)
     _record_report_audit_log(request, title=str(meta.get("title") or "Tabel TSV"), format_name="TSV", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=tsv_content, media_type="text/tab-separated-values; charset=utf-8",
@@ -3671,7 +3813,7 @@ def export_tsv(request: Request, scope: dict[str, Any] = Depends(export_scope)):
 
 @app.get("/api/export/markdown")
 def export_markdown(request: Request, scope: dict[str, Any] = Depends(export_scope)):
-    alerts, meta = _get_alerts_for_export(**scope)
+    alerts, meta = _get_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     md_content = generate_markdown_report(alerts, meta)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Markdown"), format_name="Markdown (.md)", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=md_content, media_type="text/markdown; charset=utf-8",
@@ -3680,7 +3822,7 @@ def export_markdown(request: Request, scope: dict[str, Any] = Depends(export_sco
 
 @app.get("/api/export.csv")
 def export_csv(request: Request, scope: dict[str, Any] = Depends(export_scope)):
-    alerts, meta = _get_alerts_for_export(**scope)
+    alerts, meta = _get_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     _record_report_audit_log(request, title=str(meta.get("title") or "Ekspor CSV"), format_name="CSV", tenant=scope.get("tenant"), alert_count=len(alerts))
     output = io.StringIO()
     from app.exports import EXPORT_KEYS, export_rows
@@ -4092,12 +4234,20 @@ def api_get_monitoring(
     today_start_local = datetime.combine(today_date, datetime.min.time(), tzinfo=timezone.utc)
     today_start_utc = (today_start_local - timedelta(minutes=offset)).isoformat()
 
+    analyst_user = _analyst_username(request)
     current_user = _current_username(request, fallback="admin")
     requested_reviewer = str(reviewer or "").strip()
     if len(requested_reviewer) > 128 or any(ord(char) < 32 for char in requested_reviewer):
         raise HTTPException(status_code=422, detail="Filter reviewer tidak valid.")
-    show_all_reviewers = requested_reviewer.lower() in {"all", "*", "semua"}
-    effective_reviewer = "" if show_all_reviewers else (requested_reviewer or current_user)
+    if analyst_user:
+        current_user = analyst_user
+        show_all_reviewers = False
+        effective_reviewer = analyst_user
+        is_default_reviewer = True
+    else:
+        show_all_reviewers = requested_reviewer.lower() in {"all", "*", "semua"}
+        effective_reviewer = "" if show_all_reviewers else (requested_reviewer or current_user)
+        is_default_reviewer = not requested_reviewer
     reviewer_cond = f"{REVIEWER_IDENTITY_SQL} = %s" if effective_reviewer else ""
 
     t_sql, t_params = tenant_clause("a", tenant)
@@ -4144,9 +4294,10 @@ def api_get_monitoring(
                 add_metric("a.verdict = 'tp'", "tp_total")
                 add_metric("a.verdict = 'fp'", "fp_total")
                 add_metric("a.verdict = 'benign'", "benign_total")
-                add_metric("a.flag_color = 'green'", "flag_green_total", scoped=False)
-                add_metric("a.flag_color = 'yellow'", "flag_yellow_total", scoped=False)
-                add_metric("a.flag_color = 'red'", "flag_red_total", scoped=False)
+                flag_scoped = bool(analyst_user)
+                add_metric("a.flag_color = 'green'", "flag_green_total", scoped=flag_scoped)
+                add_metric("a.flag_color = 'yellow'", "flag_yellow_total", scoped=flag_scoped)
+                add_metric("a.flag_color = 'red'", "flag_red_total", scoped=flag_scoped)
 
                 m_row = conn.execute(
                     f"""SELECT {', '.join(select_parts)}
@@ -4297,6 +4448,16 @@ def api_get_monitoring(
             reverse=True,
         )
 
+        if analyst_user:
+            reviewer_options = [
+                item for item in reviewer_options
+                if item["username"].lower() == analyst_user.lower()
+            ]
+            leaderboard = [
+                row for row in leaderboard
+                if str(row.get("username") or "").lower() == analyst_user.lower()
+            ]
+
         # 3. Audit Log Laporan (Published Incident Cases + Exported Reports)
         audit_logs: list[dict[str, Any]] = []
         try:
@@ -4354,7 +4515,8 @@ def api_get_monitoring(
             "current_user": current_user,
             "selected": effective_reviewer,
             "all": not effective_reviewer,
-            "is_default": not requested_reviewer,
+            "is_default": is_default_reviewer,
+            "locked": bool(analyst_user),
             "reviewers": reviewer_options,
         },
         "metrics": {
@@ -4430,19 +4592,26 @@ def api_auth_me(request: Request):
 @app.get("/api/reviewers")
 def api_reviewers(request: Request):
     """Reviewer choices for filters and review reassignment (no admin-only data)."""
+    analyst_user = _analyst_username(request)
     with get_db() as conn:
         users = list_users(conn)
-    return {
-        "reviewers": [
-            {
-                "username": str(user.get("username") or ""),
-                "display_name": str(user.get("display_name") or user.get("username") or ""),
-                "role": str(user.get("role") or "analyst"),
-            }
-            for user in users
-            if user.get("username")
+    reviewers = [
+        {
+            "username": str(user.get("username") or ""),
+            "display_name": str(user.get("display_name") or user.get("username") or ""),
+            "role": str(user.get("role") or "analyst"),
+        }
+        for user in users
+        if user.get("username")
+    ]
+    if analyst_user:
+        reviewers = [
+            item for item in reviewers
+            if item["username"].lower() == analyst_user.lower()
         ]
-    }
+        if not reviewers:
+            reviewers = [{"username": analyst_user, "display_name": analyst_user, "role": "analyst"}]
+    return {"reviewers": reviewers}
 
 
 @app.post("/api/auth/login")
@@ -4656,12 +4825,15 @@ def api_flag_alerts(
     raw_ids = payload.get("alert_ids")
     auto_review = bool(payload.get("auto_review", False))
     notes = str(payload.get("reviewer_notes") or "").strip()
-    actor = str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    owner_reviewer = analyst_user or ""
+    actor = analyst_user or (str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst")
     with get_db() as conn:
         if raw_ids is not None:
             if not isinstance(raw_ids, list) or not raw_ids:
                 raise HTTPException(status_code=400, detail="Pilih minimal satu alert.")
             clean_pks = _validate_membership(conn, raw_ids, tenant)
+            _assert_analyst_can_access_alerts(conn, clean_pks, request)
         else:
             group_by = payload.get("group_by")
             group_key = payload.get("group_key")
@@ -4677,6 +4849,9 @@ def api_flag_alerts(
                 group_key=str(group_key),
                 pattern=str(payload.get("pattern") or ""),
                 pattern_mode=str(payload.get("pattern_mode") or "contains"),
+                owner_reviewer=owner_reviewer,
+                reviewed_from=str(payload.get("reviewed_from") or ""),
+                reviewed_to=str(payload.get("reviewed_to") or ""),
             )
             matched_rows = conn.execute(
                 f"SELECT a.id FROM wazuh.alerts a {where_sql}",
@@ -4685,6 +4860,7 @@ def api_flag_alerts(
             clean_pks = [int(r["id"]) for r in matched_rows]
             if not clean_pks:
                 raise HTTPException(status_code=404, detail="Tidak ada alert yang cocok pada grup pola ini.")
+            _assert_analyst_can_access_alerts(conn, clean_pks, request)
 
         if unreview:
             _update_alerts_review_state(
@@ -4703,7 +4879,7 @@ def api_flag_alerts(
                 "is_reviewed": False,
                 "flag_color": None,
                 "flagged_by": None,
-                "summary": _flag_counts(conn, tenant),
+                "summary": _flag_counts(conn, tenant, owner_reviewer=owner_reviewer),
             }
         return _apply_flag_update(
             conn,
@@ -4713,6 +4889,7 @@ def api_flag_alerts(
             auto_review=auto_review,
             reviewer_notes=notes,
             tenant=tenant,
+            owner_reviewer=owner_reviewer,
         )
 
 
@@ -4741,9 +4918,12 @@ def api_flag_single_alert(
         )
     auto_review = bool(payload.get("auto_review", False))
     notes = str(payload.get("reviewer_notes") or "").strip()
-    actor = str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    owner_reviewer = analyst_user or ""
+    actor = analyst_user or (str(payload.get("flagged_by") or _current_username(request)).strip() or "analyst")
     with get_db() as conn:
         clean_pks = _validate_membership(conn, [alert_id], tenant)
+        _assert_analyst_can_access_alerts(conn, clean_pks, request)
         if unreview:
             _update_alerts_review_state(
                 conn,
@@ -4762,7 +4942,7 @@ def api_flag_single_alert(
                 "is_reviewed": False,
                 "flag_color": None,
                 "flagged_by": None,
-                "summary": _flag_counts(conn, tenant),
+                "summary": _flag_counts(conn, tenant, owner_reviewer=owner_reviewer),
             }
         res = _apply_flag_update(
             conn,
@@ -4772,20 +4952,23 @@ def api_flag_single_alert(
             auto_review=auto_review,
             reviewer_notes=notes,
             tenant=tenant,
+            owner_reviewer=owner_reviewer,
         )
         res["id"] = alert_id
         return res
 
 
 @app.get("/api/flags/summary")
-def api_flags_summary(tenant: list[str] = Query(default=["all"])):
+def api_flags_summary(request: Request, tenant: list[str] = Query(default=["all"])):
     normalize_tenants(tenant)
+    owner_reviewer = _analyst_username(request) or ""
     with get_db() as conn:
-        return _flag_counts(conn, tenant)
+        return _flag_counts(conn, tenant, owner_reviewer=owner_reviewer)
 
 
 @app.get("/api/flags/groups")
 def api_flags_groups(
+    request: Request,
     tenant: list[str] = Query(default=["all"]),
     flag_color: str = "green",
     rule_status: str = "pending",
@@ -4793,6 +4976,8 @@ def api_flags_groups(
     pattern: str = "",
     pattern_mode: str = "contains",
     q: str = "",
+    reviewed_from: str = "",
+    reviewed_to: str = "",
     limit: int = 200,
 ):
     normalize_tenants(tenant)
@@ -4801,11 +4986,15 @@ def api_flags_groups(
     limit = min(max(int(limit or 200), 1), 500)
     color = str(flag_color or "green").strip().lower()
     effective_rule_status = "all" if color == "red" else str(rule_status or "pending").strip().lower()
+    owner_reviewer = _analyst_username(request) or ""
     where_sql, params = _build_flag_scope_where(
         tenant=tenant,
         flag_color=color,
         rule_status=effective_rule_status,
         q=q,
+        owner_reviewer=owner_reviewer,
+        reviewed_from=reviewed_from,
+        reviewed_to=reviewed_to,
     )
 
     dim_params: list[Any] = []
@@ -4822,7 +5011,7 @@ def api_flags_groups(
         dim_sql = PIVOT_DEFINITIONS[group_by]["sql"]
 
     with get_db() as conn:
-        summary = _flag_counts(conn, tenant)
+        summary = _flag_counts(conn, tenant, owner_reviewer=owner_reviewer)
         if pattern_required:
             return {
                 "flag_color": color,
@@ -4910,6 +5099,7 @@ def api_flags_groups(
 
 @app.get("/api/flags/alerts")
 def api_flags_alerts(
+    request: Request,
     tenant: list[str] = Query(default=["all"]),
     flag_color: str = "green",
     rule_status: str = "pending",
@@ -4918,6 +5108,8 @@ def api_flags_alerts(
     pattern: str = "",
     pattern_mode: str = "contains",
     q: str = "",
+    reviewed_from: str = "",
+    reviewed_to: str = "",
     limit: int = 100,
     offset: int = 0,
 ):
@@ -4935,6 +5127,9 @@ def api_flags_alerts(
         group_key=group_key,
         pattern=pattern,
         pattern_mode=pattern_mode,
+        owner_reviewer=_analyst_username(request) or "",
+        reviewed_from=reviewed_from,
+        reviewed_to=reviewed_to,
     )
     with get_db() as conn:
         total_row = conn.execute(
@@ -4964,6 +5159,8 @@ def flag_export_scope(
     pattern: str = "",
     pattern_mode: str = "contains",
     q: str = "",
+    reviewed_from: str = "",
+    reviewed_to: str = "",
     group_key: list[str] = Query(default=[]),
 ) -> dict[str, Any]:
     """Canonical export scope for flagged alerts (flag category + selected groups)."""
@@ -4988,6 +5185,8 @@ def flag_export_scope(
         pattern=str(pattern or "").strip(),
         pattern_mode=mode,
         q=str(q or "").strip(),
+        reviewed_from=str(reviewed_from or "").strip(),
+        reviewed_to=str(reviewed_to or "").strip(),
         group_key=keys,
     )
 
@@ -5002,12 +5201,18 @@ def _get_flagged_alerts_for_export(
     pattern_mode: str,
     q: str,
     group_key: list[str],
+    reviewed_from: str = "",
+    reviewed_to: str = "",
+    owner_reviewer: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     where_sql, params = _build_flag_scope_where(
         tenant=tenant,
         flag_color=flag_color,
         rule_status=rule_status,
         q=q,
+        owner_reviewer=owner_reviewer,
+        reviewed_from=reviewed_from,
+        reviewed_to=reviewed_to,
     )
     keys = [str(key) for key in (group_key or [])]
     if keys:
@@ -5062,8 +5267,8 @@ def _get_flagged_alerts_for_export(
 
 
 @app.get("/api/flags/export/preview")
-def flag_export_preview(scope: dict[str, Any] = Depends(flag_export_scope)):
-    alerts, meta = _get_flagged_alerts_for_export(**scope)
+def flag_export_preview(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
+    alerts, meta = _get_flagged_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     return {
         "count": len(alerts),
         "meta": meta,
@@ -5075,7 +5280,7 @@ def flag_export_preview(scope: dict[str, Any] = Depends(flag_export_scope)):
 
 @app.get("/api/flags/export/report-html", response_class=HTMLResponse)
 def flag_export_html(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
-    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    alerts, meta = _get_flagged_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     html_content = generate_gdocs_html_report(alerts, meta, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag HTML"), format_name="Google Docs HTML (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
     return HTMLResponse(content=html_content, headers={"X-Arbiter-Count": str(len(alerts))})
@@ -5083,7 +5288,7 @@ def flag_export_html(request: Request, scope: dict[str, Any] = Depends(flag_expo
 
 @app.get("/api/flags/export/docx")
 def flag_export_docx(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
-    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    alerts, meta = _get_flagged_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     buf = generate_docx_landscape_report(alerts, meta, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag Word"), format_name="Word (.docx) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
     return StreamingResponse(
@@ -5095,7 +5300,7 @@ def flag_export_docx(request: Request, scope: dict[str, Any] = Depends(flag_expo
 
 @app.get("/api/flags/export/xlsx")
 def flag_export_xlsx(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
-    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    alerts, meta = _get_flagged_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     buf = generate_xlsx_workbook(alerts, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Workbook Flag Excel"), format_name="Excel (.xlsx) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
     return StreamingResponse(
@@ -5107,7 +5312,7 @@ def flag_export_xlsx(request: Request, scope: dict[str, Any] = Depends(flag_expo
 
 @app.get("/api/flags/export/tsv")
 def flag_export_tsv(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
-    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    alerts, meta = _get_flagged_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     content = generate_tsv_table(alerts, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Tabel Flag TSV"), format_name="TSV (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=content, media_type="text/tab-separated-values; charset=utf-8",
@@ -5116,7 +5321,7 @@ def flag_export_tsv(request: Request, scope: dict[str, Any] = Depends(flag_expor
 
 @app.get("/api/flags/export/markdown")
 def flag_export_markdown(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
-    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    alerts, meta = _get_flagged_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     content = generate_markdown_report(alerts, meta, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag Markdown"), format_name="Markdown (.md) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=content, media_type="text/markdown; charset=utf-8",
@@ -5127,7 +5332,7 @@ def flag_export_markdown(request: Request, scope: dict[str, Any] = Depends(flag_
 def flag_export_csv(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
     from app.exports import export_rows
 
-    alerts, meta = _get_flagged_alerts_for_export(**scope)
+    alerts, meta = _get_flagged_alerts_for_export(**scope, owner_reviewer=_analyst_username(request) or "")
     _record_report_audit_log(request, title=str(meta.get("title") or "Ekspor Flag CSV"), format_name="CSV (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=[key for key, _label in FLAG_EXPORT_COLUMNS], extrasaction="ignore")
@@ -5154,7 +5359,9 @@ def api_flags_rule_status(
         raise HTTPException(status_code=400, detail="rule_status harus 'pending' atau 'done'.")
     custom_rule_id = str(payload.get("custom_rule_id") or "").strip()[:50]
     rule_notes = str(payload.get("rule_notes") or "").strip()[:1000]
-    actor = str(payload.get("rule_updated_by") or _current_username(request)).strip() or "analyst"
+    analyst_user = _analyst_username(request)
+    owner_reviewer = analyst_user or ""
+    actor = analyst_user or (str(payload.get("rule_updated_by") or _current_username(request)).strip() or "analyst")
 
     raw_ids = payload.get("alert_ids")
     with get_db() as conn:
@@ -5162,6 +5369,7 @@ def api_flags_rule_status(
             pks = _validate_membership(conn, raw_ids, tenant)
             if not pks:
                 raise HTTPException(status_code=400, detail="Pilih minimal satu alert untuk diperbarui.")
+            _assert_analyst_can_access_alerts(conn, pks, request, action_label="mengubah status custom rule")
             rows = conn.execute(
                 "SELECT id, flag_color FROM wazuh.alerts WHERE id = ANY(%s)",
                 (pks,),
@@ -5186,12 +5394,16 @@ def api_flags_rule_status(
                 group_key=str(group_key),
                 pattern=str(payload.get("pattern") or ""),
                 pattern_mode=str(payload.get("pattern_mode") or "contains"),
+                owner_reviewer=owner_reviewer,
+                reviewed_from=str(payload.get("reviewed_from") or ""),
+                reviewed_to=str(payload.get("reviewed_to") or ""),
             )
             rows = conn.execute(
                 f"SELECT a.id, a.flag_color FROM wazuh.alerts a {where_sql}",
                 params,
             ).fetchall()
             pks = [int(r["id"]) for r in rows]
+            _assert_analyst_can_access_alerts(conn, pks, request, action_label="mengubah status custom rule")
 
         if not pks:
             raise HTTPException(status_code=404, detail="Tidak ada alert yang cocok pada scope ini.")
@@ -5224,7 +5436,7 @@ def api_flags_rule_status(
                 (pks,),
             )
 
-        summary = _flag_counts(conn, tenant)
+        summary = _flag_counts(conn, tenant, owner_reviewer=owner_reviewer)
 
     return {
         "status": "ok",

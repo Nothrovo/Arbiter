@@ -3,6 +3,84 @@ import {filtersValue, parseFilters} from './filters.js';
 export const choices = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
 export const integer = (value, fallback) => Number.isFinite(Number(value)) ? Math.floor(Number(value)) : fallback;
 
+const DAY_MS = 86400000;
+
+export const REVIEW_DATE_PRESETS = [
+  ['', 'Semua waktu review'],
+  ['today', 'Hari ini'],
+  ['yesterday', 'Kemarin'],
+  ['exclude_1d', 'Sebelum hari ini (tanpa hari ini)'],
+  ['exclude_2d', '≥ 2 hari lalu (tanpa hari ini & kemarin)'],
+  ['exclude_3d', '> 2 hari lalu (tanpa 3 hari terakhir)'],
+  ['exclude_7d', '> 7 hari lalu'],
+  ['custom', 'Rentang tanggal kustom…'],
+];
+
+const REVIEW_PRESET_KEYS = REVIEW_DATE_PRESETS.map(([key]) => key);
+
+export function localDateInputValue(isoValue) {
+  const raw = String(isoValue || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function localDayBoundsFromDateInput(dateStr, boundary = 'start') {
+  const match = String(dateStr || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  const [, y, m, d] = match;
+  if (boundary === 'end') {
+    return new Date(Number(y), Number(m) - 1, Number(d), 23, 59, 59, 999).toISOString();
+  }
+  return new Date(Number(y), Number(m) - 1, Number(d), 0, 0, 0, 0).toISOString();
+}
+
+export function reviewDateRangeForPreset(preset, now = new Date()) {
+  const key = String(preset || '').trim();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  if (key === 'today') {
+    return {reviewed_from: startOfToday.toISOString(), reviewed_to: endOfToday.toISOString()};
+  }
+  if (key === 'yesterday') {
+    const startOfYesterday = new Date(startOfToday.getTime() - DAY_MS);
+    const endOfYesterday = new Date(startOfToday.getTime() - 1);
+    return {reviewed_from: startOfYesterday.toISOString(), reviewed_to: endOfYesterday.toISOString()};
+  }
+  if (key === 'exclude_1d') {
+    return {reviewed_from: '', reviewed_to: new Date(startOfToday.getTime() - 1).toISOString()};
+  }
+  if (key === 'exclude_2d') {
+    return {reviewed_from: '', reviewed_to: new Date(startOfToday.getTime() - DAY_MS - 1).toISOString()};
+  }
+  if (key === 'exclude_3d') {
+    return {reviewed_from: '', reviewed_to: new Date(startOfToday.getTime() - 2 * DAY_MS - 1).toISOString()};
+  }
+  if (key === 'exclude_7d') {
+    return {reviewed_from: '', reviewed_to: new Date(startOfToday.getTime() - 7 * DAY_MS - 1).toISOString()};
+  }
+  return {reviewed_from: '', reviewed_to: ''};
+}
+
+export function reviewDateLabel(query = {}) {
+  const preset = String(query?.reviewed_preset || '').trim();
+  const from = localDateInputValue(query?.reviewed_from);
+  const to = localDateInputValue(query?.reviewed_to);
+  if (preset && preset !== 'custom') {
+    const match = REVIEW_DATE_PRESETS.find(([k]) => k === preset);
+    if (match) return to && preset.startsWith('exclude_') ? `${match[1]} (≤ ${to})` : match[1];
+  }
+  if (from && to) return from === to ? `Tanggal ${from}` : `${from} s/d ${to}`;
+  if (from) return `Sejak ${from}`;
+  if (to) return `Sampai ${to}`;
+  return '';
+}
+
 function rawTenantValues(params) {
   if (typeof params === 'string') return [params];
   if (Array.isArray(params)) return params;
@@ -50,6 +128,7 @@ export function queryFrom(params = new URLSearchParams()) {
     time_from: get('time_from') || '',
     time_to: get('time_to') || '',
     time_preset: get('time_preset') || '',
+    reviewed_preset: choices(get('reviewed_preset') || '', REVIEW_PRESET_KEYS, ''),
     reviewed_from: get('reviewed_from') || '',
     reviewed_to: get('reviewed_to') || '',
     limit: Math.min(10000, Math.max(1, integer(get('limit'), 50) || 50)),
@@ -97,7 +176,12 @@ export function scopeDescription(params) {
     if (p.get('status') === 'grouped') parts.push('Sudah masuk insiden');
     if (p.get('time_preset')) parts.push(`Waktu: ${p.get('time_preset')}`);
     else if (p.get('time_from') || p.get('time_to')) parts.push(`Waktu: ${p.get('time_from') || '—'} s/d ${p.get('time_to') || 'kini'}`);
-    if (p.get('reviewed_from') || p.get('reviewed_to')) parts.push('Tanggal review terpilih');
+    const revLabel = reviewDateLabel({
+      reviewed_preset: p.get('reviewed_preset') || '',
+      reviewed_from: p.get('reviewed_from') || '',
+      reviewed_to: p.get('reviewed_to') || '',
+    });
+    if (revLabel) parts.push(`Review: ${revLabel}`);
   }
   return parts.join(' · ');
 }

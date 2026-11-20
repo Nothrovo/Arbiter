@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from unittest.mock import patch
 
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from tests.test_ui_api import SyntheticDB, load_isolated_api
@@ -19,6 +21,9 @@ class FlagWorkspaceTests(unittest.TestCase):
         self.db = SyntheticDB()
         self.db_patch = patch.object(self.api, "get_db", self.db.session)
         self.db_patch.start()
+        self.secret = patch.dict(os.environ, {"ARBITER_SECRET_KEY": Fernet.generate_key().decode()})
+        self.secret.start()
+        self.addCleanup(self.secret.stop)
         self.client = TestClient(self.api.app)
 
     def tearDown(self):
@@ -610,6 +615,183 @@ class FlagWorkspaceTests(unittest.TestCase):
                 any(v is None for v in flat),
                 f"Unexpected None parameter bound in SQL: {sql} -> {params!r}",
             )
+
+    def test_analyst_review_isolation_ownership_protection_and_review_date_filter(self):
+        self._seed_rich_alerts()
+        login = self.client.post("/api/auth/login", json={"username": "admin", "password": "arbiter123"})
+        self.assertEqual(login.status_code, 200, login.text)
+        admin_token = login.json()["token"]
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        self.client.cookies.clear()
+
+        for payload in (
+            {"username": "analyst1", "password": "passAnalyst1", "role": "analyst", "display_name": "Analis Satu"},
+            {"username": "analyst2", "password": "passAnalyst2", "role": "analyst", "display_name": "Analis Dua"},
+            {"username": "director1", "password": "passDirector1", "role": "director", "display_name": "Director SOC"},
+        ):
+            r = self.client.post("/api/auth/users", headers=admin_headers, json=payload)
+            self.assertEqual(r.status_code, 200, r.text)
+
+        self.client.cookies.clear()
+        a1_token = self.client.post("/api/auth/login", json={"username": "analyst1", "password": "passAnalyst1"}).json()["token"]
+        self.client.cookies.clear()
+        a2_token = self.client.post("/api/auth/login", json={"username": "analyst2", "password": "passAnalyst2"}).json()["token"]
+        self.client.cookies.clear()
+        d_token = self.client.post("/api/auth/login", json={"username": "director1", "password": "passDirector1"}).json()["token"]
+        self.client.cookies.clear()
+
+        a1_h = {"Authorization": f"Bearer {a1_token}", "X-Arbiter-Auth-Enforce": "1"}
+        a2_h = {"Authorization": f"Bearer {a2_token}", "X-Arbiter-Auth-Enforce": "1"}
+        dir_h = {"Authorization": f"Bearer {d_token}", "X-Arbiter-Auth-Enforce": "1"}
+        adm_h = {"Authorization": f"Bearer {admin_token}", "X-Arbiter-Auth-Enforce": "1"}
+
+        # Analyst 1 flags alert 10 (green) & alert 11 (green); Analyst 2 flags alert 12 (yellow) & alert 13 (green);
+        # Alert 1 remains unreviewed in Alpha.
+        self.assertEqual(
+            self.client.post("/api/alerts/flag", headers=a1_h, json={"alert_ids": [10, 11], "flag_color": "green", "auto_review": True}).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post("/api/alerts/flag", headers=a2_h, json={"alert_ids": [12], "flag_color": "yellow", "auto_review": True}).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post("/api/alerts/flag", headers=a2_h, json={"alert_ids": [13], "flag_color": "green", "auto_review": True}).status_code,
+            200,
+        )
+
+        # Unreviewed backlog stays shared (alert 1 in Alpha is visible to analyst1).
+        unrev_a1 = self.client.get("/api/alerts", headers=a1_h, params={"tenant": "Alpha", "review_status": "unreviewed"}).json()
+        self.assertIn(1, {item["id"] for item in unrev_a1["items"]})
+
+        # Reviewed queue for analyst1 shows ONLY analyst1's reviewed alerts (10, 11), never analyst2's (12) or admin's (3).
+        rev_a1 = self.client.get("/api/alerts", headers=a1_h, params={"tenant": "Alpha", "review_status": "reviewed"}).json()
+        self.assertEqual({item["id"] for item in rev_a1["items"]}, {10, 11})
+        self.assertEqual(rev_a1["total"], 2)
+
+        all_a1 = self.client.get("/api/alerts", headers=a1_h, params={"tenant": "all", "review_status": "all"}).json()
+        all_a1_ids = {item["id"] for item in all_a1["items"]}
+        self.assertTrue({1, 2, 10, 11}.issubset(all_a1_ids))
+        self.assertNotIn(12, all_a1_ids)
+        self.assertNotIn(13, all_a1_ids)
+
+        sum_a1 = self.client.get("/api/triage/summary", headers=a1_h, params={"tenant": "Alpha", "review_status": "reviewed"}).json()
+        self.assertEqual(sum_a1["alerts"], 2)
+
+        # Detail & full-logs of analyst2's reviewed alert are blocked for analyst1 (403).
+        self.assertEqual(self.client.get("/api/alerts/12", headers=a1_h).status_code, 403)
+        self.assertEqual(self.client.post("/api/alerts/full-logs", headers=a1_h, json={"alert_ids": [12]}).status_code, 403)
+
+        # Mutation protections: analyst1 cannot unreview, unflag, re-flag, rule-update, or reassign analyst2's alert.
+        self.assertEqual(self.client.put("/api/alerts/12/review", headers=a1_h, json={"is_reviewed": False}).status_code, 403)
+        self.assertEqual(self.client.post("/api/alerts/batch-review", headers=a1_h, json={"alert_ids": [10, 12], "is_reviewed": False}).status_code, 403)
+        self.assertEqual(self.client.put("/api/alerts/12/flag", headers=a1_h, json={"flag_color": None}).status_code, 403)
+        self.assertEqual(self.client.post("/api/alerts/flag", headers=a1_h, json={"alert_ids": [12], "flag_color": "red"}).status_code, 403)
+        self.assertEqual(self.client.put("/api/alerts/12/reviewer", headers=a1_h, json={"reviewed_by": "analyst1"}).status_code, 403)
+        self.assertEqual(self.client.put("/api/alerts/10/reviewer", headers=a1_h, json={"reviewed_by": "analyst2"}).status_code, 403)
+        self.assertEqual(self.client.post("/api/flags/rule-status", headers=a1_h, json={"alert_ids": [12], "rule_status": "done"}).status_code, 403)
+
+        # Verify alert 10 and 12 remained untouched by rejected batch-review.
+        row12 = self.db.connection.execute("SELECT is_reviewed, flag_color, reviewed_by FROM wazuh.alerts WHERE id = 12").fetchone()
+        self.assertTrue(row12["is_reviewed"])
+        self.assertEqual(row12["flag_color"], "yellow")
+        self.assertEqual(row12["reviewed_by"], "analyst2")
+
+        # Flag workspace & export for analyst1 only show analyst1's flags (10, 11 in green; 0 in yellow).
+        flag_sum_a1 = self.client.get("/api/flags/summary", headers=a1_h).json()
+        self.assertEqual(flag_sum_a1["counts"]["green"]["total"], 2)
+        self.assertEqual(flag_sum_a1["counts"]["yellow"]["total"], 0)
+        flag_exp_a1 = self.client.get("/api/flags/export/preview", headers=a1_h, params={"flag_color": "green"}).json()
+        self.assertEqual(flag_exp_a1["count"], 2)
+
+        # Group unflag by analyst1 on rule 31101 affects ONLY analyst1's (10, 11) and preserves analyst2's (13)!
+        grp_unflag = self.client.post(
+            "/api/alerts/flag",
+            headers=a1_h,
+            json={
+                "flag_color": None,
+                "current_flag_color": "green",
+                "group_by": "rule_id",
+                "group_key": "31101",
+                "current_rule_status": "pending",
+            },
+        )
+        self.assertEqual(grp_unflag.status_code, 200, grp_unflag.text)
+        self.assertEqual(grp_unflag.json()["count"], 2)
+        row13 = self.db.connection.execute("SELECT is_reviewed, flag_color, flagged_by FROM wazuh.alerts WHERE id = 13").fetchone()
+        self.assertEqual(row13["flag_color"], "green")
+        self.assertEqual(row13["flagged_by"], "analyst2")
+
+        # Analyst1 CAN re-flag & unreview their own alert (10).
+        self.assertEqual(
+            self.client.put("/api/alerts/10/flag", headers=a1_h, json={"flag_color": "green"}).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.put("/api/alerts/10/review", headers=a1_h, json={"is_reviewed": False}).status_code,
+            200,
+        )
+
+        # Monitoring & /api/reviewers stay locked to analyst1 even when passing reviewer=all or reviewer=analyst2.
+        mon_a1 = self.client.get("/api/monitoring", headers=a1_h, params={"reviewer": "all"}).json()
+        self.assertTrue(mon_a1["reviewer"]["locked"])
+        self.assertEqual(mon_a1["reviewer"]["selected"], "analyst1")
+        self.assertFalse(mon_a1["reviewer"]["all"])
+        self.assertEqual([r["username"] for r in mon_a1["leaderboard"]], ["analyst1"])
+        self.assertEqual([r["username"] for r in mon_a1["reviewer"]["reviewers"]], ["analyst1"])
+        self.assertEqual(self.client.get("/api/reviewers", headers=a1_h).json()["reviewers"][0]["username"], "analyst1")
+        self.assertEqual(len(self.client.get("/api/reviewers", headers=a1_h).json()["reviewers"]), 1)
+
+        # Director and Admin keep full visibility & can unreview any user's alert.
+        mon_dir = self.client.get("/api/monitoring", headers=dir_h, params={"reviewer": "all"}).json()
+        self.assertFalse(mon_dir["reviewer"]["locked"])
+        self.assertTrue(mon_dir["reviewer"]["all"])
+        self.assertIn("analyst2", {r["username"] for r in mon_dir["leaderboard"]})
+        rev_dir = self.client.get("/api/alerts", headers=dir_h, params={"tenant": "all", "review_status": "reviewed"}).json()
+        self.assertIn(12, {item["id"] for item in rev_dir["items"]})
+        self.assertIn(13, {item["id"] for item in rev_dir["items"]})
+        self.assertEqual(self.client.put("/api/alerts/12/review", headers=adm_h, json={"is_reviewed": False}).status_code, 200)
+
+        # Review date filtering: distinguish today / 2 days ago / 5 days ago in Triage & Flags.
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        ts_today = now.isoformat()
+        ts_2d_ago = (now - timedelta(days=1, hours=12)).isoformat()
+        ts_5d_ago = (now - timedelta(days=5)).isoformat()
+        cutoff_older_than_2d = (now - timedelta(days=2)).isoformat()
+
+        # Re-flag 10, 11 for analyst1 at different review timestamps
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_by = 'analyst1', flagged_by = 'analyst1', flag_color = 'green', reviewed_at = ? WHERE id = 10",
+            (ts_5d_ago,),
+        )
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_by = 'analyst1', flagged_by = 'analyst1', flag_color = 'green', reviewed_at = ? WHERE id = 11",
+            (ts_2d_ago,),
+        )
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_by = 'analyst1', flagged_by = 'analyst1', flag_color = 'green', reviewed_at = ? WHERE id = 1",
+            (ts_today,),
+        )
+        triage_old = self.client.get(
+            "/api/alerts",
+            headers=a1_h,
+            params={"tenant": "Alpha", "review_status": "reviewed", "reviewed_to": cutoff_older_than_2d},
+        ).json()
+        self.assertEqual([item["id"] for item in triage_old["items"]], [10])
+
+        flags_old_groups = self.client.get(
+            "/api/flags/groups",
+            headers=a1_h,
+            params={"tenant": "Alpha", "flag_color": "green", "reviewed_to": cutoff_older_than_2d},
+        ).json()
+        self.assertEqual(flags_old_groups["total_alerts"], 1)
+        flags_old_alerts = self.client.get(
+            "/api/flags/alerts",
+            headers=a1_h,
+            params={"tenant": "Alpha", "flag_color": "green", "group_by": "rule_description", "group_key": "Web server 400 error code.", "reviewed_to": cutoff_older_than_2d},
+        ).json()
+        self.assertEqual([item["id"] for item in flags_old_alerts["items"]], [10])
 
 
 if __name__ == "__main__":

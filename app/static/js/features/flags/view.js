@@ -1,6 +1,6 @@
 import {json, apiURL, copyText, copyHTML, download, request} from '../../api/client.js';
 import {withParams} from '../../router.js';
-import {tenantValues} from '../../state/scope.js';
+import {localDayBoundsFromDateInput, reviewDateRangeForPreset, tenantValues} from '../../state/scope.js';
 import {
   normalizeFlagQuery,
   flagScopeParams,
@@ -49,6 +49,7 @@ export function mount(ctx) {
     root.innerHTML = renderFlagsPage(query, data, {
       loading,
       error,
+      currentUser: ctx.user || null,
       expandedGroups,
       groupAlertsCache,
       expandedLogIds,
@@ -296,6 +297,28 @@ export function mount(ctx) {
       updateRoute({group_by: 'pattern', pattern: pat, pattern_mode: mode});
       return;
     }
+    if (action === 'flag-apply-reviewed-date') {
+      const fromVal = String(root.querySelector('#flag-reviewed-from')?.value || '').trim();
+      const toVal = String(root.querySelector('#flag-reviewed-to')?.value || '').trim();
+      if (fromVal && toVal && fromVal > toVal) {
+        notify('Tanggal mulai review tidak boleh lebih besar dari tanggal akhir.', 'error');
+        return;
+      }
+      if (!fromVal && !toVal) {
+        updateRoute({reviewed_preset: null, reviewed_from: null, reviewed_to: null});
+        return;
+      }
+      updateRoute({
+        reviewed_preset: 'custom',
+        reviewed_from: localDayBoundsFromDateInput(fromVal, 'start') || null,
+        reviewed_to: localDayBoundsFromDateInput(toVal, 'end') || null,
+      });
+      return;
+    }
+    if (action === 'flag-clear-reviewed-date') {
+      updateRoute({reviewed_preset: null, reviewed_from: null, reviewed_to: null});
+      return;
+    }
     if (action === 'toggle-group') {
       const group = data?.groups?.[Number(btn.dataset.groupIndex)];
       if (!group) return;
@@ -332,6 +355,8 @@ export function mount(ctx) {
         pattern: query.pattern,
         pattern_mode: query.pattern_mode,
         q: query.q,
+        reviewed_from: query.reviewed_from,
+        reviewed_to: query.reviewed_to,
         current_rule_status: query.rule_status,
       }, `Status custom rule untuk grup “${group.key}” dikembalikan ke Belum Dibuat.`);
       return;
@@ -413,6 +438,8 @@ export function mount(ctx) {
             pattern: query.pattern,
             pattern_mode: query.pattern_mode,
             q: query.q,
+            reviewed_from: query.reviewed_from,
+            reviewed_to: query.reviewed_to,
           }),
           signal,
         });
@@ -444,6 +471,8 @@ export function mount(ctx) {
             pattern: query.pattern,
             pattern_mode: query.pattern_mode,
             q: query.q,
+            reviewed_from: query.reviewed_from,
+            reviewed_to: query.reviewed_to,
           }),
           signal,
         });
@@ -491,6 +520,26 @@ export function mount(ctx) {
     }
     if (el.id === 'flag-group-by') {
       updateRoute({group_by: el.value, pattern: el.value === 'pattern' ? query.pattern : null});
+      return;
+    }
+    if (el.id === 'flag-review-preset') {
+      const preset = String(el.value || '');
+      if (!preset) {
+        updateRoute({reviewed_preset: null, reviewed_from: null, reviewed_to: null});
+        return;
+      }
+      if (preset === 'custom') {
+        const customWrap = root.querySelector('#flag-review-custom');
+        if (customWrap) customWrap.style.display = 'flex';
+        root.querySelector('#flag-reviewed-to')?.focus();
+        return;
+      }
+      const range = reviewDateRangeForPreset(preset);
+      updateRoute({
+        reviewed_preset: preset,
+        reviewed_from: range.reviewed_from || null,
+        reviewed_to: range.reviewed_to || null,
+      });
       return;
     }
     if (el.id === 'flag-pattern-mode') {
@@ -560,6 +609,8 @@ export function mount(ctx) {
           pattern: query.pattern,
           pattern_mode: query.pattern_mode,
           q: query.q,
+          reviewed_from: query.reviewed_from,
+          reviewed_to: query.reviewed_to,
           current_rule_status: query.rule_status,
         }
       : {

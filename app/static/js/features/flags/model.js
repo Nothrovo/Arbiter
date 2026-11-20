@@ -1,5 +1,5 @@
 import {esc, icon} from '../../ui/primitives.js';
-import {choices, tenantScope, tenantValues} from '../../state/scope.js';
+import {REVIEW_DATE_PRESETS, choices, tenantScope, tenantValues} from '../../state/scope.js';
 
 export const FLAG_TABS = [
   {
@@ -52,6 +52,7 @@ export const FLAG_GROUP_BY_OPTIONS = [
 ];
 
 const GROUP_KEYS = FLAG_GROUP_BY_OPTIONS.map(([key]) => key);
+const REVIEW_PRESET_KEYS = REVIEW_DATE_PRESETS.map(([key]) => key);
 
 export function flagMeta(color) {
   const key = String(color || '').trim().toLowerCase();
@@ -94,6 +95,9 @@ export function normalizeFlagQuery(params = new URLSearchParams()) {
     pattern: String(get('pattern') || ''),
     pattern_mode: choices(get('pattern_mode'), ['contains', 'regex'], 'contains'),
     q: String(get('q') || ''),
+    reviewed_preset: choices(String(get('reviewed_preset') || ''), REVIEW_PRESET_KEYS, ''),
+    reviewed_from: String(get('reviewed_from') || ''),
+    reviewed_to: String(get('reviewed_to') || ''),
   };
 }
 
@@ -109,6 +113,9 @@ export function flagScopeParams(query) {
     params.set('pattern_mode', normalized.pattern_mode);
   }
   if (normalized.q) params.set('q', normalized.q);
+  if (normalized.reviewed_preset) params.set('reviewed_preset', normalized.reviewed_preset);
+  if (normalized.reviewed_from) params.set('reviewed_from', normalized.reviewed_from);
+  if (normalized.reviewed_to) params.set('reviewed_to', normalized.reviewed_to);
   return params;
 }
 

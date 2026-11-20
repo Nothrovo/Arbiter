@@ -192,3 +192,56 @@ test('triage clears selection after flag, review, queue pruning, and navigation/
     globalThis.fetch=originalFetch;
   }
 });
+
+test('triage review date bar forwards reviewed_to and analyst role hides reviewer reassignment', async () => {
+  const controls = new Map(), root = new Element(), navigated = [];
+  root.querySelector = s => { if (!controls.has(s)) controls.set(s, new Element()); return controls.get(s); };
+  root.querySelectorAll = () => [];
+  const controller = new AbortController(), originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => new Response(JSON.stringify(
+    String(url).includes('/summary')
+      ? {alerts: 0, events: 0, unique_source_ips: 0, unique_agents: 0, incident_cases: 0}
+      : {items: [], total: 0}
+  ));
+  let dispose;
+  try {
+    dispose = mount({
+      root,
+      route: {params: new URLSearchParams('tenant=Alpha&review_status=reviewed')},
+      user: {username: 'analyst1', role: 'analyst'},
+      signal: controller.signal,
+      selection: createSelection('all'),
+      navigate(url) { navigated.push(url); },
+      notify() {},
+    });
+    assert.match(root.innerHTML, /id="review-date-bar"/);
+    assert.match(root.innerHTML, /Hanya menampilkan review akun Anda \(@analyst1\)\./);
+
+    const presetEl = new Element();
+    presetEl.id = 'triage-review-preset';
+    presetEl.value = 'exclude_3d';
+    const chEv = new Event('change');
+    Object.defineProperty(chEv, 'target', {value: presetEl});
+    root.dispatchEvent(chEv);
+    assert.equal(navigated.length, 1);
+    const navParams = new URLSearchParams(navigated[0].split('?')[1]);
+    assert.equal(navParams.get('reviewed_preset'), 'exclude_3d');
+    assert.ok(navParams.get('reviewed_to'));
+    assert.equal(navParams.get('review_status'), 'reviewed');
+
+    const unrevBtn = new Element();
+    unrevBtn.dataset = {review: 'unreviewed'};
+    unrevBtn.closest = sel => sel === 'button' ? unrevBtn : null;
+    const clEv = new Event('click');
+    Object.defineProperty(clEv, 'target', {value: unrevBtn});
+    root.dispatchEvent(clEv);
+    const unrevParams = new URLSearchParams(navigated[1].split('?')[1]);
+    assert.equal(unrevParams.get('review_status'), 'unreviewed');
+    assert.equal(unrevParams.get('reviewed_to'), null);
+    assert.equal(unrevParams.get('reviewed_preset'), null);
+  } finally {
+    controller.abort();
+    dispose?.();
+    globalThis.fetch = originalFetch;
+  }
+});

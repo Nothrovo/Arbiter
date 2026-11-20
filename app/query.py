@@ -12,6 +12,10 @@ from fastapi import HTTPException
 
 from app.filters import build_filter_sql
 
+REVIEWER_IDENTITY_SQL = (
+    "COALESCE(NULLIF(a.reviewed_by, ''), NULLIF(a.flagged_by, ''), NULLIF(a.claimed_by, ''), 'admin')"
+)
+
 
 def validated_group_id(value: str | None) -> str | None:
     if value is not None and not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", value):
@@ -160,6 +164,7 @@ def alert_where(
     alert_ids: str | Sequence[int | str] | None = None,
     filters: Any = None,
     reviewed_from: str = "", reviewed_to: str = "",
+    owner_reviewer: str = "",
 ) -> tuple[str, list[Any]]:
     group_id = validated_group_id(group_id)
     clauses: list[str] = []
@@ -259,6 +264,15 @@ def alert_where(
     if reviewed_to and str(reviewed_to).strip():
         clauses.append("a.reviewed_at <= %s")
         params.append(str(reviewed_to).strip())
+    owner = str(owner_reviewer or "").strip()
+    has_review_dates = bool((reviewed_from and str(reviewed_from).strip()) or (reviewed_to and str(reviewed_to).strip()))
+    if owner:
+        if review_status == "reviewed" or has_review_dates:
+            clauses.append(f"{REVIEWER_IDENTITY_SQL} = %s")
+            params.append(owner)
+        elif review_status != "unreviewed":
+            clauses.append(f"(a.is_reviewed = false OR a.is_reviewed IS NULL OR {REVIEWER_IDENTITY_SQL} = %s)")
+            params.append(owner)
     return ("WHERE " + " AND ".join(clauses) if clauses else ""), params
 
 

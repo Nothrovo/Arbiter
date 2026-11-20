@@ -545,6 +545,12 @@
 .flag-group-select { display:flex; align-items:center; padding:2px; flex:none; }
 .flag-group-select input { width:16px; height:16px; accent-color:var(--info); cursor:pointer; }
 .flag-inline-log { margin:8px 0 0; }
+.review-date-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px; padding:8px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-control); }
+.review-date-bar[hidden] { display:none; }
+.review-date-bar .select { max-width:300px; min-height:32px; font-size:13px; }
+.review-date-custom { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.review-date-custom .input { width:auto; min-height:32px; font-size:13px; }
+.review-owner-note { margin-left:auto; }
 @media (prefers-reduced-motion: reduce) {
   .flag-group-toggle .icon { transition:none; }
 }
