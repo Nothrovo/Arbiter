@@ -33,6 +33,35 @@ export function renderReviewActivity(data) {
   </section>`;
 }
 
+export function renderReviewerFilter(reviewerInfo) {
+  const info = reviewerInfo && typeof reviewerInfo === 'object' ? reviewerInfo : {};
+  const reviewers = Array.isArray(info.reviewers) ? info.reviewers : [];
+  const currentUser = String(info.current_user || '');
+  const selected = info.all ? 'all' : String(info.selected || currentUser || 'all');
+  const options = [`<option value="all"${selected === 'all' ? ' selected' : ''}>Semua reviewer</option>`];
+  const seen = new Set(['all']);
+  for (const item of reviewers) {
+    const username = String(item?.username || '').trim();
+    if (!username || seen.has(username)) continue;
+    seen.add(username);
+    const label = String(item?.display_name || username);
+    const suffix = username === currentUser ? ' (akun saya)' : '';
+    options.push(`<option value="${esc(username)}"${selected === username ? ' selected' : ''}>${esc(label)}${esc(suffix)}</option>`);
+  }
+  if (selected !== 'all' && !seen.has(selected)) {
+    options.push(`<option value="${esc(selected)}" selected>${esc(selected)}</option>`);
+  }
+  return `<section class="monitoring-reviewer-filter" aria-label="Filter reviewer">
+    <label class="field" for="monitoring-reviewer">
+      <span>Reviewer</span>
+      <select class="select" id="monitoring-reviewer">${options.join('')}</select>
+    </label>
+    <p class="meta">${selected === 'all'
+      ? 'Menampilkan aktivitas seluruh akun.'
+      : `Menampilkan aktivitas review <strong>@${esc(selected)}</strong>${info.is_default ? ' (akun yang sedang login)' : ''}.`}</p>
+  </section>`;
+}
+
 export function renderMonitoringDashboard(data, query) {
   const metrics = data?.metrics || {};
   const flags = metrics.flags || {};
@@ -86,6 +115,7 @@ export function renderMonitoringDashboard(data, query) {
     : `<tr><td colspan="4" class="meta" style="text-align:center;padding:var(--space-4)">Belum ada riwayat laporan insiden atau ekspor dokumen.</td></tr>`;
 
   return `
+    ${renderReviewerFilter(data?.reviewer)}
     ${renderReviewActivity(data?.review_activity)}
     <section class="form-section" aria-label="Kartu Metrik Real-time">
       <div class="split">

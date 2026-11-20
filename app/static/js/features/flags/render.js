@@ -159,6 +159,13 @@ export function renderFlagGroups(query, data, {
     const rangeText = group.earliest || group.latest
       ? `${group.earliest ? esc(formatTime(group.earliest)) : '—'} s/d ${group.latest ? esc(formatTime(group.latest)) : 'kini'}`
       : 'Rentang waktu tidak tersedia';
+    const flaggedEarliest = group.flagged_earliest || '';
+    const flaggedLatest = group.flagged_latest || '';
+    const flaggedText = flaggedEarliest || flaggedLatest
+      ? `<span>Ditandai ${flaggedEarliest && flaggedLatest && flaggedEarliest !== flaggedLatest
+          ? `${esc(formatTime(flaggedEarliest))} s/d ${esc(formatTime(flaggedLatest))}`
+          : esc(formatTime(flaggedLatest || flaggedEarliest))}</span>`
+      : '';
     const doneAudit = group.rule_status !== 'pending' && group.rule_updated_by
       ? `<span>Rule ditandai oleh <strong>@${esc(group.rule_updated_by)}</strong>${group.rule_updated_at ? ` · ${esc(formatTime(group.rule_updated_at))}` : ''}${group.rule_notes ? ` — “${esc(group.rule_notes)}”` : ''}</span>`
       : '';
@@ -204,6 +211,7 @@ export function renderFlagGroups(query, data, {
             <div class="flag-group-meta">
               <span><strong class="num">${count}</strong> alert · <span class="num">${hits}</span> hits</span>
               <span>${rangeText}</span>
+              ${flaggedText}
               ${!isRed ? ruleStatusBadge(group) : ''}
               ${doneAudit}
             </div>

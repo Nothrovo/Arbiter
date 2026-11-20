@@ -498,6 +498,15 @@ class FlagWorkspaceTests(unittest.TestCase):
         self.assertEqual(body["scope"]["group_key"], ["/lib/minigalnano/createthumb.php"])
         self.assertIn("Laporan Flag Hijau", body["meta"]["title"])
         self.assertIn("createthumb.php", body["html"])
+        self.assertIn("Ditandai", body["html"])
+
+        groups = self.client.get("/api/flags/groups", params={
+            "tenant": "Alpha", "flag_color": "green", "group_by": "url_path",
+        })
+        self.assertEqual(groups.status_code, 200, groups.text)
+        group = next(item for item in groups.json()["groups"] if item["key"] == "/lib/minigalnano/createthumb.php")
+        self.assertTrue(group["flagged_earliest"])
+        self.assertTrue(group["flagged_latest"])
 
         everything = self.client.get("/api/flags/export/preview", params={
             "tenant": "Alpha", "flag_color": "red", "rule_status": "all",
@@ -518,6 +527,8 @@ class FlagWorkspaceTests(unittest.TestCase):
         self.assertEqual(rows[0]["method"], "GET")
         self.assertEqual(rows[0]["path_uri"], "/lib/minigalnano/createthumb.php")
         self.assertEqual(rows[0]["tenant_agent"], "Alpha (web-01)")
+        self.assertTrue(rows[0]["flagged_by"])
+        self.assertTrue(rows[0]["flagged_at"])
 
         for route in ("/api/flags/export/tsv", "/api/flags/export/report-html",
                       "/api/flags/export/docx", "/api/flags/export/xlsx", "/api/flags/export/markdown"):

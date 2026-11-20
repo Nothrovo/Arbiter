@@ -139,7 +139,10 @@ test('renderFlagsPage renders the Flag export bar and group selection controls',
     counts: {green: {total: 1, pending: 1, done: 0}, yellow: {total: 0, pending: 0, done: 0}, red: {total: 0, pending: 0, done: 0}},
     total_alerts: 1,
     total_groups: 1,
-    groups: [{key: 'Rule A', alert_count: 1, event_hits: 1, rule_status: 'pending'}],
+    groups: [{
+      key: 'Rule A', alert_count: 1, event_hits: 1, rule_status: 'pending',
+      flagged_earliest: '2026-11-18T08:00:00Z', flagged_latest: '2026-11-18T09:00:00Z',
+    }],
   };
   const html = renderFlagsPage(query, data, {
     selectedGroupKeys: new Set(['Rule A']),
@@ -154,6 +157,7 @@ test('renderFlagsPage renders the Flag export bar and group selection controls',
   assert.match(html, /data-select-group-index="0" checked/);
   assert.match(html, /data-action="flag-select-all"/);
   assert.match(html, /data-action="flag-select-none"/);
+  assert.match(html, /Ditandai/);
 });
 
 test('claimBadge prioritizes Flag badge with Rule Dibuat status and retains legacy TP fallback', () => {

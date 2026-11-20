@@ -601,6 +601,61 @@ class UIAPIContractTests(unittest.TestCase):
         self.assertIsInstance(body["review_activity"]["days"], list)
         self.assertEqual(body["review_activity"]["total_reviewed"], 1)
 
+    def test_monitoring_reviewer_filter_defaults_to_current_account_and_all_expands_scope(self):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_at = ?, reviewed_by = 'analis1' WHERE id = 1",
+            (now,),
+        )
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_at = ?, reviewed_by = 'lead_csirt' WHERE id = 2",
+            (now,),
+        )
+        self.db.add_alert(6, "Alpha", description="Synthetic lead review")
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_at = ?, reviewed_by = 'lead_csirt' WHERE id = 6",
+            (now,),
+        )
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_at = ?, reviewed_by = NULL WHERE id = 3",
+            (now,),
+        )
+
+        default_body = self.client.get("/api/monitoring", params={"tenant": "Alpha"}).json()
+        self.assertEqual(default_body["reviewer"]["current_user"], "admin")
+        self.assertEqual(default_body["reviewer"]["selected"], "admin")
+        self.assertTrue(default_body["reviewer"]["is_default"])
+        self.assertEqual(default_body["review_activity"]["total_reviewed"], 1)
+        self.assertEqual(default_body["metrics"]["global_review_count"], 1)
+        self.assertIn("admin", {row["username"] for row in default_body["leaderboard"]})
+        self.assertIn("analis1", {row["username"] for row in default_body["leaderboard"]})
+        self.assertIn("analis1", {item["username"] for item in default_body["reviewer"]["reviewers"]})
+
+        analyst_body = self.client.get(
+            "/api/monitoring", params={"tenant": "Alpha", "reviewer": "analis1"}
+        ).json()
+        self.assertEqual(analyst_body["reviewer"]["selected"], "analis1")
+        self.assertFalse(analyst_body["reviewer"]["is_default"])
+        self.assertEqual(analyst_body["review_activity"]["total_reviewed"], 1)
+        self.assertEqual(analyst_body["metrics"]["global_review_count"], 1)
+        self.assertEqual(len(analyst_body["leaderboard"]), len(default_body["leaderboard"]))
+
+        all_body = self.client.get(
+            "/api/monitoring", params={"tenant": "Alpha", "reviewer": "all"}
+        ).json()
+        self.assertTrue(all_body["reviewer"]["all"])
+        self.assertEqual(all_body["review_activity"]["total_reviewed"], 3)
+        self.assertEqual(all_body["metrics"]["global_review_count"], 3)
+        self.assertEqual(
+            {row["username"] for row in all_body["leaderboard"]},
+            {"admin", "analis1", "lead_csirt"},
+        )
+
+        bad = self.client.get("/api/monitoring", params={"reviewer": "x" * 200})
+        self.assertEqual(bad.status_code, 422, bad.text)
+
     def test_alert_detail_recovers_decoupled_raw_payload_from_alert_raw_table(self):
         self.db.add_alert(60, "Alpha", raw="{}")
         self.db.connection.execute(

@@ -28,11 +28,14 @@ export async function mount(ctx) {
     if (!content) return;
     content.setAttribute('aria-busy', 'true');
     try {
+      const reviewerParam = String(route.params.get('reviewer') || '').trim();
+      const params = {
+        tenant,
+        tz_offset_minutes: -new Date().getTimezoneOffset(),
+      };
+      if (reviewerParam) params.reviewer = reviewerParam;
       const data = await json(
-        apiURL('/api/monitoring', {
-          tenant,
-          tz_offset_minutes: -new Date().getTimezoneOffset(),
-        }),
+        apiURL('/api/monitoring', params),
         {signal},
       );
       if (signal.aborted) return;
@@ -67,6 +70,15 @@ export async function mount(ctx) {
       if (btn.isConnected) btn.disabled = false;
       if (btn.dataset.action === 'refresh-monitoring') notify('Dashboard User Review diperbarui.', 'info');
     }
+  }, {signal});
+
+  root.addEventListener('change', e => {
+    const select = e.target.closest('#monitoring-reviewer');
+    if (!select) return;
+    const params = new URLSearchParams();
+    for (const t of (query.tenantScope.all ? ['all'] : query.tenants)) params.append('tenant', t);
+    params.set('reviewer', select.value || 'all');
+    location.hash = withParams('/monitoring', params);
   }, {signal});
 
   root.addEventListener('arbiter:refresh', () => load(), {signal});

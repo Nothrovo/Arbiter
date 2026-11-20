@@ -65,6 +65,7 @@ from app.intel import (
 import app.database as db_module
 from app.database import get_db, init_database, ingest_alert_with_dedup
 from app.exports import (
+    FLAG_EXPORT_COLUMNS,
     generate_docx_landscape_report,
     generate_gdocs_html_report,
     generate_markdown_report,
@@ -2100,8 +2101,23 @@ def triage_summary(
     }
 
 
-def _review_activity_payload(conn, tenant: list[str], offset: int, days: int = 14) -> dict[str, Any]:
-    """Count reviewed alerts per local calendar day for a connection."""
+REVIEWER_IDENTITY_SQL = (
+    "COALESCE(NULLIF(a.reviewed_by, ''), NULLIF(a.flagged_by, ''), NULLIF(a.claimed_by, ''), 'admin')"
+)
+
+
+def _review_activity_payload(
+    conn,
+    tenant: list[str],
+    offset: int,
+    days: int = 14,
+    reviewer: str | None = None,
+) -> dict[str, Any]:
+    """Count reviewed alerts per local calendar day for a connection.
+
+    ``reviewer`` limits the counts to alerts whose review identity matches the
+    selected account; an empty value keeps the whole team in scope.
+    """
     window = max(days, 30)
     now_local = datetime.now(timezone.utc) + timedelta(minutes=offset)
     today = now_local.date()
@@ -2109,21 +2125,34 @@ def _review_activity_payload(conn, tenant: list[str], offset: int, days: int = 1
     start_local = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
     since_utc = (start_local - timedelta(minutes=offset)).isoformat()
 
+    selected_reviewer = str(reviewer or "").strip()
+    reviewer_sql = f" AND {REVIEWER_IDENTITY_SQL} = %s" if selected_reviewer else ""
+
     where = "a.reviewed_at IS NOT NULL AND a.reviewed_at >= %s"
     params: list[Any] = [since_utc]
     tenant_sql, tenant_params = tenant_clause("a", tenant)
     if tenant_sql:
         where += " AND " + tenant_sql
         params.extend(tenant_params)
+    if selected_reviewer:
+        where += reviewer_sql
+        params.append(selected_reviewer)
 
     rows = conn.execute(
         f"SELECT a.reviewed_at FROM wazuh.alerts a WHERE {where}",
         params,
     ).fetchall()
+    total_where = "a.reviewed_at IS NOT NULL"
+    total_params: list[Any] = []
+    if tenant_sql:
+        total_where += f" AND {tenant_sql}"
+        total_params.extend(tenant_params)
+    if selected_reviewer:
+        total_where += reviewer_sql
+        total_params.append(selected_reviewer)
     reviewed_row = conn.execute(
-        f"SELECT COUNT(*) AS n FROM wazuh.alerts a WHERE a.reviewed_at IS NOT NULL"
-        + (f" AND {tenant_sql}" if tenant_sql else ""),
-        tenant_params,
+        f"SELECT COUNT(*) AS n FROM wazuh.alerts a WHERE {total_where}",
+        total_params,
     ).fetchone()
     total_reviewed = int(reviewed_row["n"] or 0) if reviewed_row else 0
 
@@ -4015,8 +4044,10 @@ def api_database_purge_raw(payload: dict[str, Any]):
 
 @app.get("/api/monitoring")
 def api_get_monitoring(
+    request: Request,
     tenant: list[str] = Query(default=["all"]),
     tz_offset_minutes: int = 420,
+    reviewer: str = "",
 ):
     """PRD Section 3.C Monitoring Dashboard: Real-time metric cards, Analyst Leaderboard, and Report Audit Log."""
     offset = max(-840, min(840, int(tz_offset_minutes or 0)))
@@ -4026,6 +4057,14 @@ def api_get_monitoring(
     today_iso = today_date.isoformat()
     today_start_local = datetime.combine(today_date, datetime.min.time(), tzinfo=timezone.utc)
     today_start_utc = (today_start_local - timedelta(minutes=offset)).isoformat()
+
+    current_user = _current_username(request, fallback="admin")
+    requested_reviewer = str(reviewer or "").strip()
+    if len(requested_reviewer) > 128 or any(ord(char) < 32 for char in requested_reviewer):
+        raise HTTPException(status_code=422, detail="Filter reviewer tidak valid.")
+    show_all_reviewers = requested_reviewer.lower() in {"all", "*", "semua"}
+    effective_reviewer = "" if show_all_reviewers else (requested_reviewer or current_user)
+    reviewer_cond = f"{REVIEWER_IDENTITY_SQL} = %s" if effective_reviewer else ""
 
     t_sql, t_params = tenant_clause("a", tenant)
     t_where = f"WHERE {t_sql}" if t_sql else ""
@@ -4051,21 +4090,34 @@ def api_get_monitoring(
         # Indexed metrics query using idx_wazuh_alerts_reviewed, idx_wazuh_alerts_imported_at, idx_wazuh_alerts_timestamp
         try:
             with _savepoint(conn):
+                select_parts: list[str] = []
+                select_params: list[Any] = []
+
+                def add_metric(expr: str, alias: str, base: tuple[Any, ...] = (), scoped: bool = True) -> None:
+                    scoped_expr = f"{expr} AND {reviewer_cond}" if (effective_reviewer and scoped) else expr
+                    select_parts.append(f"COUNT(*) FILTER (WHERE {scoped_expr}) AS {alias}")
+                    select_params.extend(base)
+                    if effective_reviewer and scoped:
+                        select_params.append(effective_reviewer)
+
+                add_metric("a.imported_at >= %s OR a.timestamp >= %s", "pulled_today",
+                           (today_start_utc, today_iso))
+                add_metric("a.is_reviewed = false AND (a.imported_at < %s AND (a.timestamp IS NULL OR a.timestamp < %s))",
+                           "outstanding_backlog", (today_start_utc, today_iso))
+                add_metric("a.is_reviewed = false", "total_unreviewed")
+                add_metric("a.is_reviewed = true", "global_review_count")
+                add_metric("a.status = 'claimed'", "active_claims")
+                add_metric("a.verdict = 'tp'", "tp_total")
+                add_metric("a.verdict = 'fp'", "fp_total")
+                add_metric("a.verdict = 'benign'", "benign_total")
+                add_metric("a.flag_color = 'green'", "flag_green_total", scoped=False)
+                add_metric("a.flag_color = 'yellow'", "flag_yellow_total", scoped=False)
+                add_metric("a.flag_color = 'red'", "flag_red_total", scoped=False)
+
                 m_row = conn.execute(
-                    f"""SELECT
-                            COUNT(*) FILTER (WHERE a.imported_at >= %s OR a.timestamp >= %s) AS pulled_today,
-                            COUNT(*) FILTER (WHERE a.is_reviewed = false AND (a.imported_at < %s AND (a.timestamp IS NULL OR a.timestamp < %s))) AS outstanding_backlog,
-                            COUNT(*) FILTER (WHERE a.is_reviewed = false) AS total_unreviewed,
-                            COUNT(*) FILTER (WHERE a.is_reviewed = true) AS global_review_count,
-                            COUNT(*) FILTER (WHERE a.status = 'claimed') AS active_claims,
-                            COUNT(*) FILTER (WHERE a.verdict = 'tp') AS tp_total,
-                            COUNT(*) FILTER (WHERE a.verdict = 'fp') AS fp_total,
-                            COUNT(*) FILTER (WHERE a.verdict = 'benign') AS benign_total,
-                            COUNT(*) FILTER (WHERE a.flag_color = 'green') AS flag_green_total,
-                            COUNT(*) FILTER (WHERE a.flag_color = 'yellow') AS flag_yellow_total,
-                            COUNT(*) FILTER (WHERE a.flag_color = 'red') AS flag_red_total
+                    f"""SELECT {', '.join(select_parts)}
                         FROM wazuh.alerts a {t_where}""",
-                    [today_start_utc, today_iso, today_start_utc, today_iso, *t_params],
+                    [*select_params, *t_params],
                 ).fetchone()
         except Exception:
             # Fallback if imported_at or status/verdict/flag_color not present in minimal synthetic table
@@ -4187,6 +4239,24 @@ def api_get_monitoring(
         except Exception:
             pass
 
+        reviewer_options = sorted(
+            (
+                {
+                    "username": str(uname),
+                    "display_name": str(info.get("display_name") or uname),
+                    "role": str(info.get("role") or "analyst"),
+                }
+                for uname, info in leaderboard_map.items()
+            ),
+            key=lambda item: (item["display_name"].lower(), item["username"].lower()),
+        )
+        if not any(item["username"] == current_user for item in reviewer_options):
+            reviewer_options.insert(0, {
+                "username": current_user,
+                "display_name": current_user,
+                "role": "analyst",
+            })
+
         leaderboard = sorted(
             leaderboard_map.values(),
             key=lambda x: (x["completed_today"], x["total_contributions"], x["currently_claimed"]),
@@ -4238,12 +4308,21 @@ def api_get_monitoring(
 
         try:
             with _savepoint(conn):
-                review_activity = _review_activity_payload(conn, tenant, offset, 14)
+                review_activity = _review_activity_payload(
+                    conn, tenant, offset, 14, reviewer=effective_reviewer
+                )
         except Exception:
             review_activity = None
 
     return {
         "review_activity": review_activity,
+        "reviewer": {
+            "current_user": current_user,
+            "selected": effective_reviewer,
+            "all": not effective_reviewer,
+            "is_default": not requested_reviewer,
+            "reviewers": reviewer_options,
+        },
         "metrics": {
             "total_pull_today": pulled_today,
             "outstanding_backlog": outstanding_backlog,
@@ -4720,6 +4799,8 @@ def api_flags_groups(
                        COUNT(*) FILTER (WHERE a.rule_status = 'done') AS done_count,
                        MIN(NULLIF(a.timestamp, '')) AS earliest,
                        MAX(NULLIF(a.timestamp, '')) AS latest,
+                       MIN(a.flagged_at) AS flagged_earliest,
+                       MAX(a.flagged_at) AS flagged_latest,
                        MAX(NULLIF(a.custom_rule_id, '')) AS custom_rule_id,
                        MAX(NULLIF(a.rule_notes, '')) AS rule_notes,
                        MAX(NULLIF(a.rule_updated_by, '')) AS rule_updated_by,
@@ -4752,6 +4833,8 @@ def api_flags_groups(
             "rule_status": grp_status,
             "earliest": r.get("earliest") or "",
             "latest": r.get("latest") or "",
+            "flagged_earliest": str(r["flagged_earliest"]) if r.get("flagged_earliest") else "",
+            "flagged_latest": str(r["flagged_latest"]) if r.get("flagged_latest") else "",
             "custom_rule_id": r.get("custom_rule_id") or "",
             "rule_notes": r.get("rule_notes") or "",
             "rule_updated_by": r.get("rule_updated_by") or "",
@@ -4933,7 +5016,7 @@ def flag_export_preview(scope: dict[str, Any] = Depends(flag_export_scope)):
         "count": len(alerts),
         "meta": meta,
         "scope": scope,
-        "html": generate_gdocs_html_report(alerts, meta),
+        "html": generate_gdocs_html_report(alerts, meta, columns=FLAG_EXPORT_COLUMNS),
         "truncated": False,
     }
 
@@ -4941,7 +5024,7 @@ def flag_export_preview(scope: dict[str, Any] = Depends(flag_export_scope)):
 @app.get("/api/flags/export/report-html", response_class=HTMLResponse)
 def flag_export_html(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
     alerts, meta = _get_flagged_alerts_for_export(**scope)
-    html_content = generate_gdocs_html_report(alerts, meta)
+    html_content = generate_gdocs_html_report(alerts, meta, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag HTML"), format_name="Google Docs HTML (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
     return HTMLResponse(content=html_content, headers={"X-Arbiter-Count": str(len(alerts))})
 
@@ -4949,7 +5032,7 @@ def flag_export_html(request: Request, scope: dict[str, Any] = Depends(flag_expo
 @app.get("/api/flags/export/docx")
 def flag_export_docx(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
     alerts, meta = _get_flagged_alerts_for_export(**scope)
-    buf = generate_docx_landscape_report(alerts, meta)
+    buf = generate_docx_landscape_report(alerts, meta, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag Word"), format_name="Word (.docx) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
     return StreamingResponse(
         buf,
@@ -4961,7 +5044,7 @@ def flag_export_docx(request: Request, scope: dict[str, Any] = Depends(flag_expo
 @app.get("/api/flags/export/xlsx")
 def flag_export_xlsx(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
     alerts, meta = _get_flagged_alerts_for_export(**scope)
-    buf = generate_xlsx_workbook(alerts)
+    buf = generate_xlsx_workbook(alerts, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Workbook Flag Excel"), format_name="Excel (.xlsx) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
     return StreamingResponse(
         buf,
@@ -4973,7 +5056,7 @@ def flag_export_xlsx(request: Request, scope: dict[str, Any] = Depends(flag_expo
 @app.get("/api/flags/export/tsv")
 def flag_export_tsv(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
     alerts, meta = _get_flagged_alerts_for_export(**scope)
-    content = generate_tsv_table(alerts)
+    content = generate_tsv_table(alerts, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Tabel Flag TSV"), format_name="TSV (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=content, media_type="text/tab-separated-values; charset=utf-8",
                     headers={"X-Arbiter-Count": str(len(alerts))})
@@ -4982,7 +5065,7 @@ def flag_export_tsv(request: Request, scope: dict[str, Any] = Depends(flag_expor
 @app.get("/api/flags/export/markdown")
 def flag_export_markdown(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
     alerts, meta = _get_flagged_alerts_for_export(**scope)
-    content = generate_markdown_report(alerts, meta)
+    content = generate_markdown_report(alerts, meta, columns=FLAG_EXPORT_COLUMNS)
     _record_report_audit_log(request, title=str(meta.get("title") or "Laporan Flag Markdown"), format_name="Markdown (.md) Flag", tenant=scope.get("tenant"), alert_count=len(alerts))
     return Response(content=content, media_type="text/markdown; charset=utf-8",
                     headers={"X-Arbiter-Count": str(len(alerts))})
@@ -4990,12 +5073,12 @@ def flag_export_markdown(request: Request, scope: dict[str, Any] = Depends(flag_
 
 @app.get("/api/flags/export/csv")
 def flag_export_csv(request: Request, scope: dict[str, Any] = Depends(flag_export_scope)):
-    from app.exports import EXPORT_KEYS, export_rows
+    from app.exports import export_rows
 
     alerts, meta = _get_flagged_alerts_for_export(**scope)
     _record_report_audit_log(request, title=str(meta.get("title") or "Ekspor Flag CSV"), format_name="CSV (Flag)", tenant=scope.get("tenant"), alert_count=len(alerts))
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=list(EXPORT_KEYS), extrasaction="ignore")
+    writer = csv.DictWriter(output, fieldnames=[key for key, _label in FLAG_EXPORT_COLUMNS], extrasaction="ignore")
     writer.writeheader()
     writer.writerows(export_rows(alerts))
     return StreamingResponse(

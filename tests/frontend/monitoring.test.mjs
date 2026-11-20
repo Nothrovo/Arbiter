@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {renderMonitoringDashboard} from '../../app/static/js/features/monitoring/model.js';
+import {renderMonitoringDashboard, renderReviewerFilter} from '../../app/static/js/features/monitoring/model.js';
 import {claimBadge} from '../../app/static/js/features/triage/model.js';
 import {queryFrom} from '../../app/static/js/state/scope.js';
 
@@ -8,6 +8,16 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   const html = renderMonitoringDashboard(
     {
       checked_at: '2026-11-18T10:00:00Z',
+      reviewer: {
+        current_user: 'analis1',
+        selected: 'analis1',
+        all: false,
+        is_default: true,
+        reviewers: [
+          {username: 'analis1', display_name: 'Analis Satu', role: 'analyst'},
+          {username: 'lead_csirt', display_name: 'Kasubag CSIRT <b>', role: 'director'},
+        ],
+      },
       review_activity: {
         days: [
           {date: '2026-11-18', count: 12},
@@ -66,6 +76,10 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   );
 
   assert.match(html, /Total Pull Hari Ini/);
+  assert.match(html, /id="monitoring-reviewer"/);
+  assert.match(html, /<option value="analis1" selected>Analis Satu \(akun saya\)<\/option>/);
+  assert.match(html, /Menampilkan aktivitas review <strong>@analis1<\/strong> \(akun yang sedang login\)/);
+  assert.doesNotMatch(html, /<b>/);
   assert.match(html, /Aktivitas review/);
   assert.match(html, /data-review-day="2026-11-18"/);
   assert.match(html, /Hari ini <strong class="num">12<\/strong> alert/);
@@ -87,6 +101,41 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   assert.match(html, /Diekspor \(Word \.docx\)/);
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.doesNotMatch(html, /<img src=x/);
+});
+
+test('renderReviewerFilter defaults to the current account and offers all reviewers safely', () => {
+  const mine = renderReviewerFilter({
+    current_user: 'analis1',
+    selected: 'analis1',
+    all: false,
+    is_default: true,
+    reviewers: [
+      {username: 'analis1', display_name: 'Analis Satu'},
+      {username: 'lead_csirt', display_name: '<img src=x onerror=alert(1)>'},
+    ],
+  });
+  assert.match(mine, /<option value="analis1" selected>Analis Satu \(akun saya\)<\/option>/);
+  assert.match(mine, /<option value="lead_csirt">/);
+  assert.doesNotMatch(mine, /<img src=x/);
+
+  const all = renderReviewerFilter({
+    current_user: 'analis1',
+    selected: '',
+    all: true,
+    is_default: false,
+    reviewers: [{username: 'analis1', display_name: 'Analis Satu'}],
+  });
+  assert.match(all, /<option value="all" selected>Semua reviewer<\/option>/);
+  assert.match(all, /Menampilkan aktivitas seluruh akun\./);
+
+  const missing = renderReviewerFilter({
+    current_user: 'admin',
+    selected: 'ghost',
+    all: false,
+    is_default: false,
+    reviewers: [],
+  });
+  assert.match(missing, /<option value="ghost" selected>ghost<\/option>/);
 });
 
 test('claimBadge renders active claim owner, timeout state, and final verdict badges', () => {

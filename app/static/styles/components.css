@@ -483,6 +483,9 @@
 
 /* Review activity: how many alerts were analyzed per local day. */
 .review-activity { border:1px solid var(--border); background:var(--surface); border-radius:var(--radius-panel); padding:12px 14px; margin-bottom:12px; }
+.monitoring-reviewer-filter { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:12px; padding:12px 14px; border:1px solid var(--border); background:var(--surface); border-radius:var(--radius-panel); }
+.monitoring-reviewer-filter .field { flex:0 1 260px; min-width:200px; }
+.monitoring-reviewer-filter .meta { margin:0; }
 .review-activity-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
 .review-activity-head h2 { margin:0; font-size:13px; font-weight:600; }
 .review-activity-stats { font-size:12px; color:var(--muted); }

@@ -92,6 +92,8 @@ def _evidence_fields(alert: dict[str, Any]) -> dict[str, Any]:
         "tenant_agent": f"{tenant} ({agent})" if agent else tenant,
         "full_log": alert_full_log(alert),
         "user_agent": _first(parsed.get("ua"), parsed.get("user_agent"), data.get("ua"), data.get("user_agent")),
+        "flagged_at": _first(alert.get("flagged_at")),
+        "flagged_by": _first(alert.get("flagged_by")),
     }
 
 
@@ -119,6 +121,16 @@ EXPORT_COLUMNS: tuple[tuple[str, str], ...] = (
 EXPORT_HEADERS = [label for _key, label in EXPORT_COLUMNS]
 EXPORT_KEYS = [key for key, _label in EXPORT_COLUMNS]
 
+# Flag & Rule Tuning exports add when/whom the alert was flagged.
+FLAG_EXPORT_COLUMNS = EXPORT_COLUMNS + (
+    ("flagged_at", "Ditandai"),
+    ("flagged_by", "Ditandai Oleh"),
+)
+
+
+def _table_columns(columns: tuple[tuple[str, str], ...]) -> tuple[list[str], list[str]]:
+    return [label for _key, label in columns], [key for key, _label in columns]
+
 
 def export_row(alert: dict[str, Any], index: int) -> dict[str, Any]:
     row = {"no": index}
@@ -134,21 +146,30 @@ def _flat(value: Any) -> str:
     return str(value if value is not None else "").replace("\t", " ").replace("\r\n", " ").replace("\n", " ").strip()
 
 
-def generate_tsv_table(alerts: list[dict[str, Any]]) -> str:
+def generate_tsv_table(
+    alerts: list[dict[str, Any]],
+    columns: tuple[tuple[str, str], ...] = EXPORT_COLUMNS,
+) -> str:
     """Generates a clean Tab-Separated Values table for instant pasting into Excel or Word."""
     alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
-    rows = [[_flat(label) for label in EXPORT_HEADERS]]
+    headers, keys = _table_columns(columns)
+    rows = [[_flat(label) for label in headers]]
     for item in export_rows(alerts):
-        rows.append([_flat(item.get(key)) for key in EXPORT_KEYS])
+        rows.append([_flat(item.get(key)) for key in keys])
     output = io.StringIO()
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
     writer.writerows(rows)
     return output.getvalue()
 
 
-def generate_markdown_report(alerts: list[dict[str, Any]], meta: dict[str, Any]) -> str:
+def generate_markdown_report(
+    alerts: list[dict[str, Any]],
+    meta: dict[str, Any],
+    columns: tuple[tuple[str, str], ...] = EXPORT_COLUMNS,
+) -> str:
     """Generates an executive SOC investigation summary in Markdown format."""
     alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
+    headers, keys = _table_columns(columns)
     total_hits = sum(int(a.get("hit_count") or 1) for a in alerts)
     repeated = len([a for a in alerts if int(a.get("hit_count") or 1) > 1])
     highest_lvl = max([int(a.get("rule_level") or 0) for a in alerts], default=0)
@@ -172,10 +193,10 @@ def generate_markdown_report(alerts: list[dict[str, Any]], meta: dict[str, Any])
     def cell(value: Any) -> str:
         return _flat(value).replace("|", "\\|") or "-"
 
-    lines.append("| " + " | ".join(EXPORT_HEADERS) + " |")
-    lines.append("| " + " | ".join("---" for _ in EXPORT_HEADERS) + " |")
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("| " + " | ".join("---" for _ in headers) + " |")
     for item in export_rows(alerts):
-        lines.append("| " + " | ".join(cell(item.get(key)) for key in EXPORT_KEYS) + " |")
+        lines.append("| " + " | ".join(cell(item.get(key)) for key in keys) + " |")
 
     lines.extend([
         "",
@@ -191,9 +212,14 @@ def generate_markdown_report(alerts: list[dict[str, Any]], meta: dict[str, Any])
     return "\n".join(lines)
 
 
-def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any]) -> str:
+def generate_gdocs_html_report(
+    alerts: list[dict[str, Any]],
+    meta: dict[str, Any],
+    columns: tuple[tuple[str, str], ...] = EXPORT_COLUMNS,
+) -> str:
     """Generates styled semantic HTML with clean table borders and colors for Google Docs pasting."""
     alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
+    headers, keys = _table_columns(columns)
     title = meta.get("title") or "Laporan Hasil Investigasi Insiden Keamanan (SOC Incident Report)"
     category = meta.get("category") or "Security Incident"
     severity = meta.get("severity") or "Medium"
@@ -242,7 +268,7 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
         header_html = "".join(
             f'<th style="border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top; '
             f'font-weight: bold; color: #2d3748;">{escape(label)}</th>'
-            for label in EXPORT_HEADERS
+            for label in headers
         )
         html_parts.append(
             '<table border="1" cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; '
@@ -252,7 +278,7 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
         for idx, item in enumerate(export_rows(alerts), 1):
             row_bg = "background-color: #f7fafc;" if idx % 2 == 0 else "background-color: #ffffff;"
             cells = []
-            for key in EXPORT_KEYS:
+            for key in keys:
                 value = item.get(key)
                 style = "border: 1px solid #cbd5e0; padding: 4px 6px; text-align: left; vertical-align: top;"
                 if key == "full_log":
@@ -288,9 +314,14 @@ def generate_gdocs_html_report(alerts: list[dict[str, Any]], meta: dict[str, Any
     return "".join(html_parts)
 
 
-def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str, Any]) -> io.BytesIO:
+def generate_docx_landscape_report(
+    alerts: list[dict[str, Any]],
+    meta: dict[str, Any],
+    columns: tuple[tuple[str, str], ...] = EXPORT_COLUMNS,
+) -> io.BytesIO:
     """Generates an official Word document (.docx) in landscape orientation."""
     alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
+    headers, keys = _table_columns(columns)
     doc = Document()
     section = doc.sections[0]
     section.orientation = WD_ORIENT.LANDSCAPE
@@ -321,10 +352,10 @@ def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str,
 
     doc.add_heading("1. Tabel Kronologi Investigasi", level=2)
 
-    table = doc.add_table(rows=1, cols=len(EXPORT_HEADERS))
+    table = doc.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
     hdr_cells = table.rows[0].cells
-    for i, label in enumerate(EXPORT_HEADERS):
+    for i, label in enumerate(headers):
         hdr_cells[i].text = label
         p = hdr_cells[i].paragraphs[0]
         p.runs[0].font.bold = True
@@ -332,7 +363,7 @@ def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str,
 
     for item in export_rows(alerts):
         row_cells = table.add_row().cells
-        for i, key in enumerate(EXPORT_KEYS):
+        for i, key in enumerate(keys):
             value = item.get(key)
             row_cells[i].text = str(value if value is not None else "")
             for p in row_cells[i].paragraphs:
@@ -354,14 +385,18 @@ def generate_docx_landscape_report(alerts: list[dict[str, Any]], meta: dict[str,
     return buf
 
 
-def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
+def generate_xlsx_workbook(
+    alerts: list[dict[str, Any]],
+    columns: tuple[tuple[str, str], ...] = EXPORT_COLUMNS,
+) -> io.BytesIO:
     """Generates a styled Excel workbook (.xlsx) with the canonical evidence table."""
     alerts = sorted(alerts, key=lambda a: (str(a.get("rule_id") or ""), str(a.get("timestamp") or ""), int(a.get("id") or 0)))
+    headers, keys = _table_columns(columns)
     wb = Workbook()
     ws = wb.worksheets[0]
     ws.title = "Wazuh Alerts Triage"
 
-    ws.append(EXPORT_HEADERS)
+    ws.append(headers)
 
     header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
     header_font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
@@ -372,7 +407,7 @@ def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
         bottom=Side(style="thin", color="CBD5E0"),
     )
 
-    for col_idx in range(1, len(EXPORT_HEADERS) + 1):
+    for col_idx in range(1, len(headers) + 1):
         cell = ws.cell(row=1, column=col_idx)
         cell.fill = header_fill
         cell.font = header_font
@@ -380,7 +415,7 @@ def generate_xlsx_workbook(alerts: list[dict[str, Any]]) -> io.BytesIO:
         cell.border = thin_border
 
     for idx, item in enumerate(export_rows(alerts), 1):
-        row_vals = [item.get(key) for key in EXPORT_KEYS]
+        row_vals = [item.get(key) for key in keys]
         ws.append(row_vals)
         for col_idx in range(1, len(row_vals) + 1):
             cell = ws.cell(row=idx + 1, column=col_idx)
