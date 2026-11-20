@@ -656,6 +656,57 @@ class UIAPIContractTests(unittest.TestCase):
         bad = self.client.get("/api/monitoring", params={"reviewer": "x" * 200})
         self.assertEqual(bad.status_code, 422, bad.text)
 
+    def test_reviewer_reassignment_updates_only_an_already_reviewed_alert(self):
+        self.api.save_document(self.db, "auth_users", {"users": [
+            {"username": "admin", "display_name": "Administrator", "role": "admin"},
+            {"username": "analis1", "display_name": "Analis Satu", "role": "analyst"},
+            {"username": "lead_csirt", "display_name": "Kasubag CSIRT", "role": "director"},
+        ]})
+        self.db.connection.execute(
+            "UPDATE wazuh.alerts SET is_reviewed = 1, reviewed_at = '2026-01-01T12:00:00Z', reviewed_by = 'analis1' WHERE id = 1"
+        )
+
+        res = self.client.put(
+            "/api/alerts/1/reviewer",
+            params={"tenant": "Alpha"},
+            json={"reviewed_by": "lead_csirt"},
+        )
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()["reviewed_by"], "lead_csirt")
+        row = self.db.connection.execute(
+            "SELECT reviewed_by, is_reviewed FROM wazuh.alerts WHERE id = 1"
+        ).fetchone()
+        self.assertEqual(row["reviewed_by"], "lead_csirt")
+        self.assertTrue(row["is_reviewed"])
+
+        unreviewed = self.client.put(
+            "/api/alerts/2/reviewer",
+            params={"tenant": "Beta"},
+            json={"reviewed_by": "lead_csirt"},
+        )
+        self.assertEqual(unreviewed.status_code, 409, unreviewed.text)
+
+        unknown = self.client.put(
+            "/api/alerts/1/reviewer",
+            params={"tenant": "Alpha"},
+            json={"reviewed_by": "ghost"},
+        )
+        self.assertEqual(unknown.status_code, 422, unknown.text)
+
+        blank = self.client.put(
+            "/api/alerts/1/reviewer",
+            params={"tenant": "Alpha"},
+            json={"reviewed_by": "   "},
+        )
+        self.assertEqual(blank.status_code, 422, blank.text)
+
+        listed = self.client.get("/api/reviewers")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(
+            {item["username"] for item in listed.json()["reviewers"]},
+            {"admin", "analis1", "lead_csirt"},
+        )
+
     def test_alert_detail_recovers_decoupled_raw_payload_from_alert_raw_table(self):
         self.db.add_alert(60, "Alpha", raw="{}")
         self.db.connection.execute(

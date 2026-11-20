@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {existsSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 const url = new URL('../../app/static/js/features/triage/model.js', import.meta.url);
+test('triage inspector exposes reviewer reassignment for reviewed alerts', () => {
+  const source = readFileSync(new URL('../../app/static/js/features/triage/view.js', import.meta.url), 'utf8');
+  assert.match(source, /data-action="save-reviewer"/);
+  assert.match(source, /\/api\/alerts\/\$\{currentAlert\.id\}\/reviewer/);
+  assert.match(source, /Direview oleh/);
+  assert.match(source, /api\/reviewers/);
+});
 test('triage list keeps unknown intel distinct from zero detections and renders selected state safely', async () => {
   assert.ok(existsSync(url), 'triage view model exists');
   const {intelSummary, intelBadge, renderQueue} = await import(url);

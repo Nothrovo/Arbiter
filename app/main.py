@@ -975,6 +975,40 @@ def _update_alerts_review_state(
             )
 
 
+@app.put("/api/alerts/{alert_id}/reviewer")
+def update_alert_reviewer(
+    alert_id: int,
+    payload: dict[str, Any],
+    request: Request,
+    tenant: list[str] = Query(default=["all"]),
+):
+    """Reassign which account is recorded as the reviewer of an already reviewed alert."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload reviewer tidak valid.")
+    reviewer = str(payload.get("reviewed_by") or "").strip()
+    if not reviewer:
+        raise HTTPException(status_code=422, detail="Reviewer wajib dipilih.")
+    if len(reviewer) > 128 or any(ord(char) < 32 for char in reviewer):
+        raise HTTPException(status_code=422, detail="Nama reviewer tidak valid.")
+    with get_db() as conn:
+        known_users = {str(user.get("username") or "") for user in list_users(conn)}
+        if reviewer not in known_users:
+            raise HTTPException(status_code=422, detail="Reviewer tidak dikenal.")
+        _validate_membership(conn, [alert_id], tenant)
+        prev = conn.execute(
+            "SELECT is_reviewed FROM wazuh.alerts WHERE id = %s", (alert_id,)
+        ).fetchone()
+        if not prev:
+            raise HTTPException(status_code=404, detail="Alert tidak ditemukan.")
+        if not prev.get("is_reviewed"):
+            raise HTTPException(status_code=409, detail="Alert belum direview; tandai direview terlebih dahulu.")
+        conn.execute(
+            "UPDATE wazuh.alerts SET reviewed_by = %s WHERE id = ANY(%s)",
+            (reviewer, [alert_id]),
+        )
+    return {"status": "ok", "id": alert_id, "reviewed_by": reviewer}
+
+
 @app.put("/api/alerts/{alert_id}/review")
 def update_alert_review(
     alert_id: int,
@@ -4391,6 +4425,24 @@ def api_auth_me(request: Request):
     if not user:
         return {"authenticated": False, "user": None}
     return {"authenticated": True, "user": user}
+
+
+@app.get("/api/reviewers")
+def api_reviewers(request: Request):
+    """Reviewer choices for filters and review reassignment (no admin-only data)."""
+    with get_db() as conn:
+        users = list_users(conn)
+    return {
+        "reviewers": [
+            {
+                "username": str(user.get("username") or ""),
+                "display_name": str(user.get("display_name") or user.get("username") or ""),
+                "role": str(user.get("role") or "analyst"),
+            }
+            for user in users
+            if user.get("username")
+        ]
+    }
 
 
 @app.post("/api/auth/login")
