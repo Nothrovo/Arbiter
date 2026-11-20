@@ -193,16 +193,46 @@ test('triage clears selection after flag, review, queue pruning, and navigation/
   }
 });
 
-test('triage review date bar forwards reviewed_to and analyst role hides reviewer reassignment', async () => {
+test('triage reviewer and date bar defaults analyst to self on Direview, allows reading all, and protects other reviews in inspector', async () => {
   const controls = new Map(), root = new Element(), navigated = [];
   root.querySelector = s => { if (!controls.has(s)) controls.set(s, new Element()); return controls.get(s); };
   root.querySelectorAll = () => [];
   const controller = new AbortController(), originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => new Response(JSON.stringify(
-    String(url).includes('/summary')
-      ? {alerts: 0, events: 0, unique_source_ips: 0, unique_agents: 0, incident_cases: 0}
-      : {items: [], total: 0}
-  ));
+  globalThis.fetch = async url => {
+    const u = String(url);
+    if (u.includes('/summary')) {
+      return new Response(JSON.stringify({alerts: 0, events: 0, unique_source_ips: 0, unique_agents: 0, incident_cases: 0}));
+    }
+    if (u.includes('/api/reviewers')) {
+      return new Response(JSON.stringify({
+        reviewers: [
+          {username: 'analyst1', display_name: 'Analis Satu'},
+          {username: 'analyst2', display_name: 'Analis Dua'},
+        ],
+      }));
+    }
+    if (u.includes('/api/groups')) {
+      return new Response(JSON.stringify([]));
+    }
+    if (/\/api\/alerts\/\d+/.test(u)) {
+      return new Response(JSON.stringify({
+        id: 55,
+        alert_id: 'syn-55',
+        description: 'Other analyst reviewed alert',
+        rule_id: '31101',
+        rule_level: 7,
+        tenant: 'Alpha',
+        agent_name: 'web-01',
+        is_reviewed: true,
+        reviewed_by: 'analyst2',
+        flag_color: 'green',
+        flagged_by: 'analyst2',
+        rule_status: 'pending',
+        raw: {full_log: 'synthetic log'},
+      }));
+    }
+    return new Response(JSON.stringify({items: [], total: 0}));
+  };
   let dispose;
   try {
     dispose = mount({
@@ -215,30 +245,77 @@ test('triage review date bar forwards reviewed_to and analyst role hides reviewe
       notify() {},
     });
     assert.match(root.innerHTML, /id="review-date-bar"/);
-    assert.match(root.innerHTML, /Hanya menampilkan review akun Anda \(@analyst1\)\./);
+    assert.match(root.innerHTML, /id="triage-reviewer-filter"/);
+    assert.match(root.innerHTML, /value="analyst1" selected/);
+    assert.match(root.innerHTML, /Default: review akun Anda/);
 
+    // Analyst switches reviewer filter to Semua reviewer
+    const revEl = new Element();
+    revEl.id = 'triage-reviewer-filter';
+    revEl.value = 'all';
+    const revEv = new Event('change');
+    Object.defineProperty(revEv, 'target', {value: revEl});
+    root.dispatchEvent(revEv);
+    assert.equal(navigated.length, 1);
+    assert.equal(new URLSearchParams(navigated[0].split('?')[1]).get('reviewer'), 'all');
+
+    // Preset exclude_3d forwards reviewed_to
     const presetEl = new Element();
     presetEl.id = 'triage-review-preset';
     presetEl.value = 'exclude_3d';
     const chEv = new Event('change');
     Object.defineProperty(chEv, 'target', {value: presetEl});
     root.dispatchEvent(chEv);
-    assert.equal(navigated.length, 1);
-    const navParams = new URLSearchParams(navigated[0].split('?')[1]);
+    assert.equal(navigated.length, 2);
+    const navParams = new URLSearchParams(navigated[1].split('?')[1]);
     assert.equal(navParams.get('reviewed_preset'), 'exclude_3d');
     assert.ok(navParams.get('reviewed_to'));
     assert.equal(navParams.get('review_status'), 'reviewed');
 
+    // Clear reviewer chip keeps 'all' for analysts
+    const clearRevBtn = new Element();
+    clearRevBtn.dataset = {action: 'clear-reviewer'};
+    clearRevBtn.closest = sel => sel === 'button' ? clearRevBtn : null;
+    const clearRevEv = new Event('click');
+    Object.defineProperty(clearRevEv, 'target', {value: clearRevBtn});
+    root.dispatchEvent(clearRevEv);
+    assert.equal(new URLSearchParams(navigated[2].split('?')[1]).get('reviewer'), 'all');
+
+    // Switching back to unreviewed clears reviewer and review date filters
     const unrevBtn = new Element();
     unrevBtn.dataset = {review: 'unreviewed'};
     unrevBtn.closest = sel => sel === 'button' ? unrevBtn : null;
     const clEv = new Event('click');
     Object.defineProperty(clEv, 'target', {value: unrevBtn});
     root.dispatchEvent(clEv);
-    const unrevParams = new URLSearchParams(navigated[1].split('?')[1]);
+    const unrevParams = new URLSearchParams(navigated[3].split('?')[1]);
     assert.equal(unrevParams.get('review_status'), 'unreviewed');
+    assert.equal(unrevParams.get('reviewer'), null);
     assert.equal(unrevParams.get('reviewed_to'), null);
     assert.equal(unrevParams.get('reviewed_preset'), null);
+
+    // Opening inspector for another user's reviewed alert shows read-only notice and hides unflag/unreview buttons
+    const origHistory = globalThis.history;
+    const origWindow = globalThis.window;
+    globalThis.history = {replaceState() {}};
+    globalThis.window = {scrollY: 0, dispatchEvent() {}};
+    try {
+      const inspectBtn = new Element();
+      inspectBtn.dataset = {inspect: '55'};
+      inspectBtn.closest = sel => sel === 'button' ? inspectBtn : null;
+      const inspEv = new Event('click');
+      Object.defineProperty(inspEv, 'target', {value: inspectBtn});
+      root.dispatchEvent(inspEv);
+      await new Promise(resolve => setTimeout(resolve, 25));
+      const inspectorHtml = root.querySelector('#alert-inspector').innerHTML;
+      assert.match(inspectorHtml, /telah direview oleh <strong>@analyst2<\/strong>/);
+      assert.doesNotMatch(inspectorHtml, /data-action="unflag-current"/);
+      assert.doesNotMatch(inspectorHtml, /data-action="review-current"/);
+      assert.doesNotMatch(inspectorHtml, /data-action="save-reviewer"/);
+    } finally {
+      globalThis.history = origHistory;
+      globalThis.window = origWindow;
+    }
   } finally {
     controller.abort();
     dispose?.();

@@ -61,6 +61,8 @@ export async function mount(ctx) {
       params.set('review_status', 'reviewed');
       params.set('reviewed_from', start.toISOString());
       params.set('reviewed_to', new Date(end.getTime() - 1).toISOString());
+      const activeReviewer = root.querySelector('#monitoring-reviewer')?.value || String(route.params.get('reviewer') || '').trim();
+      if (activeReviewer) params.set('reviewer', activeReviewer);
       location.hash = withParams('/triage', params);
       return;
     }

@@ -27,10 +27,12 @@ function triageLinkFor(query, alert) {
   return withParams('/triage', params);
 }
 
-function renderAlertDetailRows(query, items, {expandedLogIds = new Set()} = {}) {
+function renderAlertDetailRows(query, items, {expandedLogIds = new Set(), currentUser = null} = {}) {
   if (!items.length) {
     return '<p class="meta">Tidak ada alert pada grup pola ini untuk filter status saat ini.</p>';
   }
+  const isAnalyst = currentUser?.role === 'analyst';
+  const myUsername = String(currentUser?.username || '').trim().toLowerCase();
   const showRuleCol = query.flag_color !== 'red';
   const rows = items.map(a => {
     const id = Number(a.id);
@@ -39,6 +41,8 @@ function renderAlertDetailRows(query, items, {expandedLogIds = new Set()} = {}) 
     const fullLog = a.full_log || 'Full log tidak tersedia.';
     const ruleDone = a.rule_status === 'done';
     const currentFlag = String(a.flag_color || query.flag_color || 'green').toLowerCase();
+    const owner = String(a.reviewed_by || a.flagged_by || a.claimed_by || 'admin').trim();
+    const canEditFlag = !isAnalyst || (Boolean(myUsername) && owner.toLowerCase() === myUsername);
     const auditRule = ruleDone && a.rule_updated_by
       ? `<div class="meta">oleh @${esc(a.rule_updated_by)}${a.rule_updated_at ? ` · ${esc(formatTime(a.rule_updated_at))}` : ''}${a.rule_notes ? `<br>${esc(a.rule_notes)}` : ''}</div>`
       : '';
@@ -53,14 +57,16 @@ function renderAlertDetailRows(query, items, {expandedLogIds = new Set()} = {}) 
       <td><span class="mono">${esc(a.source_ip || '—')}</span></td>
       <td>
         ${flagBadge(currentFlag, {compact: true})}
-        <div class="meta">oleh @${esc(a.flagged_by || 'analyst')}${a.flagged_at ? ` · ${esc(formatTime(a.flagged_at))}` : ''}</div>
-        <label class="sr-only" for="alert-flag-select-${id}">Ubah flag alert ${id}</label>
-        <select class="select" id="alert-flag-select-${id}" data-change-alert-flag="${id}" style="margin-top:4px;min-height:28px;font-size:12px;padding:2px 6px;">
-          <option value="green" ${currentFlag === 'green' ? 'selected' : ''}>Hijau</option>
-          <option value="yellow" ${currentFlag === 'yellow' ? 'selected' : ''}>Kuning</option>
-          <option value="red" ${currentFlag === 'red' ? 'selected' : ''}>Merah</option>
-          <option value="">— Hapus Flag (Unflag) —</option>
-        </select>
+        <div class="meta">oleh @${esc(a.flagged_by || owner)}${a.flagged_at ? ` · ${esc(formatTime(a.flagged_at))}` : ''}</div>
+        ${canEditFlag
+          ? `<label class="sr-only" for="alert-flag-select-${id}">Ubah flag alert ${id}</label>
+             <select class="select" id="alert-flag-select-${id}" data-change-alert-flag="${id}" style="margin-top:4px;min-height:28px;font-size:12px;padding:2px 6px;">
+               <option value="green" ${currentFlag === 'green' ? 'selected' : ''}>Hijau</option>
+               <option value="yellow" ${currentFlag === 'yellow' ? 'selected' : ''}>Kuning</option>
+               <option value="red" ${currentFlag === 'red' ? 'selected' : ''}>Merah</option>
+               <option value="">— Hapus Flag (Unflag) —</option>
+             </select>`
+          : '<div class="meta">Hanya baca flag (milik user lain)</div>'}
       </td>
       ${showRuleCol ? `<td>
         ${ruleStatusBadge(a)}
@@ -75,8 +81,10 @@ function renderAlertDetailRows(query, items, {expandedLogIds = new Set()} = {}) 
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="button text-button meta" data-action="toggle-flag-log" data-alert-id="${id}" aria-expanded="${isLogOpen}">[${isLogOpen ? 'Tutup Log' : 'Log'}]</button>
           <a class="button text-button meta" href="${esc(triageLinkFor(query, a))}">Buka di Triage</a>
-          <button type="button" class="button text-button meta" data-action="unflag-alert" data-alert-id="${id}" title="Hapus Flag alert ini (status review tetap)">Hapus Flag</button>
-          <button type="button" class="button text-button meta" data-action="unreview-alert" data-alert-id="${id}" title="Kembalikan ke Belum direview dan hapus Flag">Belum direview</button>
+          ${canEditFlag
+            ? `<button type="button" class="button text-button meta" data-action="unflag-alert" data-alert-id="${id}" title="Hapus Flag alert ini (status review tetap)">Hapus Flag</button>
+               <button type="button" class="button text-button meta" data-action="unreview-alert" data-alert-id="${id}" title="Kembalikan ke Belum direview dan hapus Flag">Belum direview</button>`
+            : ''}
         </div>
       </td>
     </tr>`;
@@ -109,6 +117,7 @@ export function renderFlagGroups(query, data, {
   exportPending = false,
   exportStatus = '',
   exportCount = null,
+  currentUser = null,
 } = {}) {
   const groups = Array.isArray(data?.groups) ? data.groups : [];
   if (data?.pattern_required) {
@@ -169,10 +178,20 @@ export function renderFlagGroups(query, data, {
     const doneAudit = group.rule_status !== 'pending' && group.rule_updated_by
       ? `<span>Rule ditandai oleh <strong>@${esc(group.rule_updated_by)}</strong>${group.rule_updated_at ? ` · ${esc(formatTime(group.rule_updated_at))}` : ''}${group.rule_notes ? ` — “${esc(group.rule_notes)}”` : ''}</span>`
       : '';
+    const isAnalyst = currentUser?.role === 'analyst';
+    const totalGroupCount = Number(group.alert_count || 0);
+    const ownGroupCount = group.own_alert_count !== undefined ? Number(group.own_alert_count) : totalGroupCount;
+    const canGroupEditFlag = !isAnalyst || ownGroupCount > 0;
+    const partialOwnNote = isAnalyst && ownGroupCount > 0 && ownGroupCount < totalGroupCount
+      ? ` Saya (${ownGroupCount.toLocaleString('id-ID')})`
+      : '';
+    const groupFlagButtons = canGroupEditFlag
+      ? `<button type="button" class="button" data-action="unflag-group" data-group-index="${index}" title="Hapus Flag alert pada grup ini">Hapus Flag Grup${partialOwnNote}</button>
+         <button type="button" class="button" data-action="unreview-group" data-group-index="${index}" title="Kembalikan alert pada grup ini ke Belum direview dan hapus Flag">Belum direview${partialOwnNote}</button>`
+      : '';
     const actionsHTML = isRed
       ? `<span class="meta">Tidak boleh diabaikan dengan custom rule</span>
-         <button type="button" class="button" data-action="unflag-group" data-group-index="${index}" title="Hapus Flag semua alert pada grup ini">Hapus Flag Grup</button>
-         <button type="button" class="button" data-action="unreview-group" data-group-index="${index}" title="Kembalikan semua alert pada grup ini ke Belum direview dan hapus Flag">Belum direview</button>`
+         ${groupFlagButtons}`
       : `
         ${group.rule_status !== 'done'
           ? `<button type="button" class="button primary" data-action="open-group-rule-modal" data-group-index="${index}">${icon('check')}Tandai Rule Dibuat (${Number(group.pending_count ?? group.alert_count).toLocaleString('id-ID')})</button>`
@@ -180,8 +199,7 @@ export function renderFlagGroups(query, data, {
         ${group.rule_status === 'done' || group.rule_status === 'partial'
           ? `<button type="button" class="button" data-action="revert-group-rule" data-group-index="${index}">Kembalikan Pending</button>`
           : ''}
-        <button type="button" class="button" data-action="unflag-group" data-group-index="${index}" title="Hapus Flag semua alert pada grup ini">Hapus Flag Grup</button>
-        <button type="button" class="button" data-action="unreview-group" data-group-index="${index}" title="Kembalikan semua alert pada grup ini ke Belum direview dan hapus Flag">Belum direview</button>
+        ${groupFlagButtons}
       `;
 
     let bodyHTML = '';
@@ -195,7 +213,7 @@ export function renderFlagGroups(query, data, {
         const moreNote = Number(cached.total || items.length) > items.length
           ? `<p class="meta" style="margin-top:8px">Menampilkan ${items.length.toLocaleString('id-ID')} dari ${Number(cached.total).toLocaleString('id-ID')} alert dalam grup pola ini.</p>`
           : '';
-        bodyHTML = `${renderAlertDetailRows(query, items, {expandedLogIds})}${moreNote}`;
+        bodyHTML = `${renderAlertDetailRows(query, items, {expandedLogIds, currentUser})}${moreNote}`;
       }
     }
 
@@ -261,7 +279,21 @@ export function renderFlagsPage(query, data = null, state = {}) {
   ).join('');
   const activeReviewLabel = reviewDateLabel(query);
   const currentUser = state.currentUser || null;
-  const isAnalyst = currentUser?.role === 'analyst';
+  const reviewers = Array.isArray(state.reviewers) ? state.reviewers : [];
+  const selectedReviewer = query.reviewer || 'all';
+  const seenReviewers = new Set(['all']);
+  const reviewerFilterOptions = [`<option value="all"${selectedReviewer === 'all' ? ' selected' : ''}>Semua reviewer</option>`];
+  for (const user of reviewers) {
+    const uname = String(user?.username || '').trim();
+    if (!uname || seenReviewers.has(uname)) continue;
+    seenReviewers.add(uname);
+    const label = String(user?.display_name || uname);
+    const suffix = currentUser?.username && uname === currentUser.username ? ' (akun saya)' : '';
+    reviewerFilterOptions.push(`<option value="${esc(uname)}"${selectedReviewer === uname ? ' selected' : ''}>${esc(label)}${esc(suffix)}</option>`);
+  }
+  if (selectedReviewer !== 'all' && !seenReviewers.has(selectedReviewer)) {
+    reviewerFilterOptions.push(`<option value="${esc(selectedReviewer)}" selected>@${esc(selectedReviewer)}</option>`);
+  }
 
   const noticeKind = isRed ? 'warning' : 'info';
   const resultsContent = state.error
@@ -285,18 +317,22 @@ export function renderFlagsPage(query, data = null, state = {}) {
     <div class="flag-tabs" role="tablist" aria-label="Kategori warna Flag">${tabsHTML}</div>
 
     <div class="notice" data-kind="${noticeKind}" style="margin-bottom:14px;">
-      <p><strong>Flag ${esc(activeMeta.label)} (${esc(activeMeta.title)}):</strong> ${esc(activeMeta.description)}${isAnalyst ? ` <span class="meta">· Menampilkan alert Flag milik akun Anda (@${esc(currentUser.username)}).</span>` : ''}</p>
+      <p><strong>Flag ${esc(activeMeta.label)} (${esc(activeMeta.title)}):</strong> ${esc(activeMeta.description)}</p>
     </div>
 
     <div class="flag-filter-bar">
       ${ruleFiltersHTML}
-      <span class="meta">${data && !data.pattern_required ? `<strong class="num">${Number(data.total_groups || 0).toLocaleString('id-ID')}</strong> grup pola · <strong class="num">${Number(data.total_alerts || 0).toLocaleString('id-ID')}</strong> alert${activeReviewLabel ? ` · Filter waktu review: <strong>${esc(activeReviewLabel)}</strong>` : ''}` : ''}</span>
+      <span class="meta">${data && !data.pattern_required ? `<strong class="num">${Number(data.total_groups || 0).toLocaleString('id-ID')}</strong> grup pola · <strong class="num">${Number(data.total_alerts || 0).toLocaleString('id-ID')}</strong> alert${selectedReviewer !== 'all' ? ` · Reviewer: <strong>@${esc(selectedReviewer)}</strong>` : ''}${activeReviewLabel ? ` · Filter waktu review: <strong>${esc(activeReviewLabel)}</strong>` : ''}` : ''}</span>
     </div>
 
     <section class="flag-controls" aria-label="Kontrol pengelompokan pola">
       <div class="field">
         <label for="flag-group-by">Kelompokkan berdasarkan</label>
         <select class="select" id="flag-group-by" name="group_by">${groupOptions}</select>
+      </div>
+      <div class="field">
+        <label for="flag-reviewer-filter">Reviewer</label>
+        <select class="select" id="flag-reviewer-filter" name="reviewer">${reviewerFilterOptions.join('')}</select>
       </div>
       <div class="field">
         <label for="flag-review-preset">Waktu review</label>

@@ -131,6 +131,7 @@ export function queryFrom(params = new URLSearchParams()) {
     reviewed_preset: choices(get('reviewed_preset') || '', REVIEW_PRESET_KEYS, ''),
     reviewed_from: get('reviewed_from') || '',
     reviewed_to: get('reviewed_to') || '',
+    reviewer: get('reviewer') || '',
     limit: Math.min(10000, Math.max(1, integer(get('limit'), 50) || 50)),
     offset: Math.max(0, integer(get('offset'), 0) || 0),
   };
@@ -182,6 +183,7 @@ export function scopeDescription(params) {
       reviewed_to: p.get('reviewed_to') || '',
     });
     if (revLabel) parts.push(`Review: ${revLabel}`);
+    if (p.get('reviewer') && p.get('reviewer') !== 'all') parts.push(`Reviewer: @${p.get('reviewer')}`);
   }
   return parts.join(' · ');
 }

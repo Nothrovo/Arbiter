@@ -82,13 +82,42 @@ export function mount(ctx) {
   let items = [], total = 0, pageRequest, detailRequest, summaryRequest = null, summaryData = null, isSummaryCollapsed = route.params.get('summary') === 'collapsed', generation = 0, currentAlert = null, lastSelected = null, searchTimer, heartbeatTimer = null;
   let activeTab = 'detail', activeId = route.params.get('alert'), showIntel = true, wrapLog = true, showAllLogs = false, expandedLogIds = new Set(), intelWebUrl = 'http://localhost:3001', reviewerOptions = [];
   async function loadReviewerOptions() {
-    if (isAnalyst || reviewerOptions.length) return;
+    if (reviewerOptions.length) return reviewerOptions;
     try {
       const res = await json(apiURL('/api/reviewers'), {signal, timeout: 8000});
       reviewerOptions = Array.isArray(res?.reviewers) ? res.reviewers : [];
     } catch {
       reviewerOptions = [];
     }
+    return reviewerOptions;
+  }
+  const effectiveReviewer = query.reviewer
+    ? query.reviewer
+    : (isAnalyst && query.review_status === 'reviewed' && currentUser?.username ? currentUser.username : 'all');
+  function buildReviewerFilterOptionsHTML(selectedVal = effectiveReviewer) {
+    const sel = String(selectedVal || 'all');
+    const seen = new Set(['all']);
+    const opts = [`<option value="all"${sel === 'all' ? ' selected' : ''}>Semua reviewer</option>`];
+    const sourceList = reviewerOptions.slice();
+    if (currentUser?.username && !sourceList.some(u => u.username === currentUser.username)) {
+      sourceList.unshift({username: currentUser.username, display_name: currentUser.display_name || currentUser.username});
+    }
+    for (const user of sourceList) {
+      const uname = String(user?.username || '').trim();
+      if (!uname || seen.has(uname)) continue;
+      seen.add(uname);
+      const label = String(user?.display_name || uname);
+      const suffix = currentUser?.username && uname === currentUser.username ? ' (akun saya)' : '';
+      opts.push(`<option value="${esc(uname)}"${sel === uname ? ' selected' : ''}>${esc(label)}${esc(suffix)}</option>`);
+    }
+    if (sel !== 'all' && !seen.has(sel)) {
+      opts.push(`<option value="${esc(sel)}" selected>@${esc(sel)}</option>`);
+    }
+    return opts.join('');
+  }
+  function syncReviewerFilterSelect() {
+    const selEl = root.querySelector('#triage-reviewer-filter');
+    if (selEl) selEl.innerHTML = buildReviewerFilterOptionsHTML(effectiveReviewer);
   }
   async function loadIntelWebUrl() {
     try {
@@ -98,12 +127,12 @@ export function mount(ctx) {
     } catch { /* fallback to default */ }
   }
   const activeReviewPreset = query.reviewed_preset || ((query.reviewed_from || query.reviewed_to) ? 'custom' : '');
-  const showReviewDateBar = query.review_status === 'reviewed' || Boolean(query.reviewed_from || query.reviewed_to || query.reviewed_preset);
+  const showReviewDateBar = query.review_status === 'reviewed' || Boolean(query.reviewed_from || query.reviewed_to || query.reviewed_preset || (query.reviewer && query.reviewer !== 'all'));
   const hasReviewDateFilter = Boolean(query.reviewed_from || query.reviewed_to || query.reviewed_preset);
   const reviewPresetOptions = REVIEW_DATE_PRESETS.map(([val, label]) => `<option value="${esc(val)}" ${activeReviewPreset === val ? 'selected' : ''}>${esc(label)}</option>`).join('');
   root.innerHTML = `<div class="page-header"><div class="page-heading"><h1>Triage</h1><p class="page-description">Periksa bukti. Tentukan langkah berikutnya.</p></div><div class="page-actions"><button class="button" type="button" data-action="open-pattern-verdict">${icon('check')}Sapu Backlog Pola</button><a class="button primary" href="${scopedRoute('/imports')}">${icon('upload')}Impor</a></div></div>
     <div class="tabs" aria-label="Antrean review">${[['unreviewed','Belum direview'],['all','Semua'],['reviewed','Direview']].map(([key,label])=>`<button class="tab" data-review="${key}" aria-pressed="${query.review_status===key}">${label}</button>`).join('')}</div>
-    <div id="review-date-bar" class="review-date-bar" ${showReviewDateBar?'':'hidden'} aria-label="Filter tanggal review"><label class="meta" for="triage-review-preset">Waktu review</label><select class="select" id="triage-review-preset" name="reviewed_preset">${reviewPresetOptions}</select><div id="triage-review-custom" class="review-date-custom" style="display:${activeReviewPreset==='custom'?'inline-flex':'none'}"><input class="input" type="date" id="triage-reviewed-from" aria-label="Review dari tanggal" value="${esc(localDateInputValue(query.reviewed_from))}"><span class="meta">s/d</span><input class="input" type="date" id="triage-reviewed-to" aria-label="Review sampai tanggal" value="${esc(localDateInputValue(query.reviewed_to))}"><button class="button primary" type="button" data-action="apply-reviewed-date">Terapkan</button></div>${hasReviewDateFilter?'<button class="button text-button" type="button" data-action="clear-reviewed-date">Reset waktu review</button>':''}${isAnalyst?`<span class="meta review-owner-note">Hanya menampilkan review akun Anda (@${esc(currentUser?.username||'analyst')}).</span>`:''}</div>
+    <div id="review-date-bar" class="review-date-bar" ${showReviewDateBar?'':'hidden'} aria-label="Filter reviewer dan tanggal review"><label class="meta" for="triage-reviewer-filter">Reviewer</label><select class="select" id="triage-reviewer-filter" name="reviewer">${buildReviewerFilterOptionsHTML(effectiveReviewer)}</select><label class="meta" for="triage-review-preset">Waktu review</label><select class="select" id="triage-review-preset" name="reviewed_preset">${reviewPresetOptions}</select><div id="triage-review-custom" class="review-date-custom" style="display:${activeReviewPreset==='custom'?'inline-flex':'none'}"><input class="input" type="date" id="triage-reviewed-from" aria-label="Review dari tanggal" value="${esc(localDateInputValue(query.reviewed_from))}"><span class="meta">s/d</span><input class="input" type="date" id="triage-reviewed-to" aria-label="Review sampai tanggal" value="${esc(localDateInputValue(query.reviewed_to))}"><button class="button primary" type="button" data-action="apply-reviewed-date">Terapkan</button></div>${hasReviewDateFilter?'<button class="button text-button" type="button" data-action="clear-reviewed-date">Reset waktu review</button>':''}${isAnalyst?`<span class="meta review-owner-note">${effectiveReviewer===currentUser?.username?'Default: review akun Anda · pilih Semua reviewer untuk baca review user lain.':`Mode baca review @${esc(effectiveReviewer==='all'?'semua reviewer':effectiveReviewer)} (tidak bisa unflag/unreview user lain).`}</span>`:''}</div>
     <div class="toolbar"><div class="search-field"><label class="sr-only" for="triage-search">Cari alert</label>${icon('search')}<input type="search" id="triage-search" name="q" value="${esc(query.q)}" placeholder="Cari IP, asset, rule…" autocomplete="off" spellcheck="false"></div><button class="button" data-action="filters">${icon('filter')}Filter${query.filter_preset||query.status!=='all'||query.group_id||query.alert_ids||query.time_preset||query.time_from||query.reviewed_from||query.reviewed_to||query.filters?.length?' aktif':''}</button><button class="button" data-action="toggle-all-queue-logs" id="btn-toggle-queue-logs" aria-pressed="false" title="Tampilkan atau sembunyikan full log semua alert">${icon('cases')}Semua log</button><label class="sr-only" for="triage-sort">Urutan alert</label><select class="sort-control" id="triage-sort" name="sort"><option value="timestamp:desc">Terbaru</option><option value="timestamp:asc">Kronologis</option><option value="severity:desc">Severity tertinggi</option><option value="hits:desc">Hits terbanyak</option></select><button class="button icon-button" data-action="more" aria-label="Opsi antrean" aria-controls="queue-options" aria-expanded="false">${icon('more')}</button></div>
     <div id="queue-options" class="toolbar" hidden><label class="checkbox-label"><input type="checkbox" id="show-intel" checked>Kolom source / intel</label><button class="button" data-action="correlation">Korelasi</button><button class="button" data-action="report-query">Laporan hasil filter</button></div>
     <div id="applied-filters" class="applied-filters"></div><div id="triage-summary-slot"></div><div id="correlation-slot"></div>
@@ -293,6 +322,12 @@ ${rawLog}`;
       ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;">${flagBadge(currentFlag)}${ruleStatusBadge(a)}<span class="meta">oleh @${esc(a.flagged_by||'analyst')}${a.flagged_at?` · ${esc(formatTime(a.flagged_at))}`:''}</span><a class="text-button meta" href="${scopedRoute('/flags',{flag_color:currentFlag})}">Kelola di Menu Flag →</a></div>`
       : '';
     const currentReviewer = String(a.reviewed_by || '').trim();
+    const alertOwner = String(a.reviewed_by || a.flagged_by || a.claimed_by || 'admin').trim();
+    const isReviewedByOther = Boolean(
+      isAnalyst
+      && (a.is_reviewed || currentFlag)
+      && alertOwner.toLowerCase() !== String(currentUser?.username || '').toLowerCase(),
+    );
     const reviewerChoices = reviewerOptions.slice();
     if (currentReviewer && !reviewerChoices.some(user => user.username === currentReviewer)) {
       reviewerChoices.unshift({username: currentReviewer, display_name: currentReviewer});
@@ -300,7 +335,10 @@ ${rawLog}`;
     const reviewerEditor = (a.is_reviewed && !isAnalyst)
       ? `<div class="field" style="margin-top:8px;"><label for="inspector-reviewer">Direview oleh</label><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><select class="select" id="inspector-reviewer" style="max-width:260px;">${reviewerChoices.map(user => `<option value="${esc(user.username)}"${user.username === currentReviewer ? ' selected' : ''}>${esc(user.display_name || user.username)} (@${esc(user.username)})</option>`).join('')}</select><button class="button" type="button" data-action="save-reviewer">Simpan reviewer</button></div>${reviewerChoices.length ? '' : '<p class="meta">Daftar akun tidak dapat dimuat.</p>'}</div>`
       : '';
-    return `<dl class="detail-grid"><div class="key-value"><dt>Target asset</dt><dd>${esc(a.agent_name||'—')}</dd></div><div class="key-value"><dt>Tenant</dt><dd>${esc(a.tenant||'Default')}</dd></div><div class="key-value"><dt>Detection rule</dt><dd>${esc(a.rule_id||'—')} · Level ${Number(a.rule_level)||0}</dd></div>${sourceUrl?`<div class="key-value wide"><dt>URL / Path</dt><dd class="mono" style="word-break:break-all">${esc(sourceUrl)}</dd></div>`:''}<div class="key-value wide"><dt>Filter noise</dt><dd style="display:flex;gap:8px;flex-wrap:wrap"><button class="button" data-action="exclude-data" title="Sembunyikan data alert ini dari Triage dan Statistik; pilih field dan pola">${icon('shield')}Pengecualian…</button><button class="button" data-action="prefill-pattern-verdict" title="Saring semua alert serupa di backlog dan tandai Flag sekaligus">${icon('flag')}Sapu Pola Serupa…</button></dd><dd class="meta" style="margin-top:2px">Pilih URL, source IP, agent, rule, referer, atau sapu &amp; flag semua alert serupa di backlog.</dd></div><div class="key-value wide"><dt>Source / intel</dt><dd class="mono">${esc(a.source_ip||'—')}</dd><dd class="meta" style="margin-top:2px;">${intelBadge(a)}</dd>${a.source_ip?`<dd style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;"><button class="button" data-action="enrich-single-ip" data-ip="${esc(a.source_ip)}">${icon('refresh')}Live Enrich</button><a class="button" data-intel-link href="${esc(intelWebUrl)}/ip/${encodeURIComponent(a.source_ip)}" rel="noopener noreferrer" target="_blank">Buka IP Intel ${icon('external')}</a></dd>`:''}</div><div class="key-value"><dt>Waktu</dt><dd>${esc(formatTime(a.timestamp))}</dd></div>${a.cve?`<div class="key-value"><dt>CVE</dt><dd>${esc(a.cve)}</dd></div>`:''}${a.mitre_ids?.length?`<div class="key-value wide"><dt>MITRE</dt><dd>${esc(a.mitre_ids.join(', '))}</dd></div>`:''}</dl>${classificationBlock(a)}${log?`<section class="stack"><div class="split"><h3>Log utama</h3><button class="button" data-action="copy-redacted">Versi tersamarkan</button></div><pre class="raw-log">${esc(log)}</pre><p class="meta">Redaksi otomatis bukan jaminan aman untuk cloud. Tinjau hasil sebelum membagikan.</p></section>`:''}${a.previous_output?`<details><summary>Previous output</summary><pre class="raw-log">${esc(a.previous_output)}</pre></details>`:''}<section class="stack"><h3>Insiden terkait</h3>${a.groups?.length?a.groups.map(g=>`<div class="split"><a href="${scopedRoute('/incidents/'+encodeURIComponent(g.id))}">${esc(g.title)}</a><button class="button icon-button" data-remove-group="${esc(g.id)}" aria-label="Keluarkan dari insiden ${esc(g.title)}">${icon('close')}</button></div>`).join(''):'<p class="meta">Belum terhubung ke insiden.</p>'}<div class="field"><label for="inspector-group">Tambahkan ke insiden</label><select id="inspector-group" name="group_id"><option value="">Memuat insiden…</option></select></div><button class="button" data-action="add-group">Tambahkan bukti ke insiden</button></section><section class="stack"><h3>Kepemilikan Klaim &amp; Flag</h3><div class="split"><span class="meta">${isClaimed?`Sedang diklaim oleh <strong>@${esc(a.claimed_by)}</strong> (${esc(formatTime(a.claimed_at))})`:'Bebas diklaim (atomic lock · auto-release 30 menit)'}</span><div style="display:flex;gap:6px;flex-wrap:wrap">${isClaimed?`<button class="button" type="button" data-action="heartbeat-claim">${icon('clock')}Perpanjang</button><button class="button" type="button" data-action="release-claim">Lepas Klaim</button>`:`<button class="button primary" type="button" data-action="claim-current">${icon('shield')}Klaim Alert</button>`}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"><button class="button flag-btn-green ${currentFlag==='green'?'is-active':''}" type="button" data-action="flag-current" data-flag-color="green">${icon('flag')}Flag Hijau</button><button class="button flag-btn-yellow ${currentFlag==='yellow'?'is-active':''}" type="button" data-action="flag-current" data-flag-color="yellow">${icon('flag')}Flag Kuning</button><button class="button flag-btn-red ${currentFlag==='red'?'is-active':''}" type="button" data-action="flag-current" data-flag-color="red">${icon('flag')}Flag Merah</button>${currentFlag?`<button class="button" type="button" data-action="unflag-current" title="Hapus Flag tanpa mengubah status review">Hapus Flag</button>`:''}</div>${flagStatusInfo}<div class="split" style="margin-top:6px;"><span class="meta">${a.is_reviewed?`Direview oleh <strong>@${esc(currentReviewer || 'analyst')}</strong>${a.reviewed_at?` · ${esc(formatTime(a.reviewed_at))}`:''}`:'Belum ditinjau'}</span><button class="button" data-action="review-current">${a.is_reviewed?(currentFlag?'Belum direview &amp; Hapus Flag':'Ubah ke Belum direview'):'Tandai selesai ditinjau'}</button></div>${reviewerEditor}</section>`;
+    const reviewControlSection = isReviewedByOther
+      ? `<section class="stack"><h3>Kepemilikan Klaim &amp; Flag</h3><div class="notice" data-kind="info"><p>Alert ini telah direview oleh <strong>@${esc(alertOwner)}</strong>. Anda tetap dapat membaca detail dan log, namun akun Analis tidak dapat melakukan <strong>unflag</strong>, ubah Flag, atau mengembalikan ke <strong>Belum direview</strong> milik user lain.</p></div>${flagStatusInfo}<div class="meta">Direview oleh <strong>@${esc(currentReviewer || alertOwner)}</strong>${a.reviewed_at?` · ${esc(formatTime(a.reviewed_at))}`:''}</div></section>`
+      : `<section class="stack"><h3>Kepemilikan Klaim &amp; Flag</h3><div class="split"><span class="meta">${isClaimed?`Sedang diklaim oleh <strong>@${esc(a.claimed_by)}</strong> (${esc(formatTime(a.claimed_at))})`:'Bebas diklaim (atomic lock · auto-release 30 menit)'}</span><div style="display:flex;gap:6px;flex-wrap:wrap">${isClaimed?`<button class="button" type="button" data-action="heartbeat-claim">${icon('clock')}Perpanjang</button><button class="button" type="button" data-action="release-claim">Lepas Klaim</button>`:`<button class="button primary" type="button" data-action="claim-current">${icon('shield')}Klaim Alert</button>`}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"><button class="button flag-btn-green ${currentFlag==='green'?'is-active':''}" type="button" data-action="flag-current" data-flag-color="green">${icon('flag')}Flag Hijau</button><button class="button flag-btn-yellow ${currentFlag==='yellow'?'is-active':''}" type="button" data-action="flag-current" data-flag-color="yellow">${icon('flag')}Flag Kuning</button><button class="button flag-btn-red ${currentFlag==='red'?'is-active':''}" type="button" data-action="flag-current" data-flag-color="red">${icon('flag')}Flag Merah</button>${currentFlag?`<button class="button" type="button" data-action="unflag-current" title="Hapus Flag tanpa mengubah status review">Hapus Flag</button>`:''}</div>${flagStatusInfo}<div class="split" style="margin-top:6px;"><span class="meta">${a.is_reviewed?`Direview oleh <strong>@${esc(currentReviewer || 'analyst')}</strong>${a.reviewed_at?` · ${esc(formatTime(a.reviewed_at))}`:''}`:'Belum ditinjau'}</span><button class="button" data-action="review-current">${a.is_reviewed?(currentFlag?'Belum direview &amp; Hapus Flag':'Ubah ke Belum direview'):'Tandai selesai ditinjau'}</button></div>${reviewerEditor}</section>`;
+    return `<dl class="detail-grid"><div class="key-value"><dt>Target asset</dt><dd>${esc(a.agent_name||'—')}</dd></div><div class="key-value"><dt>Tenant</dt><dd>${esc(a.tenant||'Default')}</dd></div><div class="key-value"><dt>Detection rule</dt><dd>${esc(a.rule_id||'—')} · Level ${Number(a.rule_level)||0}</dd></div>${sourceUrl?`<div class="key-value wide"><dt>URL / Path</dt><dd class="mono" style="word-break:break-all">${esc(sourceUrl)}</dd></div>`:''}<div class="key-value wide"><dt>Filter noise</dt><dd style="display:flex;gap:8px;flex-wrap:wrap"><button class="button" data-action="exclude-data" title="Sembunyikan data alert ini dari Triage dan Statistik; pilih field dan pola">${icon('shield')}Pengecualian…</button><button class="button" data-action="prefill-pattern-verdict" title="Saring semua alert serupa di backlog dan tandai Flag sekaligus">${icon('flag')}Sapu Pola Serupa…</button></dd><dd class="meta" style="margin-top:2px">Pilih URL, source IP, agent, rule, referer, atau sapu &amp; flag semua alert serupa di backlog.</dd></div><div class="key-value wide"><dt>Source / intel</dt><dd class="mono">${esc(a.source_ip||'—')}</dd><dd class="meta" style="margin-top:2px;">${intelBadge(a)}</dd>${a.source_ip?`<dd style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;"><button class="button" data-action="enrich-single-ip" data-ip="${esc(a.source_ip)}">${icon('refresh')}Live Enrich</button><a class="button" data-intel-link href="${esc(intelWebUrl)}/ip/${encodeURIComponent(a.source_ip)}" rel="noopener noreferrer" target="_blank">Buka IP Intel ${icon('external')}</a></dd>`:''}</div><div class="key-value"><dt>Waktu</dt><dd>${esc(formatTime(a.timestamp))}</dd></div>${a.cve?`<div class="key-value"><dt>CVE</dt><dd>${esc(a.cve)}</dd></div>`:''}${a.mitre_ids?.length?`<div class="key-value wide"><dt>MITRE</dt><dd>${esc(a.mitre_ids.join(', '))}</dd></div>`:''}</dl>${classificationBlock(a)}${log?`<section class="stack"><div class="split"><h3>Log utama</h3><button class="button" data-action="copy-redacted">Versi tersamarkan</button></div><pre class="raw-log">${esc(log)}</pre><p class="meta">Redaksi otomatis bukan jaminan aman untuk cloud. Tinjau hasil sebelum membagikan.</p></section>`:''}${a.previous_output?`<details><summary>Previous output</summary><pre class="raw-log">${esc(a.previous_output)}</pre></details>`:''}<section class="stack"><h3>Insiden terkait</h3>${a.groups?.length?a.groups.map(g=>`<div class="split"><a href="${scopedRoute('/incidents/'+encodeURIComponent(g.id))}">${esc(g.title)}</a><button class="button icon-button" data-remove-group="${esc(g.id)}" aria-label="Keluarkan dari insiden ${esc(g.title)}">${icon('close')}</button></div>`).join(''):'<p class="meta">Belum terhubung ke insiden.</p>'}<div class="field"><label for="inspector-group">Tambahkan ke insiden</label><select id="inspector-group" name="group_id"><option value="">Memuat insiden…</option></select></div><button class="button" data-action="add-group">Tambahkan bukti ke insiden</button></section>${reviewControlSection}`;
   }
   async function renderInspector() {
     const a=currentAlert;if(!a)return;
@@ -424,6 +462,7 @@ ${rawLog}`;
       return;
     }
     if(button.dataset.action==='clear-facet'){updateQuery({facet:null,facet_value:null,offset:0});return;}
+    if(button.dataset.action==='clear-reviewer'){updateQuery({reviewer:isAnalyst?'all':null,offset:0});return;}
     if(button.dataset.action==='clear-reviewed-date'){updateQuery({reviewed_preset:null,reviewed_from:null,reviewed_to:null,offset:0});return;}
     if(button.dataset.action==='apply-reviewed-date'){
       const fromVal=String(root.querySelector('#triage-reviewed-from')?.value||'').trim();
@@ -441,7 +480,7 @@ ${rawLog}`;
     }
     if(button.dataset.action==='clear-alert-ids'){updateQuery({alert_ids:null,offset:0});return;}
     if(button.dataset.review){
-      if(button.dataset.review==='unreviewed')updateQuery({review_status:'unreviewed',reviewed_preset:null,reviewed_from:null,reviewed_to:null});
+      if(button.dataset.review==='unreviewed')updateQuery({review_status:'unreviewed',reviewer:null,reviewed_preset:null,reviewed_from:null,reviewed_to:null});
       else updateQuery({review_status:button.dataset.review});
       return;
     }
@@ -683,6 +722,11 @@ ${rawLog}`;
     if(el.id==='show-intel'){showIntel=el.checked;renderResults();}
     if(el.id==='filter-time-preset'){const custom=root.querySelector('#filter-custom-time');if(custom)custom.style.display=el.value==='custom'?'grid':'none';}
     if(el.id==='filter-reviewed-preset'){const custom=root.querySelector('#filter-custom-reviewed');if(custom)custom.style.display=el.value==='custom'?'grid':'none';}
+    if(el.id==='triage-reviewer-filter'){
+      const nextReviewer=String(el.value||'all');
+      updateQuery({review_status:query.review_status==='unreviewed'?'reviewed':query.review_status,reviewer:nextReviewer,offset:0});
+      return;
+    }
     if(el.id==='triage-review-preset'){
       const preset=String(el.value||'');
       if(!preset){updateQuery({reviewed_preset:null,reviewed_from:null,reviewed_to:null,offset:0});return;}
@@ -814,11 +858,13 @@ ${rawLog}`;
   if(query.facet&&query.facet_value)filters.push(`Filter: ${esc(query.facet)} = ${esc(query.facet_value)} <button class="button text-button" data-action="clear-facet" style="cursor:pointer; padding:0 4px;">✕</button>`);
   if(query.time_preset){const labels={'1h':'1 jam terakhir','24h':'24 jam terakhir','7d':'7 hari terakhir','30d':'30 hari terakhir'};filters.push(labels[query.time_preset]||`Waktu: ${esc(query.time_preset)}`);}
   else if(query.time_from||query.time_to)filters.push(`Waktu: ${query.time_from?esc(formatTime(query.time_from)):'—'} s/d ${query.time_to?esc(formatTime(query.time_to)):'kini'}`);
+  if(effectiveReviewer&&effectiveReviewer!=='all'&&query.review_status!=='unreviewed')filters.push(`Reviewer: @${esc(effectiveReviewer)} <button class="button text-button" data-action="clear-reviewer" style="cursor:pointer; padding:0 4px;" aria-label="Tampilkan semua reviewer">✕</button>`);
   const revChipLabel = reviewDateLabel(query);
   if(revChipLabel)filters.push(`Review: ${esc(revChipLabel)} <button class="button text-button" data-action="clear-reviewed-date" style="cursor:pointer; padding:0 4px;" aria-label="Hapus filter tanggal review">✕</button>`);
   else if(query.reviewed_from||query.reviewed_to)filters.push(`Review: ${query.reviewed_from?esc(formatTime(query.reviewed_from)):'—'} s/d ${query.reviewed_to?esc(formatTime(query.reviewed_to)):'kini'} <button class="button text-button" data-action="clear-reviewed-date" style="cursor:pointer; padding:0 4px;" aria-label="Hapus filter tanggal review">✕</button>`);
   const chips=renderFilterChips(query.filters);
   root.querySelector('#applied-filters').innerHTML=(chips||filters.length)?`${chips}${filters.map(f=>`<span>${f}</span>`).join('')}<button class="button" data-action="reset">Reset</button>`:'';
+  if(showReviewDateBar)void loadReviewerOptions().then(syncReviewerFilterSelect);
   load();
   return ()=>{stopHeartbeat();session.dispose();selection.clear();lastSelected=null;root.classList.remove('triage-page');clearTimeout(searchTimer);pageRequest?.abort();summaryRequest?.abort();detailRequest?.abort();dialog.close();root.querySelector('#batch-add-incident-dialog')?.close();root.querySelector('#pattern-verdict-dialog')?.close();};
 }

@@ -78,8 +78,10 @@ test('review date presets and bounds compute accurate cutoffs to exclude recent 
   assert.equal(localDateInputValue(endBound), '2026-11-15');
   assert.equal(localDayBoundsFromDateInput('invalid', 'start'), '');
 
-  const q = queryFrom(new URLSearchParams(`tenant=Alpha&review_status=reviewed&reviewed_preset=exclude_3d&reviewed_to=${encodeURIComponent(olderThan2d.reviewed_to)}`));
+  const q = queryFrom(new URLSearchParams(`tenant=Alpha&review_status=reviewed&reviewer=analyst1&reviewed_preset=exclude_3d&reviewed_to=${encodeURIComponent(olderThan2d.reviewed_to)}`));
   assert.equal(q.reviewed_preset, 'exclude_3d');
+  assert.equal(q.reviewer, 'analyst1');
   assert.match(reviewDateLabel(q), /> 2 hari lalu/);
   assert.match(scopeDescription(scopeParams(q)), /> 2 hari lalu/);
+  assert.match(scopeDescription(scopeParams(q)), /Reviewer: @analyst1/);
 });

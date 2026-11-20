@@ -192,24 +192,54 @@ test('triage view replaces TP/FP/Benign buttons with Flag Hijau/Kuning/Merah and
   assert.doesNotMatch(triageView, /Verdict TP|Verdict FP|Verdict Benign/);
 });
 
-test('flag workspace forwards review date filters and indicates analyst self-scope', () => {
-  const query = normalizeFlagQuery(new URLSearchParams('tenant=Alpha&flag_color=green&reviewed_preset=exclude_3d&reviewed_to=2026-11-17T16:59:59.999Z'));
+test('flag workspace supports team-wide rule creation, reviewer filter, and analyst own-flag edit bounds', () => {
+  const query = normalizeFlagQuery(new URLSearchParams('tenant=Alpha&flag_color=green&reviewer=analyst2&reviewed_preset=exclude_3d&reviewed_to=2026-11-17T16:59:59.999Z'));
   const params = flagScopeParams(query);
+  assert.equal(params.get('reviewer'), 'analyst2');
   assert.equal(params.get('reviewed_preset'), 'exclude_3d');
   assert.equal(params.get('reviewed_to'), '2026-11-17T16:59:59.999Z');
 
   const expParams = flagExportParams(query, ['Rule A']);
+  assert.equal(expParams.get('reviewer'), 'analyst2');
   assert.equal(expParams.get('reviewed_to'), '2026-11-17T16:59:59.999Z');
 
   const html = renderFlagsPage(query, {
-    counts: {green: {total: 1, pending: 1, done: 0}, yellow: {total: 0, pending: 0, done: 0}, red: {total: 0, pending: 0, done: 0}},
-    total_alerts: 1,
-    total_groups: 1,
-    groups: [{key: 'Rule A', alert_count: 1, event_hits: 1, rule_status: 'pending'}],
+    counts: {green: {total: 3, pending: 3, done: 0}, yellow: {total: 0, pending: 0, done: 0}, red: {total: 0, pending: 0, done: 0}},
+    total_alerts: 3,
+    total_groups: 2,
+    groups: [
+      {key: 'Rule Mixed', alert_count: 2, own_alert_count: 1, pending_count: 2, event_hits: 2, rule_status: 'pending'},
+      {key: 'Rule Others', alert_count: 1, own_alert_count: 0, pending_count: 1, event_hits: 1, rule_status: 'pending'},
+    ],
   }, {
     currentUser: {username: 'analyst1', role: 'analyst'},
+    reviewers: [
+      {username: 'analyst1', display_name: 'Analis Satu'},
+      {username: 'analyst2', display_name: 'Analis Dua'},
+    ],
+    expandedGroups: new Set(['Rule Mixed']),
+    groupAlertsCache: new Map([[
+      'Rule Mixed',
+      {
+        loading: false,
+        error: '',
+        total: 2,
+        items: [
+          {id: 10, alert_id: 'syn-10', description: 'Own flagged', rule_level: 7, flag_color: 'green', flagged_by: 'analyst1', reviewed_by: 'analyst1', rule_status: 'pending'},
+          {id: 11, alert_id: 'syn-11', description: 'Other flagged', rule_level: 7, flag_color: 'green', flagged_by: 'analyst2', reviewed_by: 'analyst2', rule_status: 'pending'},
+        ],
+      },
+    ]]),
   });
   assert.match(html, /id="flag-review-preset"/);
-  assert.match(html, /@analyst1/);
+  assert.match(html, /id="flag-reviewer-filter"/);
+  assert.match(html, /value="analyst2" selected/);
   assert.match(html, /Filter waktu review/);
+  // Mixed group shows rule button + 'Saya (1)' partial unflag buttons
+  assert.match(html, /Hapus Flag Grup Saya \(1\)/);
+  // Row 10 (analyst1) keeps edit controls; Row 11 (analyst2) allows Tandai Rule Dibuat but hides unflag/unreview
+  assert.match(html, /data-change-alert-flag="10"/);
+  assert.doesNotMatch(html, /data-change-alert-flag="11"/);
+  assert.match(html, /Hanya baca flag \(milik user lain\)/);
+  assert.match(html, /data-action="open-alert-rule-modal" data-alert-id="11"/);
 });

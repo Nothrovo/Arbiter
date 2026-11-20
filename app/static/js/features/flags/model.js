@@ -98,6 +98,7 @@ export function normalizeFlagQuery(params = new URLSearchParams()) {
     reviewed_preset: choices(String(get('reviewed_preset') || ''), REVIEW_PRESET_KEYS, ''),
     reviewed_from: String(get('reviewed_from') || ''),
     reviewed_to: String(get('reviewed_to') || ''),
+    reviewer: String(get('reviewer') || ''),
   };
 }
 
@@ -116,6 +117,7 @@ export function flagScopeParams(query) {
   if (normalized.reviewed_preset) params.set('reviewed_preset', normalized.reviewed_preset);
   if (normalized.reviewed_from) params.set('reviewed_from', normalized.reviewed_from);
   if (normalized.reviewed_to) params.set('reviewed_to', normalized.reviewed_to);
+  if (normalized.reviewer && normalized.reviewer !== 'all') params.set('reviewer', normalized.reviewer);
   return params;
 }
 

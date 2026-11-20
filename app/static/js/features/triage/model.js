@@ -24,6 +24,7 @@ export function summaryRequestParams(query) {
   if (query.time_to) p.set('time_to', query.time_to);
   if (query.reviewed_from) p.set('reviewed_from', query.reviewed_from);
   if (query.reviewed_to) p.set('reviewed_to', query.reviewed_to);
+  if (query.reviewer) p.set('reviewer', query.reviewer);
   if (query.facet && query.facet_value) {
     p.set('facet', query.facet);
     p.set('facet_value', query.facet_value);

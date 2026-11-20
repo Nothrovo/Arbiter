@@ -28,6 +28,16 @@ export function mount(ctx) {
   let exportCount = null;
   let exportCountVersion = 0;
   let pendingRuleTarget = null;
+  let reviewers = [];
+
+  async function loadReviewers() {
+    try {
+      const res = await json('/api/reviewers', {signal, timeout: 8000});
+      if (signal.aborted) return;
+      reviewers = Array.isArray(res?.reviewers) ? res.reviewers : [];
+      paint();
+    } catch { /* ignore reviewer list failure */ }
+  }
 
   const tenantParams = () => {
     const p = new URLSearchParams();
@@ -50,6 +60,7 @@ export function mount(ctx) {
       loading,
       error,
       currentUser: ctx.user || null,
+      reviewers,
       expandedGroups,
       groupAlertsCache,
       expandedLogIds,
@@ -357,6 +368,7 @@ export function mount(ctx) {
         q: query.q,
         reviewed_from: query.reviewed_from,
         reviewed_to: query.reviewed_to,
+        reviewer: query.reviewer && query.reviewer !== 'all' ? query.reviewer : '',
         current_rule_status: query.rule_status,
       }, `Status custom rule untuk grup “${group.key}” dikembalikan ke Belum Dibuat.`);
       return;
@@ -440,6 +452,7 @@ export function mount(ctx) {
             q: query.q,
             reviewed_from: query.reviewed_from,
             reviewed_to: query.reviewed_to,
+            reviewer: query.reviewer && query.reviewer !== 'all' ? query.reviewer : '',
           }),
           signal,
         });
@@ -473,6 +486,7 @@ export function mount(ctx) {
             q: query.q,
             reviewed_from: query.reviewed_from,
             reviewed_to: query.reviewed_to,
+            reviewer: query.reviewer && query.reviewer !== 'all' ? query.reviewer : '',
           }),
           signal,
         });
@@ -520,6 +534,10 @@ export function mount(ctx) {
     }
     if (el.id === 'flag-group-by') {
       updateRoute({group_by: el.value, pattern: el.value === 'pattern' ? query.pattern : null});
+      return;
+    }
+    if (el.id === 'flag-reviewer-filter') {
+      updateRoute({reviewer: el.value === 'all' ? null : el.value});
       return;
     }
     if (el.id === 'flag-review-preset') {
@@ -611,6 +629,7 @@ export function mount(ctx) {
           q: query.q,
           reviewed_from: query.reviewed_from,
           reviewed_to: query.reviewed_to,
+          reviewer: query.reviewer && query.reviewer !== 'all' ? query.reviewer : '',
           current_rule_status: query.rule_status,
         }
       : {
@@ -639,6 +658,7 @@ export function mount(ctx) {
 
   root.addEventListener('arbiter:refresh', () => loadGroups({preserveExpanded: true}), {signal});
 
+  void loadReviewers();
   loadGroups();
 
   return () => {
