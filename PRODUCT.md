@@ -9,7 +9,7 @@ Desktop-first analysts working extended investigation sessions; narrow screens s
 ## Product boundaries
 
 - FastAPI backend, PostgreSQL storage, native JavaScript ES modules and CSS. No framework migration is required by the UI.
-- Four task destinations: Triage, Insiden, Impor, Laporan. Triage is the default entry; there is no decorative overview dashboard.
+- Focused destinations, not a monolithic page. Core tasks: Triage, Insiden, Impor, Laporan. Supporting pages: Flag, AI Triage, Statistik, User Review, Audit Laporan, Realtime, Ambil Alert, Rumus Query, Kamus Kode, Database, Pengaturan. The sidebar groups them into Investigasi, Analitik, Telemetri, Referensi, and Sistem. Triage is the default entry; there is no decorative overview dashboard.
 - Tenant is a visible working context, not an asserted authorization mechanism. Case evidence and exports retain explicit tenant scope.
 - Raw alert/log data is sensitive. Development and agent QA use authored synthetic fixtures only; never inspect production records, .env, raw logs or populated production UI.
 - Fonts and UI assets are local. No analytics, runtime CDN, external font fetch or silent data upload is introduced. IP intelligence pivot is an explicit user action to the configured local platform.

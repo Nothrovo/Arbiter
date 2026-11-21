@@ -73,7 +73,7 @@ export async function mount(ctx) {
       <header class="page-header">
         <div class="page-heading">
           <h1>Ambil Alert</h1>
-          <p class="page-description">Tarik alert langsung dari Wazuh Indexer ke database aktif. Proses berjalan di latar belakang dengan progres per halaman, terpisah dari monitor realtime.</p>
+          <p class="page-description">Backfill alert dari Wazuh Indexer ke database aktif.</p>
         </div>
         <div class="page-actions">
           <a class="button" href="#/realtime">${icon('pulse')} Monitor realtime</a>
@@ -115,17 +115,14 @@ export async function mount(ctx) {
               <div class="field">
                 <label for="pull-max-docs">Maks alert</label>
                 <input class="input mono" id="pull-max-docs" name="max_docs" type="number" min="1" max="100000" step="1" value="100000">
-                <span class="meta">1–100000 dokumen. Rentang yang lebih kecil lebih cepat selesai.</span>
               </div>
               <div class="field">
                 <label for="pull-page-size">Per halaman</label>
                 <input class="input mono" id="pull-page-size" name="page_size" type="number" min="50" max="10000" step="100" value="2000">
-                <span class="meta">Dokumen per permintaan ke indexer (50–10000). Halaman lebih besar = lebih sedikit request.</span>
               </div>
               <div class="field">
                 <label for="pull-chunk-days">Pecah per hari</label>
                 <input class="input mono" id="pull-chunk-days" name="chunk_days" type="number" min="0" max="30" step="1" value="1">
-                <span class="meta">0 = satu permintaan untuk seluruh rentang.</span>
               </div>
             </div>
             <p class="meta">Filter: <strong>${esc(wazuh.index_pattern || 'wazuh-alerts-*')}</strong> · ${esc(realtimeSeverityLabel(parseRealtimeSeverity(severitySelection)))}. Alert yang sudah ada otomatis digabung (dedup), bukan diduplikasi.</p>
@@ -162,17 +159,6 @@ export async function mount(ctx) {
               <a class="button" href="#/triage" id="pull-open-triage" hidden>${icon('inbox')} Lihat di Triage</a>
             </div>
           </div>
-        </section>
-
-        <section class="form-section pull-card">
-          <h2 class="section-heading">Catatan</h2>
-          <ul class="stack meta">
-            <li>Monitor <a href="#/realtime">Realtime</a> tetap dipakai untuk pull kecil berkala (interval 30 detik atau harian). Halaman ini untuk backfill manual.</li>
-            <li>Progres berasal dari server, bukan perkiraan browser. Total alert dihitung lebih dulu dari indexer.</li>
-            <li>Alert yang dikecualikan tetap masuk database; pengecualian hanya menyembunyikannya dari Triage, Statistik, dan AI Triage.</li>
-            <li>Job berjalan di server. Menutup tab atau berpindah menu tidak menghentikannya; buka lagi halaman ini untuk melanjutkan progres (ID job disimpan di browser).</li>
-            <li>Job disimpan di memori proses. Restart server membatalkan job yang sedang berjalan.</li>
-          </ul>
         </section>
       </div>`;
 

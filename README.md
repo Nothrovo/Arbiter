@@ -20,9 +20,9 @@
 
 When investigating high-volume attacks (credential stuffing, SSH brute-force, web vulnerability probing), raw Wazuh Elasticsearch JSON exports often flood analysts with tens of thousands of repetitive log lines. Arbiter normalizes multi-format logs, **reads nested Wazuh structures**, **classifies each event with auditable local rules**, **links Active Response events back to their origin alert**, deduplicates recurring attacks using stable hashing, enriches source IPs with local Threat Intelligence, and produces **Google Docs**, **Word (.docx)**, and **Excel (.xlsx)** deliverables in one click.
 
-The architecture is documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): data contracts, classification policy, correlation rules, storage, failure modes, and dataset-derived calibration.
+Arsitektur dibagi menjadi dua dokumen yang saling melengkapi, bukan duplikat: [`docs/ARSITEKTUR.md`](docs/ARSITEKTUR.md) memuat arsitektur sistem berbahasa Indonesia (C4, frontend, tools, deployment), sedangkan [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) memuat kontrak pipeline berbahasa Inggris (data contracts, classification policy, correlation, failure modes).
 
-Dokumentasi lengkap berbahasa Indonesia (ringkasan, workflow, flowchart, keamanan, komponen, dan instalasi) tersedia di [`docs/DOKUMENTASI.md`](docs/DOKUMENTASI.md). Arsitektur web dan tools dijelaskan di [`docs/ARSITEKTUR.md`](docs/ARSITEKTUR.md).
+Dokumentasi lengkap berbahasa Indonesia (ringkasan, workflow, flowchart, keamanan, komponen, dan instalasi) tersedia di [`docs/DOKUMENTASI.md`](docs/DOKUMENTASI.md).
 
 ---
 
@@ -56,17 +56,23 @@ Dokumentasi lengkap berbahasa Indonesia (ringkasan, workflow, flowchart, keamana
 
 ### 5. Modular Destination UI
 
-Arbiter uses a **Quiet Evidence Desk** design with focused destinations instead of a monolithic single-page layout:
+Arbiter uses a **Quiet Evidence Desk** design with focused destinations instead of a monolithic single-page layout. The sidebar groups them into **Investigasi**, **Analitik**, **Telemetri**, **Referensi**, and **Sistem**:
 
 | Destination | Route | Purpose |
 |-------------|-------|---------|
 | **Triage** | `#/triage` | Alert queue with sidebar inspector, scoped `alert_ids` filtering, and inline log viewer. Default home. |
-| **AI Triage** | `#/ai-triage` | Local AI (Ollama) & deterministic heuristic TP/FP triage, tenant/severity/grouping controls, persistent state, and daily 17:00 WIB case windowing |
-| **Realtime** | `#/realtime` | Live Wazuh Indexer alert counter and on-demand / scheduled pull into active database |
-| **Statistik** | `#/stats` | Multi-dimensional pivot charts, Benign/Malicious Spotter, and secondary drill-down |
+| **Flag** | `#/flags` | Flag & rule-tuning tracker with follow-up status |
 | **Insiden** | `#/incidents/:id` | Case editor: evidence grouping, analysis, conclusions, recommendations |
+| **AI Triage** | `#/ai-triage` | Local AI (Ollama) & deterministic heuristic TP/FP triage, tenant/severity/grouping controls, persistent state, and daily 17:00 WIB case windowing |
+| **Statistik** | `#/stats` | Multi-dimensional pivot charts, Benign/Malicious Spotter, and secondary drill-down |
+| **User Review** | `#/monitoring` | Reviewer workload, backlog, and per-analyst contribution |
+| **Audit Laporan** | `#/audit` | Report audit log: title/case, author, time, and export status |
+| **Realtime** | `#/realtime` | Live Wazuh Indexer alert counter and on-demand / scheduled pull into active database |
+| **Ambil Alert** | `#/pull` | Manual / scheduled alert pull with time-range controls |
 | **Impor** | `#/imports` | Paste or upload new Wazuh JSON exports |
 | **Laporan** | `#/reports` | Scoped export (CSV, JSON, clipboard HTML, .docx, .xlsx) |
+| **Rumus Query** | `#/wazuh-queries` | Saved Wazuh query notes and reference library |
+| **Kamus Kode** | `#/error-codes` | Wazuh error-code reference |
 | **Database** | `#/database` | Local / Remote PostgreSQL profile switching and safe preview-gated purge maintenance |
 | **Pengaturan** | `#/settings` | Wazuh Indexer connection, local AI (Ollama) model config, realtime monitor, sidebar preference |
 
@@ -192,7 +198,7 @@ app/
 │       ├── api/client.js           # Same-origin fetch wrapper
 │       ├── state/                  # Scope, selection, navigation, triage, workspace
 │       ├── ui/primitives.js        # Shared UI utilities
-│       └── features/               # triage/, ai-triage/, realtime/, stats/, incidents/, imports/, reports/, database/, settings/
+│       └── features/               # triage/, flags/, monitoring/, audit/, stats/, incidents/, ai-triage/, realtime/, pull/, imports/, reports/, database/, settings/, wazuh-queries/, error-codes/
 ```
 
 - **Backend**: Python 3.11+, FastAPI, Uvicorn, Psycopg 3

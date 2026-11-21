@@ -5,7 +5,7 @@ export function parseRoute(hash = '') {
   const search = qIdx === -1 ? '' : raw.slice(qIdx + 1);
   const path = pathPart.startsWith('/') ? pathPart : '/triage';
   const first = path.split('/')[1];
-  return {path, params: new URLSearchParams(search), page: ['triage', 'flags', 'monitoring', 'stats', 'incidents', 'imports', 'reports', 'realtime', 'pull', 'ai-triage', 'wazuh-queries', 'error-codes', 'database', 'settings'].includes(first) ? first : 'not-found'};
+  return {path, params: new URLSearchParams(search), page: ['triage', 'flags', 'monitoring', 'audit', 'stats', 'incidents', 'imports', 'reports', 'realtime', 'pull', 'ai-triage', 'wazuh-queries', 'error-codes', 'database', 'settings'].includes(first) ? first : 'not-found'};
 }
 export const withParams = (path, params) => `#${path}${params?.size ? `?${params}` : ''}`;
 export function createRouter(onChange, canLeave = () => true) {

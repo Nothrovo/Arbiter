@@ -37,12 +37,6 @@ export async function mount(ctx) {
     return parts.length ? parts : ['all'];
   };
 
-  const activeTenantLabel = () => {
-    const list = activeTenants();
-    if (list.length === 1 && list[0] === 'all') return 'Semua tenant';
-    return list.join(', ');
-  };
-
   const scopedRoute = (path, extra = {}, overrideTenant = '') => {
     const params = new URLSearchParams();
     const tenants = overrideTenant && overrideTenant !== 'Default' ? [overrideTenant] : activeTenants();
@@ -265,7 +259,7 @@ export async function mount(ctx) {
       <header class="page-header">
         <div class="page-heading">
           <h1>AI Triage</h1>
-          <p class="page-description">Klasifikasi True Positive / False Positive dan pengelompokan alert Wazuh Medium ke atas. AI berjalan lokal lewat Ollama; bila model tidak tersedia, Arbiter memakai heuristik deterministik dan memberi label yang jelas.</p>
+          <p class="page-description">Klasifikasi TP/FP dan pengelompokan alert Wazuh Medium ke atas.</p>
         </div>
         <div class="page-actions">
           <a class="button" href="#/settings">${icon('settings')} Pengaturan AI</a>
@@ -277,7 +271,6 @@ export async function mount(ctx) {
           <div class="split">
             <div>
               <h2 class="section-heading">Jalankan triage</h2>
-              <p class="meta">Scope tenant: <strong id="ai-tenant-label">${esc(activeTenantLabel())}</strong>. Halaman ini tidak mengubah status review atau menyimpan alert baru.</p>
             </div>
             <span class="badge ${settings.ai.enabled ? 'success' : 'warning'}"><span class="status-dot"></span>${settings.ai.enabled ? 'AI lokal aktif' : 'Heuristik lokal'}</span>
           </div>
@@ -631,9 +624,7 @@ export async function mount(ctx) {
     }
     if (event.target.name === 'tenant') {
       state.tenantValue = event.target.value || 'all';
-      const label = root.querySelector('#ai-tenant-label');
-      if (label) label.textContent = activeTenantLabel();
-      
+
       // Reload saved state for the new tenant selection
       (async () => {
         const resultsEl = root.querySelector('#ai-results');

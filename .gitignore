@@ -99,3 +99,6 @@ tmp/
 graphify-out/cache/
 graphify-out/*.pending.json
 contoh_tools_ambil_wazuh/
+
+# Documentation excluded from git
+/docs/

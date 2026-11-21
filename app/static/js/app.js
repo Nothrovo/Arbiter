@@ -19,7 +19,7 @@ const selection=createSelection(routeScope(parseRoute(location.hash).params).key
 let currentRoute, controller, cleanup, guard=null, notifyTimer, healthPending=false, lastHealth=null, routeVersion=0;
 const scrollPositions=new Map();
 let navigationMemory=createNavigationMemory();
-const pageTitles={triage:'Triage',flags:'Flag & Rule Tuning',monitoring:'User Review',stats:'Statistik',incidents:'Insiden',imports:'Impor',reports:'Laporan',realtime:'Realtime',pull:'Ambil Alert','ai-triage':'AI Triage','wazuh-queries':'Rumus Query Wazuh','error-codes':'Kamus Error Code',database:'Database',settings:'Pengaturan'};
+const pageTitles={triage:'Triage',flags:'Flag & Rule Tuning',monitoring:'User Review',audit:'Audit Laporan',stats:'Statistik',incidents:'Insiden',imports:'Impor',reports:'Laporan',realtime:'Realtime',pull:'Ambil Alert','ai-triage':'AI Triage','wazuh-queries':'Rumus Query Wazuh','error-codes':'Kamus Error Code',database:'Database',settings:'Pengaturan'};
 const adminOnlyPages=new Set(['database','settings']);
 const roleLabels={admin:'Admin',director:'Director / Lead',analyst:'Analis'};
 let currentUser=null, authChecked=false;

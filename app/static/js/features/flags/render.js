@@ -148,7 +148,7 @@ export function renderFlagGroups(query, data, {
     <div class="split" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
         <h2 class="section-heading">Ekspor Flag</h2>
-        <p class="meta">${selectedCount ? `<strong>${selectedCount.toLocaleString('id-ID')} grup dipilih</strong> · ` : 'Tanpa centang = seluruh alert pada kategori ini · '}${countText}</p>
+        <p class="meta">${selectedCount ? `<strong>${selectedCount.toLocaleString('id-ID')} grup dipilih</strong> · ` : ''}${countText}</p>
       </div>
       <div class="page-actions" style="flex-wrap:wrap;">
         <button class="button" type="button" data-action="flag-select-all">Pilih semua grup</button>
@@ -248,7 +248,6 @@ export function renderFlagsPage(query, data = null, state = {}) {
     yellow: {total: 0, pending: 0, done: 0},
     red: {total: 0, pending: 0, done: 0},
   };
-  const activeMeta = flagMeta(query.flag_color) || FLAG_TABS[0];
   const isRed = query.flag_color === 'red';
 
   const tabsHTML = FLAG_TABS.map(tab => {
@@ -295,7 +294,6 @@ export function renderFlagsPage(query, data = null, state = {}) {
     reviewerFilterOptions.push(`<option value="${esc(selectedReviewer)}" selected>@${esc(selectedReviewer)}</option>`);
   }
 
-  const noticeKind = isRed ? 'warning' : 'info';
   const resultsContent = state.error
     ? errorState(state.error)
     : state.loading && !data
@@ -306,7 +304,6 @@ export function renderFlagsPage(query, data = null, state = {}) {
     <header class="page-header">
       <div class="page-heading">
         <h1>Flag &amp; Rule Tuning Tracker</h1>
-        <p class="page-description">Kelompokkan alert ber-flag menurut pola atribut untuk mempercepat pembuatan custom rule Wazuh dan mencegah tuning ganda.</p>
       </div>
       <div class="page-actions">
         <button class="button" type="button" data-action="refresh-flags">${icon('refresh')}Muat Ulang</button>
@@ -315,10 +312,6 @@ export function renderFlagsPage(query, data = null, state = {}) {
     </header>
 
     <div class="flag-tabs" role="tablist" aria-label="Kategori warna Flag">${tabsHTML}</div>
-
-    <div class="notice" data-kind="${noticeKind}" style="margin-bottom:14px;">
-      <p><strong>Flag ${esc(activeMeta.label)} (${esc(activeMeta.title)}):</strong> ${esc(activeMeta.description)}</p>
-    </div>
 
     <div class="flag-filter-bar">
       ${ruleFiltersHTML}

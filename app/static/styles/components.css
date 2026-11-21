@@ -554,3 +554,11 @@
 @media (prefers-reduced-motion: reduce) {
   .flag-group-toggle .icon { transition:none; }
 }
+.import-layout-single{grid-template-columns:minmax(0,1fr);max-width:760px}
+.file-picker{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-control);cursor:pointer;min-width:0}
+.file-picker:hover{background:var(--surface)}
+.file-picker:focus-within{outline:2px solid var(--text);outline-offset:2px}
+.file-picker .button{pointer-events:none}
+.file-picker .meta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 14px}
+.row-actions .text-button{min-height:28px;line-height:20px}

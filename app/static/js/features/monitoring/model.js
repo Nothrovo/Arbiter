@@ -29,7 +29,6 @@ export function renderReviewActivity(data) {
       <span class="review-activity-stats">Hari ini <strong class="num">${Number(data.today || 0).toLocaleString('id-ID')}</strong> alert · 7 hari <strong class="num">${Number(data.last_7_days || 0).toLocaleString('id-ID')}</strong> · total <strong class="num">${Number(data.total_reviewed || 0).toLocaleString('id-ID')}</strong></span>
     </div>
     <div class="review-bars" role="group" aria-label="Jumlah alert direview per hari">${bars}</div>
-    <p class="meta">Klik satu hari untuk menampilkan alert yang direview pada hari itu. Tanggal mengikuti zona waktu perangkat ini.</p>
   </section>`;
 }
 
@@ -42,7 +41,6 @@ export function renderReviewerFilter(reviewerInfo) {
         <span>Reviewer</span>
         <div class="badge info" data-reviewer-locked="true">Akun Saya · @${esc(currentUser)}</div>
       </div>
-      <p class="meta">Akun Analis hanya dapat melihat statistik, flag, dan aktivitas review milik <strong>@${esc(currentUser)}</strong>.</p>
     </section>`;
   }
   const reviewers = Array.isArray(info.reviewers) ? info.reviewers : [];
@@ -65,17 +63,13 @@ export function renderReviewerFilter(reviewerInfo) {
       <span>Reviewer</span>
       <select class="select" id="monitoring-reviewer">${options.join('')}</select>
     </label>
-    <p class="meta">${selected === 'all'
-      ? 'Menampilkan aktivitas seluruh akun.'
-      : `Menampilkan aktivitas review <strong>@${esc(selected)}</strong>${info.is_default ? ' (akun yang sedang login)' : ''}.`}</p>
   </section>`;
 }
 
-export function renderMonitoringDashboard(data, query) {
+export function renderMonitoringDashboard(data, query, {includeAudit = true} = {}) {
   const metrics = data?.metrics || {};
   const flags = metrics.flags || {};
   const leaderboard = Array.isArray(data?.leaderboard) ? data.leaderboard : [];
-  const auditLogs = Array.isArray(data?.audit_logs) ? data.audit_logs : [];
   const num = v => Number(v || 0).toLocaleString('id-ID');
 
   const tenantParams = () => {
@@ -108,29 +102,13 @@ export function renderMonitoringDashboard(data, query) {
       }).join('')
     : `<tr><td colspan="7" class="meta" style="text-align:center;padding:var(--space-4)">Belum ada aktivitas klaim atau review analis tercatat.</td></tr>`;
 
-  const auditRows = auditLogs.length
-    ? auditLogs.map(log => {
-        const isCase = !String(log.id || '').startsWith('rep-') && String(log.id || '').length === 36;
-        const titleCell = isCase
-          ? `<a href="${withParams('/incidents/' + encodeURIComponent(log.id), tenantParams())}"><strong>${esc(log.title)}</strong></a>`
-          : `<strong>${esc(log.title)}</strong>`;
-        return `<tr>
-          <td>${titleCell}<div class="meta">${esc(log.tenant || 'Semua Tenant')} · ${num(log.alert_count)} bukti</div></td>
-          <td><span class="mono">${esc(log.author || 'analyst')}</span></td>
-          <td class="meta num">${esc(formatTime(log.created_at))}</td>
-          <td><span class="badge neutral">${esc(log.export_status || 'Diterbitkan')}</span></td>
-        </tr>`;
-      }).join('')
-    : `<tr><td colspan="4" class="meta" style="text-align:center;padding:var(--space-4)">Belum ada riwayat laporan insiden atau ekspor dokumen.</td></tr>`;
-
   return `
     ${renderReviewerFilter(data?.reviewer)}
     ${renderReviewActivity(data?.review_activity)}
     <section class="form-section" aria-label="Kartu Metrik Real-time">
       <div class="split">
         <div>
-          <h2 class="section-heading">Metrik Operasional Real-Time</h2>
-          <p class="meta">Ritme penarikan alert harian, sisa antrean lintas hari (backlog persistence), dan akumulasi flag tim SOC.</p>
+          <h2 class="section-heading">Metrik Operasional</h2>
         </div>
         <span class="meta">Diperbarui ${esc(formatTime(data?.checked_at))}</span>
       </div>
@@ -161,8 +139,7 @@ export function renderMonitoringDashboard(data, query) {
     <section class="form-section" style="margin-top:24px;" aria-label="Leaderboard Analis">
       <div class="split">
         <div>
-          <h2 class="section-heading">Leaderboard &amp; Akuntabilitas Analis</h2>
-          <p class="meta">Pemantauan beban kerja aktif (sedang diklaim), penyelesaian hari ini, dan total kontribusi flag (Hijau, Kuning, Merah) per analis.</p>
+          <h2 class="section-heading">Leaderboard Analis</h2>
         </div>
         <a class="button" href="${esc(triageLink({review_status: 'unreviewed'}))}">${icon('inbox')} Buka Antrean Backlog</a>
       </div>
@@ -184,12 +161,36 @@ export function renderMonitoringDashboard(data, query) {
       </div>
     </section>
 
-    <section class="form-section" style="margin-top:24px;" aria-label="Audit Log Laporan">
+    ${includeAudit ? renderAuditLogSection(data, query) : ''}
+  `;
+}
+
+export function renderAuditLogSection(data, query) {
+  const tenantParams = () => {
+    const p = new URLSearchParams();
+    for (const t of tenantValues(query || new URLSearchParams())) p.append('tenant', t);
+    return p;
+  };
+  const num = v => Number(v || 0).toLocaleString('id-ID');
+  const auditLogs = Array.isArray(data?.audit_logs) ? data.audit_logs : [];
+  const auditRows = auditLogs.length
+    ? auditLogs.map(log => {
+        const isCase = !String(log.id || '').startsWith('rep-') && String(log.id || '').length === 36;
+        const titleCell = isCase
+          ? `<a href="${withParams('/incidents/' + encodeURIComponent(log.id), tenantParams())}"><strong>${esc(log.title)}</strong></a>`
+          : `<strong>${esc(log.title)}</strong>`;
+        return `<tr>
+          <td>${titleCell}<div class="meta">${esc(log.tenant || 'Semua Tenant')} · ${num(log.alert_count)} bukti</div></td>
+          <td><span class="mono">${esc(log.author || 'analyst')}</span></td>
+          <td class="meta num">${esc(formatTime(log.created_at))}</td>
+          <td><span class="badge neutral">${esc(log.export_status || 'Diterbitkan')}</span></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="4" class="meta" style="text-align:center;padding:var(--space-4)">Belum ada riwayat laporan atau ekspor.</td></tr>`;
+
+  return `<section class="form-section" style="margin-top:24px;" aria-label="Audit Log Laporan">
       <div class="split">
-        <div>
-          <h2 class="section-heading">Audit Log Laporan Insiden</h2>
-          <p class="meta">Daftar seluruh laporan insiden dan dokumen ekspor yang telah diterbitkan tim SOC (Judul, Pembuat, Waktu, Status Ekspor).</p>
-        </div>
+        <h2 class="section-heading">Audit Log Laporan</h2>
         <a class="button" href="${esc(withParams('/reports', tenantParams()))}">${icon('report')} Buat Laporan Baru</a>
       </div>
       <div class="table-region" tabindex="0" style="margin-top:12px;">
@@ -205,6 +206,5 @@ export function renderMonitoringDashboard(data, query) {
           <tbody>${auditRows}</tbody>
         </table>
       </div>
-    </section>
-  `;
+    </section>`;
 }

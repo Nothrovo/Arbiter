@@ -267,7 +267,7 @@ export async function mount(ctx) {
       <header class="page-header">
         <div class="page-heading">
           <h1>Pengaturan</h1>
-          <p class="page-description">Sumber telemetri Wazuh, monitor realtime, dan preferensi tampilan. Password Wazuh dienkripsi dengan kunci lokal sebelum disimpan; API tidak pernah mengembalikannya.</p>
+          <p class="page-description">Koneksi Wazuh, monitor, dan preferensi workspace.</p>
         </div>
       </header>
 
@@ -292,12 +292,11 @@ export async function mount(ctx) {
             <div class="field">
               <label for="indexer-url">URL Indexer</label>
               <input class="input mono" id="indexer-url" name="indexer_url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://wazuh.local:9200" value="${esc(wazuh.indexer_url)}">
-              <span class="meta">Hanya http/https. Jangan sertakan path indeks di sini.</span>
+              <span class="meta">Hanya http/https.</span>
             </div>
             <div class="field">
               <label for="index-pattern">Pola indeks</label>
               <input class="input mono" id="index-pattern" name="index_pattern" type="text" autocomplete="off" spellcheck="false" value="${esc(wazuh.index_pattern)}">
-              <span class="meta">Contoh: wazuh-alerts-*</span>
             </div>
             <div class="field">
               <label for="indexer-username">Username</label>
@@ -311,7 +310,6 @@ export async function mount(ctx) {
           </div>
 
           <label class="checkbox-label"><input type="checkbox" name="verify_tls" ${wazuh.verify_tls ? 'checked' : ''}> Verifikasi sertifikat TLS</label>
-          <p class="meta">Matikan verifikasi TLS hanya untuk lab lokal dengan sertifikat self-signed.</p>
 
           <div class="settings-actions">
             <button class="button" type="button" data-action="test-connection">${icon('pulse')} Tes koneksi</button>

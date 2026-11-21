@@ -4,7 +4,7 @@ import {renderMonitoringDashboard, renderReviewerFilter} from '../../app/static/
 import {claimBadge} from '../../app/static/js/features/triage/model.js';
 import {queryFrom} from '../../app/static/js/state/scope.js';
 
-test('renderMonitoringDashboard renders real-time metric cards, analyst leaderboard, and report audit logs safely', () => {
+test('renderMonitoringDashboard renders metric cards, analyst leaderboard, and report audit logs safely', () => {
   const html = renderMonitoringDashboard(
     {
       checked_at: '2026-11-18T10:00:00Z',
@@ -78,7 +78,6 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   assert.match(html, /Total Pull Hari Ini/);
   assert.match(html, /id="monitoring-reviewer"/);
   assert.match(html, /<option value="analis1" selected>Analis Satu \(akun saya\)<\/option>/);
-  assert.match(html, /Menampilkan aktivitas review <strong>@analis1<\/strong> \(akun yang sedang login\)/);
   assert.doesNotMatch(html, /<b>/);
   assert.match(html, /Aktivitas review/);
   assert.match(html, /data-review-day="2026-11-18"/);
@@ -95,8 +94,8 @@ test('renderMonitoringDashboard renders real-time metric cards, analyst leaderbo
   assert.doesNotMatch(html, /Rincian Verdict/);
   assert.doesNotMatch(html, /TP 40/);
   assert.doesNotMatch(html, /Benign 100/);
-  assert.match(html, /Leaderboard &amp; Akuntabilitas Analis/);
-  assert.match(html, /Audit Log Laporan Insiden/);
+  assert.match(html, /Leaderboard Analis/);
+  assert.match(html, /Audit Log Laporan/);
   assert.match(html, /Director \/ Lead/);
   assert.match(html, /Diekspor \(Word \.docx\)/);
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
@@ -126,7 +125,6 @@ test('renderReviewerFilter defaults to the current account and offers all review
     reviewers: [{username: 'analis1', display_name: 'Analis Satu'}],
   });
   assert.match(all, /<option value="all" selected>Semua reviewer<\/option>/);
-  assert.match(all, /Menampilkan aktivitas seluruh akun\./);
 
   const missing = renderReviewerFilter({
     current_user: 'admin',

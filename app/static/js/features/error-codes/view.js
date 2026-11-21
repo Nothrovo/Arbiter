@@ -70,7 +70,7 @@ export async function mount(ctx) {
       <header class="page-header">
         <div class="page-heading" style="width:100%">
           <h1>Kamus Error Code</h1>
-          <p class="page-description" style="max-width:none">Referensi kode status HTTP standar (1xx–5xx) dan kode nonstandar yang dikelompokkan pada tabel terpisah per platform/layanan (IIS, nginx, Cloudflare, AWS ELB, Apache, Laravel, Spring, Twitter, Shopify, ArcGIS, cPanel, SSLLabs, Pantheon, LinkedIn).</p>
+          <p class="page-description">Referensi kode status HTTP standar dan khusus platform.</p>
         </div>
       </header>
 

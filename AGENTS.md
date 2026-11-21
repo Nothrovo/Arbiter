@@ -58,6 +58,8 @@ app/
 │       ├── ui/primitives.js        # esc(), icon(), severity(), formatTime(), emptyState()
 │       └── features/
 │           ├── triage/             # model.js (intelSummary, renderQueue), view.js
+│           ├── monitoring/         # model.js (review + audit section), view.js
+│           ├── audit/              # view.js (report audit log destination)
 │           ├── incidents/          # model.js, render.js, state.js, view.js, workspace.js
 │           ├── imports/            # model.js, render.js, view.js
 │           ├── reports/            # model.js, render.js, view.js
@@ -87,17 +89,30 @@ requirements.txt        # Python deps
 start.sh                # Local uvicorn --reload launcher
 ```
 
-## Four destinations (not a monolithic page)
+## Destinations (not a monolithic page)
+
+Sidebar groups: **Investigasi**, **Analitik**, **Telemetri**, **Referensi**, **Sistem**.
 
 | Route | Purpose |
 |-------|---------|
 | `#/triage` | Alert queue with sidebar inspector. Default home. |
+| `#/flags` | Flag & rule-tuning tracker |
 | `#/incidents/:id` | Case editor: evidence grouping, analysis, conclusion, recommendation |
+| `#/ai-triage` | Local AI / deterministic TP-FP triage with daily 17:00 WIB window |
+| `#/stats` | Multi-dimensional pivot charts and drill-down |
+| `#/monitoring` | Reviewer workload and contribution |
+| `#/audit` | Report audit log: author, time, export status |
+| `#/realtime` | Wazuh Indexer counter and pull monitor |
+| `#/pull` | Manual / scheduled alert pull and time-range controls |
 | `#/imports` | Paste or upload new Wazuh JSON exports |
 | `#/reports` | Scoped export to CSV, JSON, clipboard HTML, .docx, .xlsx |
+| `#/wazuh-queries` | Saved Wazuh query reference |
+| `#/error-codes` | Wazuh error-code reference |
+| `#/database` | Local / Remote PostgreSQL profiles and maintenance |
 | `#/settings` | Wazuh Indexer connection, realtime monitor, sidebar preference |
 
-There is **no overview dashboard**. Triage is the entry point.
+There is **no overview dashboard**. Triage is the entry point. Audit log lives
+on its own `#/audit` page, not inside User Review.
 
 ## Design direction: Quiet Evidence Desk
 

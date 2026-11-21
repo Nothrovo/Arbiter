@@ -121,7 +121,6 @@ export function filterBuilderHTML(filters = [], {prefix = 'flt'} = {}) {
       <button type="button" class="button" data-add-filter>+ Tambah filter</button>
     </div>
     <div class="filter-chip-list" data-filter-chips>${renderFilterChips(filters)}</div>
-    <p class="meta">Contoh: <code>rule.description does not contain mhs</code>, <code>data.url matches glob */mhs/*</code>, <code>rule.level in range 7..12</code>. Pola dengan <code>*</code> atau <code>?</code> pada operator <code>is</code>/<code>is not</code> otomatis dicocokkan sebagai glob. Filter memakai AND dan ikut tersimpan di URL.</p>
   </div>`;
 }
 

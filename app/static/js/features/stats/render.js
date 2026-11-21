@@ -75,7 +75,6 @@ export function statsPage(query) {
     <header class="page-header">
       <div class="page-heading">
         <h1 id="stats-title">Statistik &amp; Pivot</h1>
-        <p class="page-description">Workbench investigasi analitis berbasis agregasi telemetri SQL murni.</p>
       </div>
       <div class="page-actions stats-page-actions"><details class="format-menu"><summary class="button">Ekspor ${icon('down')}</summary><div>
         <button class="button" type="button" data-action="export-csv">${icon('report')} CSV</button>
@@ -163,7 +162,7 @@ export function statsPage(query) {
           ${CHART_OPTIONS.map(([val, lbl]) => `<button type="button" class="btn-seg ${query.chart === val ? 'active' : ''}" data-chart="${val}" aria-pressed="${query.chart === val}">${esc(lbl)}</button>`).join('')}
         </div>
       </div>
-      <div class="field stats-field-auto stats-scale-control" style="margin-left:auto;">
+      <div class="field stats-field-auto stats-scale-control">
         <label for="stats-scale-segmented">Ukuran grafik</label>
         <div class="segmented stats-segmented" id="stats-scale-segmented">
           <button type="button" class="btn-seg ${query.chart_scale !== 'large' ? 'active' : ''}" data-chart-scale="normal" aria-pressed="${query.chart_scale !== 'large'}" title="Ukuran standar seimbang">
@@ -255,11 +254,13 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
             <div class="meta font-medium sub-breakdown-pct">(${data.primary_percentage_of_total}% workspace)</div>
           ` : ''}
         </td>
-        <td class="actions-col" style="text-align:right;">
-          <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik dan tampilkan bukti alert">Drill-down</button>
-          <button type="button" class="button text-button" data-exclude-key="${keyEsc}" title="Exclude kategori ini dari statistik">Exclude</button>
-          ${PERSIST_EXCLUDE_PIVOTS.has(data.pivot_by) ? `<button type="button" class="button text-button" data-global-exclude-key="${keyEsc}" title="Sembunyikan kategori ini secara permanen dari Triage dan Statistik; pilih field dan pola">Exclude…</button>` : ''}
-          <a class="button text-button" href="${triageUrl}" title="Lihat di antrean Triage">Triage</a>
+        <td class="actions-col">
+          <div class="row-actions">
+            <button type="button" class="button text-button" data-drill-key="${keyEsc}" title="Saring statistik dan tampilkan bukti alert">Drill-down</button>
+            <button type="button" class="button text-button" data-exclude-key="${keyEsc}" title="Exclude kategori ini dari statistik">Exclude</button>
+            ${PERSIST_EXCLUDE_PIVOTS.has(data.pivot_by) ? `<button type="button" class="button text-button" data-global-exclude-key="${keyEsc}" title="Sembunyikan kategori ini secara permanen dari Triage dan Statistik; pilih field dan pola">Sembunyikan…</button>` : ''}
+            <a class="button text-button" href="${triageUrl}" title="Lihat di antrean Triage">Triage</a>
+          </div>
         </td>
       </tr>
     `;
@@ -318,20 +319,22 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
           </td>
           <td class="numeric">${sb.count.toLocaleString('id-ID')}</td>
           <td class="numeric">${pct}%</td>
-          <td class="actions-col" style="text-align:right; white-space:nowrap;">
-            <button type="button" class="button text-button ${isFiltered ? 'primary' : ''}"
-                    data-secondary-drill-key="${keyEsc}"
-                    title="Saring hanya kategori kedua: ${keyEsc}">
-              ${isFiltered ? 'Terpilih (Saring)' : 'Drill-down'}
-            </button>
-            <button type="button" class="button text-button"
-                    data-action="add-secondary-to-incident"
-                    data-secondary-key="${keyEsc}"
-                    data-count="${sb.count}"
-                    title="Langsung masukkan semua ${sb.count} alert pada sub-kategori ini ke insiden">
-              ${icon('cases')} + Insiden
-            </button>
-            ${PERSIST_EXCLUDE_PIVOTS.has(data.secondary_pivot) ? `<button type="button" class="button text-button" data-global-exclude-secondary="${keyEsc}" title="Sembunyikan sub-kategori ini secara permanen; pilih field dan pola">Exclude…</button>` : ''}
+          <td class="actions-col">
+            <div class="row-actions">
+              <button type="button" class="button text-button ${isFiltered ? 'primary' : ''}"
+                      data-secondary-drill-key="${keyEsc}"
+                      title="Saring hanya kategori kedua: ${keyEsc}">
+                ${isFiltered ? 'Terpilih (Saring)' : 'Drill-down'}
+              </button>
+              <button type="button" class="button text-button"
+                      data-action="add-secondary-to-incident"
+                      data-secondary-key="${keyEsc}"
+                      data-count="${sb.count}"
+                      title="Langsung masukkan semua ${sb.count} alert pada sub-kategori ini ke insiden">
+                ${icon('cases')} + Insiden
+              </button>
+              ${PERSIST_EXCLUDE_PIVOTS.has(data.secondary_pivot) ? `<button type="button" class="button text-button" data-global-exclude-secondary="${keyEsc}" title="Sembunyikan sub-kategori ini secara permanen; pilih field dan pola">Sembunyikan…</button>` : ''}
+            </div>
           </td>
         </tr>
       `;
@@ -388,7 +391,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
                 <th>${esc(secLabel)}</th>
                 <th class="numeric" style="width:120px;">${data.metric === 'events' ? 'Event' : 'Alert'}</th>
                 <th class="numeric" style="width:100px;">Proporsi</th>
-                <th style="width:180px; text-align:right;">Aksi</th>
+                <th style="width:220px; text-align:right;">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -590,7 +593,7 @@ export function statsResults(data, query, {drilldownAlerts = null, selectedIds =
               <th>Nilai / Kategori</th>
               <th class="numeric" style="width:120px;">${data.metric === 'events' ? 'Event' : 'Alert'}</th>
               <th class="numeric" style="width:100px;">Proporsi</th>
-              <th style="width:150px; text-align:right;">Aksi</th>
+              <th style="width:260px; text-align:right;">Aksi</th>
             </tr>
           </thead>
           <tbody>

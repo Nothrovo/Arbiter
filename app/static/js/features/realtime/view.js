@@ -54,13 +54,13 @@ export async function mount(ctx) {
         ? `<span class="inline-status" data-kind="info">Dilewati — pull harian sudah dijalankan</span>`
         : latest
           ? `<span class="inline-status" data-kind="error">${esc(latest.error || 'Pull gagal')}</span>`
-          : '<span class="muted">Belum ada pull pada sesi ini.</span>';
+          : '<span class="muted">—</span>';
 
     root.innerHTML = `
       <header class="page-header">
         <div class="page-heading">
           <h1>Realtime</h1>
-          <p class="page-description">Tarik alert (${esc(sevLabel)}) dari Wazuh Indexer ke database aktif, lalu kelompokkan di AI Triage. Alert yang sama otomatis digabung (dedup) saat masuk.</p>
+          <p class="page-description">Monitor penarikan alert Wazuh (${esc(sevLabel)}) secara berkala.</p>
         </div>
         <div class="page-actions">
           <a class="button" href="#/settings">${icon('settings')} Pengaturan Wazuh</a>
@@ -78,7 +78,7 @@ export async function mount(ctx) {
             <div class="key-value">
               <dt>Status</dt>
               <dd><span class="badge ${realtime.enabled ? 'success' : 'neutral'}"><span class="status-dot"></span>${realtime.enabled ? 'Aktif' : 'Nonaktif'}</span></dd>
-              <dd class="meta">${realtime.enabled ? modeLabel : 'Polling otomatis dimatikan'}</dd>
+              ${realtime.enabled ? `<dd class="meta">${modeLabel}</dd>` : ''}
             </div>
             <div class="key-value">
               <dt><label for="realtime-page-severity">Ambang severity</label></dt>
@@ -87,7 +87,6 @@ export async function mount(ctx) {
                   ${REALTIME_SEVERITY_OPTIONS.map(([val, label]) => `<option value="${esc(val)}" ${sevSelection === val ? 'selected' : ''}>${esc(label)}</option>`).join('')}
                 </select>
               </dd>
-              <dd class="meta">Pilih severity alert yang ditarik saat pull</dd>
             </div>
             <div class="key-value">
               <dt><label for="realtime-time-preset">Rentang waktu telemetri</label></dt>
@@ -111,19 +110,17 @@ export async function mount(ctx) {
                   </div>
                 </div>
               </dd>
-              <dd class="meta">Kosongkan "Sampai" untuk menarik hingga waktu saat ini (Now)</dd>
             </div>
             <div class="key-value">
               <dt><label for="realtime-max-alerts">Maks alert/pull</label></dt>
               <dd>
                 <input class="input mono" id="realtime-max-alerts" name="max_alerts" type="number" min="1" max="100000" step="1" value="${esc(customMaxAlerts || realtime.max_alerts)}">
               </dd>
-              <dd class="meta">1–100000 dokumen per pull. Nilai disimpan ke Pengaturan.</dd>
             </div>
             <div class="key-value">
               <dt>Pull terakhir</dt>
               <dd>${latest ? esc(formatTime(latest.at)) : '—'}</dd>
-              <dd class="meta">${latest?.duration ? `${latest.duration} ms` : 'Belum ada data'}</dd>
+              ${latest?.duration ? `<dd class="meta">${latest.duration} ms</dd>` : ''}
             </div>
             <div class="key-value">
               <dt>Hasil terakhir</dt>
@@ -139,7 +136,6 @@ export async function mount(ctx) {
           <div class="settings-actions">
             <button class="button" data-action="toggle" type="button" ${configured ? '' : 'disabled'}>${realtime.enabled ? 'Matikan monitor' : 'Aktifkan monitor'}</button>
           </div>
-          <p class="meta">Alert yang ditarik masuk ke database aktif dan muncul di antrean <a href="#/triage">Triage</a>. Untuk mengelompokkan dan klasifikasi TP/FP, buka <a href="#/ai-triage">AI Triage</a>.</p>
         </section>
 
         <section class="form-section realtime-card">
@@ -153,7 +149,7 @@ export async function mount(ctx) {
               <td class="numeric num">${item.status === 'pulled' ? item.inserted.toLocaleString('id-ID') : '—'}</td>
               <td class="numeric num">${item.status === 'pulled' ? item.deduplicated.toLocaleString('id-ID') : '—'}</td>
             </tr>`).join('')}
-          </tbody></table></div>` : '<p class="muted">Riwayat hanya disimpan di memori halaman ini dan hilang saat berpindah menu atau memuat ulang.</p>'}
+          </tbody></table></div>` : '<p class="muted">Belum ada riwayat pull.</p>'}
         </section>
       </div>`;
   }

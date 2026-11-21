@@ -28,8 +28,9 @@
 .stats-field-grow{min-width:140px}
 .stats-advanced>summary{cursor:pointer;color:var(--muted);padding:6px 0;min-height:32px}
 .stats-advanced[open]>.stats-control-row{padding:12px 0 4px;border-top:1px solid var(--border)}
-.stats-chart-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
+.stats-chart-toolbar{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-bottom:8px}
 .stats-chart-toolbar>.field{display:flex;align-items:center;gap:12px}
+.stats-chart-toolbar>.stats-scale-control{margin-left:auto}
 .stats-chart-toolbar label{color:var(--muted);font-size:13px}
 .stats-segmented button{font-size:13px;min-height:32px}
 .stats-preset-control{display:flex;gap:8px}

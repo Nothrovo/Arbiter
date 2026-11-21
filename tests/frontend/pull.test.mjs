@@ -66,8 +66,8 @@ test('exclusion dialog offers a field picker from Triage and Statistics', () => 
 
   const statsRender = read('app/static/js/features/stats/render.js');
   assert.match(statsRender, /data-global-exclude-key/);
-  assert.match(statsRender, /Exclude…/);
-  assert.doesNotMatch(statsRender, />Sembunyikan</);
+  assert.match(statsRender, /Sembunyikan…/);
+  assert.doesNotMatch(statsRender, />Exclude…</);
 
   const charts = read('app/static/js/ui/charts.js');
   assert.match(charts, /data-secondary-exclude-key/);

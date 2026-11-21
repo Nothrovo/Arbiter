@@ -13,7 +13,7 @@ export async function mount(ctx) {
     <header class="page-header">
       <div class="page-heading">
         <h1>User Review</h1>
-        <p class="page-description">Pantau aktivitas review analis per hari, ritme penarikan alert, antrean backlog, kontribusi analis, dan audit log laporan insiden.</p>
+        <p class="page-description">Aktivitas, backlog, dan kontribusi review analis.</p>
       </div>
       <div class="page-actions">
         <button class="button" type="button" data-action="refresh-monitoring">${icon('refresh')} Perbarui Data</button>
@@ -39,7 +39,7 @@ export async function mount(ctx) {
         {signal},
       );
       if (signal.aborted) return;
-      content.innerHTML = renderMonitoringDashboard(data, query);
+      content.innerHTML = renderMonitoringDashboard(data, query, {includeAudit: false});
     } catch (err) {
       if (err.name !== 'AbortError' && !signal.aborted) {
         content.innerHTML = errorState(err.message || 'Gagal memuat data monitoring.');
